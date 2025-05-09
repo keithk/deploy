@@ -1,0 +1,5 @@
+{
+  "type": "dynamic",
+  "entryPoint": "index",
+  "subdomain": "pokemon-api"
+}

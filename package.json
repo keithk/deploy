@@ -1,0 +1,36 @@
+{
+  "name": "dialup-deploy",
+  "version": "0.1.0",
+  "description": "A simple way to deploy websites with automatic SSL and subdomains",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli start",
+    "dev": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli dev",
+    "build": "bun run build:all",
+    "build:all": "bun run build:core && bun run build:server && bun run build:cli",
+    "build:core": "bun run --cwd packages/core build",
+    "build:server": "bun run --cwd packages/server build",
+    "build:cli": "bun run --cwd packages/cli build",
+    "build:sites": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli build:sites",
+    "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
+    "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup production",
+    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local"
+  },
+  "keywords": [
+    "bun",
+    "static-site",
+    "file-router"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.32",
+    "bun-plugin-dtsx": "^0.21.9",
+    "bun-types": "latest",
+    "typescript": "^5.8.3"
+  }
+}

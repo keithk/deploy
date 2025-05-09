@@ -1,0 +1,14 @@
+{
+  "name": "@dialup-deploy/core",
+  "version": "0.1.0",
+  "description": "Shared utilities and types for DialUpDeploy",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --minify"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
