@@ -1,0 +1,4 @@
+{
+  "type": "passthrough",
+  "proxyPort": 4500
+}

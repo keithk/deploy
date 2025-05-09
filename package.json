@@ -1,0 +1,42 @@
+{
+  "name": "dialup-deploy",
+  "version": "0.1.0",
+  "description": "A simple way to deploy websites with automatic SSL and subdomains",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli start",
+    "dev": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli dev",
+    "build": "bun run build:all",
+    "build:all": "bun run clear:dist && bun run build:core && bun run build:actions && bun run build:server && bun run build:cli",
+    "build:core": "bun run --cwd packages/core build",
+    "build:server": "bun run --cwd packages/server build",
+    "build:cli": "bun run --cwd packages/cli build",
+    "build:actions": "bun run --cwd packages/actions build",
+    "build:sites": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli build:sites",
+    "clear:dist": "rm -rf packages/server/dist && rm -rf packages/core/dist && rm -rf packages/cli/dist && rm -rf packages/actions/dist",
+    "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
+    "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup production",
+    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
+    "version": "lerna version",
+    "publish": "lerna publish",
+    "publish:from-git": "lerna publish from-git"
+  },
+  "keywords": [
+    "bun",
+    "static-site",
+    "file-router"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.32",
+    "bun-plugin-dtsx": "^0.21.9",
+    "bun-types": "latest",
+    "lerna": "^8.2.2",
+    "typescript": "^5.8.3"
+  }
+}

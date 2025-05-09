@@ -1,0 +1,32 @@
+{
+  "name": "@keithk/deploy-actions",
+  "version": "0.0.3",
+  "description": "Action utilities for DialUp Deploy",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --minify"
+  },
+  "keywords": [
+    "dialup",
+    "deploy",
+    "actions"
+  ],
+  "author": "DialUp Deploy",
+  "license": "MIT",
+  "dependencies": {
+    "@keithk/deploy-core": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithk/deploy.git",
+    "directory": "packages/actions"
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
+}
