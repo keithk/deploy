@@ -13,13 +13,13 @@ _I built this to solve my own personal website hosting needs. You'll notice ther
 Spin up a new server and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash
 ```
 
 Or, with your own domain and email:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | sudo bash -s yourdomain.com your@email.com
+curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash -s yourdomain.com your@email.com
 ```
 
 - Installs everything (Bun, Caddy, dependencies)
