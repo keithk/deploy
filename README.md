@@ -92,7 +92,7 @@ deploy caddyfile update
 - [Getting Started](docs/getting-started.md)
 - [Site Types](docs/site-types.md)
 - [Custom Domains & SSL](docs/custom-domains.md)
-- [Actions & Automation](docs/actions.md)
+- [Actions & Automation](docs/actions/index.md)
 - [Bluesky Integration](docs/bluesky.md)
 
 ---
