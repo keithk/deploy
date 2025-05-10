@@ -1,4 +1,3 @@
-
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
@@ -22,7 +21,7 @@ export async function initializeActionRegistry(
   const rootConfig = await loadRootConfig();
 
   // Initialize GitHub webhook action if configured
-  initializeGitHubAction(rootConfig, actionRegistry);
+  initializeGitHubAction(rootConfig);
 
   // Discover sites
   const sites = await getSites(rootDir);
@@ -118,7 +117,7 @@ export async function runAction(
 }
 
 /**
- * Create a site-specific action configuration
+ * Create a site-specific action as a TypeScript file
  */
 export async function createSiteAction(
   siteName: string,
@@ -138,86 +137,173 @@ export async function createSiteAction(
     };
   }
 
-  // Create .flexi directory if it doesn't exist
-  const flexiDir = join(site.path, ".flexi");
-  if (!existsSync(flexiDir)) {
+  // Create .dialup/actions directory if it doesn't exist
+  const actionsDir = join(site.path, ".dialup", "actions");
+  if (!existsSync(actionsDir)) {
     try {
-      mkdirSync(flexiDir, { recursive: true });
+      mkdirSync(actionsDir, { recursive: true });
     } catch (error) {
       return {
         success: false,
-        message: `Failed to create .flexi directory: ${
+        message: `Failed to create .dialup/actions directory: ${
           error instanceof Error ? error.message : String(error)
         }`
       };
     }
   }
 
-  // Load existing actions.json if it exists
-  const actionsPath = join(flexiDir, "actions.json");
-  let actionsConfig: { actions: any[] } = { actions: [] };
+  // Generate action ID if not provided
+  const actionId = options.id || `${actionType}-action`;
 
-  if (existsSync(actionsPath)) {
-    try {
-      const content = readFileSync(actionsPath, "utf-8");
-      actionsConfig = JSON.parse(content);
-    } catch (error) {
-      console.warn(
-        `Failed to read existing actions.json: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      // Continue with empty actions array
-    }
-  }
+  // Create the TypeScript file path
+  const actionFilePath = join(actionsDir, `${actionId}.ts`);
 
-  // Create action config based on type
-  let actionConfig: any = {
-    id: options.id || `${actionType}-action`,
-    type: actionType
-  };
+  // Check if file already exists
+  const fileExists = existsSync(actionFilePath);
+
+  // Generate TypeScript content based on action type
+  let actionContent = "";
 
   if (actionType === "scheduled") {
-    actionConfig.schedule = options.schedule || "0 * * * *"; // Default: every hour
-    actionConfig.command = options.command || "";
-    actionConfig.triggerBuild =
+    const schedule = options.schedule || "0 * * * *"; // Default: every hour
+    const command = options.command || "echo 'No command specified'";
+    const triggerBuild =
       options.triggerBuild !== undefined ? options.triggerBuild : true;
-  } else if (actionType === "webhook") {
-    actionConfig.path = options.path || "/webhook";
-    if (options.secret) {
-      actionConfig.secret = options.secret;
+
+    actionContent = `import { defineScheduledAction } from "@dialup-deploy/core";
+
+export default defineScheduledAction({
+  id: "${actionId}",
+  schedule: "${schedule}",
+  async handler(payload, context) {
+    // Execute the command
+    const { executeCommand } = await import("@dialup-deploy/server");
+    const result = await executeCommand("${command}", {
+      cwd: context.site?.path || ""
+    });
+
+    ${
+      triggerBuild
+        ? `
+    // Trigger build if specified
+    if (result.success) {
+      const { buildSite } = await import("@dialup-deploy/server");
+      const buildResult = await buildSite(context.site!, context);
+      
+      return {
+        success: buildResult.success && result.success,
+        message: \`Command: \${result.message}, Build: \${buildResult.message}\`,
+        data: result.data
+      };
+    }`
+        : ""
     }
+
+    return {
+      success: result.success,
+      message: result.message,
+      data: result.data
+    };
+  }
+});
+`;
+  } else if (actionType === "webhook") {
+    const path = options.path || "/webhook";
+    const secret = options.secret ? `\n  // Secret: ${options.secret}` : "";
+
+    actionContent = `import { defineWebhookAction } from "@dialup-deploy/core";
+
+export default defineWebhookAction({
+  id: "${actionId}",
+  path: "${path}",${secret}
+  async handler(payload, context) {
+    // Process the webhook payload
+    console.log("Received webhook:", payload);
+    
+    // Add your webhook handling logic here
+    
+    return {
+      success: true,
+      message: "Webhook processed successfully",
+      data: payload
+    };
+  }
+});
+`;
+  } else if (actionType === "route") {
+    const path = options.path || "/api/example";
+
+    actionContent = `import { defineRouteAction } from "@dialup-deploy/core";
+
+export default defineRouteAction({
+  id: "${actionId}",
+  routes: [
+    {
+      path: "${path}",
+      method: "GET",
+      handler: async (request, context) => {
+        return new Response(JSON.stringify({
+          message: "Hello from ${actionId}!",
+          timestamp: new Date().toISOString()
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
+  ],
+  async handler(payload, context) {
+    return {
+      success: true,
+      message: "Route action executed directly",
+      data: { payload }
+    };
+  }
+});
+`;
+  } else if (actionType === "hook") {
+    const hook = options.hook || "server:after-start";
+
+    actionContent = `import { defineHookAction } from "@dialup-deploy/core";
+
+export default defineHookAction({
+  id: "${actionId}",
+  hooks: ["${hook}"],
+  async handler(payload, context) {
+    console.log(\`Hook triggered: ${hook}\`);
+    
+    // Add your hook handling logic here
+    
+    return {
+      success: true,
+      message: "Hook executed successfully",
+      data: {
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+});
+`;
   } else {
     return {
       success: false,
-      message: `Unsupported action type: ${actionType}`
+      message: `Unsupported action type: ${actionType}. Supported types are: scheduled, webhook, route, hook`
     };
   }
 
-  // Add or update the action
-  const existingIndex = actionsConfig.actions.findIndex(
-    (a) => a.id === actionConfig.id
-  );
-
-  if (existingIndex >= 0) {
-    actionsConfig.actions[existingIndex] = actionConfig;
-  } else {
-    actionsConfig.actions.push(actionConfig);
-  }
-
-  // Write the updated config
+  // Write the TypeScript file
   try {
-    writeFileSync(actionsPath, JSON.stringify(actionsConfig, null, 2), "utf-8");
+    writeFileSync(actionFilePath, actionContent, "utf-8");
     return {
       success: true,
-      message: `Action "${actionConfig.id}" ${
-        existingIndex >= 0 ? "updated" : "created"
+      message: `Action "${actionId}" ${
+        fileExists ? "updated" : "created"
       } successfully.`
     };
   } catch (error) {
     return {
       success: false,
-      message: `Failed to write actions.json: ${
+      message: `Failed to write action file: ${
         error instanceof Error ? error.message : String(error)
       }`
     };
