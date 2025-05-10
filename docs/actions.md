@@ -20,7 +20,7 @@ Example of using environment variables in an action:
 
 ```typescript
 // sites/mysite/.dialup/actions/api-key-action.ts
-import { defineScheduledAction } from "@dialup-deploy/core";
+import { defineScheduledAction } from "@dialup-deploy/actions";
 
 export default defineScheduledAction({
   id: "api-key-action",
@@ -101,7 +101,7 @@ Create a file in your site's `.dialup/actions` directory:
 
 ```typescript
 // sites/mysite/.dialup/actions/nightly-build.ts
-import { defineScheduledAction } from "@dialup-deploy/core";
+import { defineScheduledAction, executeCommand } from "@dialup-deploy/actions";
 
 export default defineScheduledAction({
   id: "nightly-build",
@@ -109,7 +109,6 @@ export default defineScheduledAction({
   async handler(payload, context) {
     // Run your code here
     // For example, execute a build command:
-    const { executeCommand } = await import("@dialup-deploy/server");
     const result = await executeCommand("bun run build", {
       cwd: context.site?.path || ""
     });
@@ -149,7 +148,7 @@ Create a custom webhook handler:
 
 ```typescript
 // sites/mysite/.dialup/actions/stripe-webhook.ts
-import { defineWebhookAction } from "@dialup-deploy/core";
+import { defineWebhookAction } from "@dialup-deploy/actions";
 
 export default defineWebhookAction({
   id: "stripe-webhook",
@@ -178,7 +177,7 @@ Expose custom HTTP endpoints for your site.
 
 ```typescript
 // sites/mysite/.dialup/actions/api-routes.ts
-import { defineRouteAction } from "@dialup-deploy/core";
+import { defineRouteAction } from "@dialup-deploy/actions";
 
 export default defineRouteAction({
   id: "api-routes",
@@ -217,7 +216,7 @@ Execute code at specific points in the server lifecycle.
 
 ```typescript
 // sites/mysite/.dialup/actions/startup.ts
-import { defineHookAction } from "@dialup-deploy/core";
+import { defineHookAction } from "@dialup-deploy/actions";
 
 export default defineHookAction({
   id: "startup",
@@ -422,7 +421,7 @@ export default defineScheduledAction({
 
 ---
 
-## 🚀 Action-Based Sites
+## � Action-Based Sites
 
 You can create sites that are primarily or entirely driven by actions. This approach is useful for:
 

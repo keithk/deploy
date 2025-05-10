@@ -1,7 +1,18 @@
-
 import { createServer } from "./createServer";
 import { discoverSites } from "./discoverSites";
 import { info, LogLevel } from "@dialup-deploy/core";
+import {
+  processManager as actionsProcessManager,
+  setServerExecuteCommand
+} from "@dialup-deploy/actions";
+import { processManager } from "./utils/process-manager";
+
+// Initialize the actions package with the server's process manager
+actionsProcessManager.setServerProcessManager(processManager);
+
+// Initialize the actions package with the server's executeCommand function
+import { executeCommand as serverExecuteCommand } from "./actions";
+setServerExecuteCommand(serverExecuteCommand);
 
 // Export server creation function
 export async function startServer(
@@ -26,14 +37,12 @@ export async function startServer(
 // Export other utilities
 export { discoverSites };
 
-// Re-export action utilities
+// Re-export action utilities from the server
 export {
   actionRegistry,
   loadRootConfig,
   discoverActions,
-  initializeGitHubAction,
-  executeCommand,
-  restartSite
+  initializeGitHubAction
 } from "./actions";
 
 // Export types
@@ -41,3 +50,6 @@ export type { ActionRegistry } from "./actions/registry";
 
 // Re-export logging utilities from core
 export { LogLevel, setLogLevel } from "@dialup-deploy/core";
+
+// Re-export everything from the actions package
+export * from "@dialup-deploy/actions";

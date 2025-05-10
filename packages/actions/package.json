@@ -1,17 +1,21 @@
 {
-  "name": "@dialup-deploy/server",
+  "name": "@dialup-deploy/actions",
   "version": "0.1.0",
-  "description": "Server for DialUpDeploy",
+  "description": "Action utilities for DialUp Deploy",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --minify"
   },
+  "keywords": [
+    "dialup",
+    "deploy",
+    "actions"
+  ],
+  "author": "DialUp Deploy",
+  "license": "MIT",
   "dependencies": {
-    "@dialup-deploy/actions": "workspace:*",
-    "@dialup-deploy/core": "workspace:*",
-    "croner": "^9.0.0"
+    "@dialup-deploy/core": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"
