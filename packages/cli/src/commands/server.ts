@@ -1,4 +1,3 @@
-
 import { Command } from "commander";
 import { resolve } from "path";
 import { existsSync, readFileSync, mkdirSync } from "fs";
@@ -8,7 +7,14 @@ import {
   startCaddyProduction,
   getDomain
 } from "../utils/caddy";
-import { debug, info, error, warn, LogLevel } from "@dialup-deploy/core";
+import {
+  debug,
+  info,
+  error,
+  warn,
+  LogLevel,
+  processModel
+} from "@dialup-deploy/core";
 
 /**
  * Register the server commands
@@ -50,6 +56,45 @@ export function registerServerCommands(program: Command): void {
         debug(`Using root directory: ${rootDir}`);
         const logLevel = parseInt(options.logLevel);
         const server = await startServer("serve", { rootDir, logLevel });
+
+        // Restart any processes that were running before
+        info("Checking for processes to restart...");
+        try {
+          const runningProcesses = processModel.getByStatus("running");
+          if (runningProcesses.length > 0) {
+            info(`Found ${runningProcesses.length} processes to restart`);
+
+            // Import the process manager directly from the utils
+            const { processManager } = await import(
+              "@dialup-deploy/server/src/utils/process-manager"
+            );
+
+            // Restart each process
+            for (const proc of runningProcesses) {
+              info(
+                `Restarting process ${proc.id} (${proc.site} on port ${proc.port})`
+              );
+              const success = await processManager.startProcess(
+                proc.site,
+                proc.port,
+                proc.script,
+                proc.cwd,
+                proc.type,
+                {} // We don't store env variables in the database for security reasons
+              );
+
+              if (success) {
+                info(`Successfully restarted process ${proc.id}`);
+              } else {
+                warn(`Failed to restart process ${proc.id}`);
+              }
+            }
+          } else {
+            info("No processes found to restart");
+          }
+        } catch (err) {
+          warn("Error restarting processes:", err);
+        }
 
         info(`Server is now active and ready to handle requests`);
         info(`Logs are being written to: ${logsDir}`);
@@ -111,6 +156,45 @@ export function registerServerCommands(program: Command): void {
 
         // Get domain from .env
         const domain = await getDomain();
+
+        // Restart any processes that were running before
+        info("Checking for processes to restart...");
+        try {
+          const runningProcesses = processModel.getByStatus("running");
+          if (runningProcesses.length > 0) {
+            info(`Found ${runningProcesses.length} processes to restart`);
+
+            // Import the process manager directly from the utils
+            const { processManager } = await import(
+              "@dialup-deploy/server/src/utils/process-manager"
+            );
+
+            // Restart each process
+            for (const proc of runningProcesses) {
+              info(
+                `Restarting process ${proc.id} (${proc.site} on port ${proc.port})`
+              );
+              const success = await processManager.startProcess(
+                proc.site,
+                proc.port,
+                proc.script,
+                proc.cwd,
+                proc.type,
+                {} // We don't store env variables in the database for security reasons
+              );
+
+              if (success) {
+                info(`Successfully restarted process ${proc.id}`);
+              } else {
+                warn(`Failed to restart process ${proc.id}`);
+              }
+            }
+          } else {
+            info("No processes found to restart");
+          }
+        } catch (err) {
+          warn("Error restarting processes:", err);
+        }
 
         info(`Development server is now active and ready to handle requests`);
         info(`You can access your sites at:`);
