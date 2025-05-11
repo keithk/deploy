@@ -11,7 +11,7 @@
     "start": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli start",
     "dev": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli dev",
     "build": "bun run build:all",
-    "build:all": "bun run build:core && bun run build:server && bun run build:cli && bun run build:actions",
+    "build:all": "cleanup && bun run build:core && bun run build:actions && bun run build:server && bun run build:cli",
     "build:core": "bun run --cwd packages/core build",
     "build:server": "bun run --cwd packages/server build",
     "build:cli": "bun run --cwd packages/cli build",
