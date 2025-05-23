@@ -35,6 +35,8 @@ jobs:
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > ~/.npmrc
           echo "@dialup-deploy:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "Debug: Repository is ${{ github.repository }}"
+          echo "Debug: Actor is ${{ github.actor }}"
 
       - name: Commit any changes
         run: |
