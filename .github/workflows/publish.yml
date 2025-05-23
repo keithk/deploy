@@ -36,11 +36,16 @@ jobs:
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > ~/.npmrc
           echo "@dialup-deploy:registry=https://npm.pkg.github.com" >> ~/.npmrc
 
-      - name: Version and publish
-        if: github.event_name == 'workflow_dispatch'
+      - name: Commit any changes
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: update workspace dependencies"
+
+      - name: Version and publish
+        if: github.event_name == 'workflow_dispatch'
+        run: |
           npx lerna version ${{ github.event.inputs.version }} --yes --no-push
           npx lerna publish from-git --yes
         env:
