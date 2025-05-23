@@ -19,8 +19,8 @@
     "setup": "bun run src/index.ts setup local"
   },
   "dependencies": {
-    "@keithk/deploy-core": "workspace:*",
-    "@keithk/deploy-server": "workspace:*",
+    "@keithk/deploy-core": "0.0.2",
+    "@keithk/deploy-server": "0.0.2",
     "chalk": "^5.3.0",
     "commander": "^11.0.0",
     "fs-extra": "^11.2.0",
@@ -44,5 +44,6 @@
     "type": "git",
     "url": "git+https://github.com/keithk/deploy.git",
     "directory": "packages/cli"
-  }
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
 }

@@ -18,5 +18,6 @@
     "type": "git",
     "url": "git+https://github.com/keithk/deploy.git",
     "directory": "packages/core"
-  }
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
 }

@@ -15,7 +15,7 @@
   "author": "DialUp Deploy",
   "license": "MIT",
   "dependencies": {
-    "@keithk/deploy-core": "workspace:*"
+    "@keithk/deploy-core": "0.0.2"
   },
   "devDependencies": {
     "bun-types": "latest"
@@ -27,5 +27,6 @@
     "type": "git",
     "url": "git+https://github.com/keithk/deploy.git",
     "directory": "packages/actions"
-  }
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
 }

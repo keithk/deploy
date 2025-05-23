@@ -10,8 +10,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun --minify"
   },
   "dependencies": {
-    "@keithk/deploy-actions": "workspace:*",
-    "@keithk/deploy-core": "workspace:*",
+    "@keithk/deploy-actions": "0.0.2",
+    "@keithk/deploy-core": "0.0.2",
     "croner": "^9.0.0"
   },
   "devDependencies": {
@@ -24,5 +24,6 @@
     "type": "git",
     "url": "git+https://github.com/keithk/deploy.git",
     "directory": "packages/server"
-  }
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
 }
