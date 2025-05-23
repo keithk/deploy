@@ -1,5 +1,5 @@
-import type { Action, ActionContext, ActionResult } from "@dialup-deploy/core";
-import { debug, info, warn } from "@dialup-deploy/core";
+import type { Action, ActionContext, ActionResult } from "@keithk/deploy-core";
+import { debug, info, warn } from "@keithk/deploy-core";
 import { join } from "path";
 import { loadEnvFile } from "../utils";
 

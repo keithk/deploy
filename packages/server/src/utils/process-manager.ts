@@ -6,7 +6,7 @@ import {
   processModel,
   ProcessInfo as DbProcessInfo,
   ProcessRegistryEntry as DbProcessRegistryEntry
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 
 // Define Bun.Process type since it's not in the TypeScript definitions
 type Signals =

@@ -1,5 +1,5 @@
 import { join } from "path";
-import type { SiteConfig } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
 
 /**
  * Creates a handler for static sites.

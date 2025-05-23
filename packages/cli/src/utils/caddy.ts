@@ -1,6 +1,6 @@
 
 import { join, resolve } from "path";
-import { debug, info, error, warn } from "@dialup-deploy/core";
+import { debug, info, error, warn } from "@keithk/deploy-core";
 
 /**
  * Check if Caddy is installed

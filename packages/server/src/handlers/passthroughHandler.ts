@@ -1,5 +1,5 @@
-import type { SiteConfig } from "@dialup-deploy/core";
-import { detectPackageManager } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
+import { detectPackageManager } from "@keithk/deploy-core";
 import { proxyRequest } from "../utils/proxy";
 import { processManager } from "../utils/process-manager";
 import { debug, info, warn, error } from "../utils/logging";

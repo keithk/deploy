@@ -1,4 +1,4 @@
-import type { SiteConfig } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
 import { discoverSites } from "./discoverSites";
 import {
   logger,
@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, setLogLevel, LogLevel } from "@dialup-deploy/core";
+import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 
 /**
@@ -51,7 +51,7 @@ export async function createServer({
   debug(`Using root directory: ${resolvedRootDir}`);
 
   // Create action context
-  const actionContext: import("@dialup-deploy/core").ActionContext = {
+  const actionContext: import("@keithk/deploy-core").ActionContext = {
     rootDir: resolvedRootDir,
     mode,
     sites: [] // Will be populated after site discovery

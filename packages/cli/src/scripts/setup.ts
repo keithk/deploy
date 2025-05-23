@@ -3,7 +3,7 @@
 
 import { join, resolve, dirname } from "path";
 import { homedir } from "os";
-import { generateCaddyfileContent } from "@dialup-deploy/core";
+import { generateCaddyfileContent } from "@keithk/deploy-core";
 
 // Colors for terminal output
 const colors = {

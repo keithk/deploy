@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { join, resolve } from "path";
 import { existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import chalk from "chalk";
-import { debug, info, error } from "@dialup-deploy/core";
+import { debug, info, error } from "@keithk/deploy-core";
 
 /**
  * Create a new site in the project

@@ -5,11 +5,11 @@ import type {
   ActionResult,
   ActionRoute,
   SiteConfig
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 import { buildSite } from "../discovery";
 import { createHmac } from "crypto";
 import { processManager } from "../../utils/process-manager";
-import { debug, info, warn } from "@dialup-deploy/core";
+import { debug, info, warn } from "@keithk/deploy-core";
 
 /**
  * Verify the GitHub webhook signature

@@ -1,7 +1,7 @@
 
 import { join, resolve } from "path";
 import { homedir } from "os";
-import { generateCaddyfileContent } from "@dialup-deploy/core";
+import { generateCaddyfileContent } from "@keithk/deploy-core";
 
 // Type for log functions
 type LogFunctions = {

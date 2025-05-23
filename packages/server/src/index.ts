@@ -1,10 +1,10 @@
 import { createServer } from "./createServer";
 import { discoverSites } from "./discoverSites";
-import { info, LogLevel } from "@dialup-deploy/core";
+import { info, LogLevel } from "@keithk/deploy-core";
 import {
   processManager as actionsProcessManager,
   setServerExecuteCommand
-} from "@dialup-deploy/actions";
+} from "@keithk/deploy-actions";
 import { processManager } from "./utils/process-manager";
 
 // Initialize the actions package with the server's process manager
@@ -49,7 +49,7 @@ export {
 export type { ActionRegistry } from "./actions/registry";
 
 // Re-export logging utilities from core
-export { LogLevel, setLogLevel } from "@dialup-deploy/core";
+export { LogLevel, setLogLevel } from "@keithk/deploy-core";
 
 // Re-export everything from the actions package
-export * from "@dialup-deploy/actions";
+export * from "@keithk/deploy-actions";

@@ -1,4 +1,4 @@
-import type { SiteConfig } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
 import { ActionRegistry } from "../actions/registry";
 import { join } from "path";
 import { existsSync } from "fs";

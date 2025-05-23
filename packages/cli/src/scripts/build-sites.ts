@@ -10,7 +10,7 @@ import {
   needsRebuild,
   updateBuildCache,
   createSiteConfig
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 
 const ROOT_DIR = process.env.ROOT_DIR || "./sites";
 

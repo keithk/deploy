@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { resolve, join } from "path";
 import chalk from "chalk";
-import { generateCaddyfileContent } from "@dialup-deploy/core";
+import { generateCaddyfileContent } from "@keithk/deploy-core";
 import { execCommand, ensureDir } from "../utils/setup-utils";
 
 // Log functions using chalk

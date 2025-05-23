@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { resolve } from "path";
 import { existsSync } from "fs";
 import chalk from "chalk";
-import { processModel } from "@dialup-deploy/core";
+import { processModel } from "@keithk/deploy-core";
 
 /**
  * Register the processes command
@@ -81,7 +81,7 @@ export function registerProcessesCommand(program: Command): void {
       try {
         // For restart, we still need the process manager since it handles the actual process
         const { processManager } = await import(
-          "@dialup-deploy/server/src/utils/process-manager"
+          "@keithk/deploy-server/src/utils/process-manager"
         );
 
         console.log(`Attempting to restart process: ${id}`);
@@ -108,7 +108,7 @@ export function registerProcessesCommand(program: Command): void {
       try {
         // For stop, we still need the process manager since it handles the actual process
         const { processManager } = await import(
-          "@dialup-deploy/server/src/utils/process-manager"
+          "@keithk/deploy-server/src/utils/process-manager"
         );
 
         console.log(`Attempting to stop process: ${id}`);

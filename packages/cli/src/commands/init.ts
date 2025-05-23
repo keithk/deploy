@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { join, resolve } from "path";
 import { existsSync, mkdirSync, readdirSync } from "fs";
 import chalk from "chalk";
-import { debug, info, error } from "@dialup-deploy/core";
+import { debug, info, error } from "@keithk/deploy-core";
 
 /**
  * Initialize a new DialUpDeploy project

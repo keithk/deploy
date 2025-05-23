@@ -14,7 +14,7 @@ import {
   warn,
   LogLevel,
   processModel
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 
 /**
  * Register the server commands
@@ -47,7 +47,7 @@ export function registerServerCommands(program: Command): void {
           mkdirSync(logsDir, { recursive: true });
         }
 
-        const { startServer } = await import("@dialup-deploy/server");
+        const { startServer } = await import("@keithk/deploy-server");
         // Ensure rootDir is properly resolved
         const rootDir = process.env.ROOT_DIR
           ? resolve(process.env.ROOT_DIR)
@@ -66,7 +66,7 @@ export function registerServerCommands(program: Command): void {
 
             // Import the process manager directly from the utils
             const { processManager } = await import(
-              "@dialup-deploy/server/src/utils/process-manager"
+              "@keithk/deploy-server/src/utils/process-manager"
             );
 
             // Restart each process
@@ -144,7 +144,7 @@ export function registerServerCommands(program: Command): void {
           mkdirSync(logsDir, { recursive: true });
         }
 
-        const { startServer } = await import("@dialup-deploy/server");
+        const { startServer } = await import("@keithk/deploy-server");
         // Ensure rootDir is properly resolved
         const rootDir = process.env.ROOT_DIR
           ? resolve(process.env.ROOT_DIR)
@@ -166,7 +166,7 @@ export function registerServerCommands(program: Command): void {
 
             // Import the process manager directly from the utils
             const { processManager } = await import(
-              "@dialup-deploy/server/src/utils/process-manager"
+              "@keithk/deploy-server/src/utils/process-manager"
             );
 
             // Restart each process

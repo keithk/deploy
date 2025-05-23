@@ -5,7 +5,7 @@ import {
   loadRootConfig,
   discoverActions,
   initializeGitHubAction
-} from "@dialup-deploy/server";
+} from "@keithk/deploy-server";
 import { getSites } from "./site-manager";
 
 // Default root directory for sites
@@ -170,14 +170,14 @@ export async function createSiteAction(
     const triggerBuild =
       options.triggerBuild !== undefined ? options.triggerBuild : true;
 
-    actionContent = `import { defineScheduledAction } from "@dialup-deploy/core";
+    actionContent = `import { defineScheduledAction } from "@keithk/deploy-core";
 
 export default defineScheduledAction({
   id: "${actionId}",
   schedule: "${schedule}",
   async handler(payload, context) {
     // Execute the command
-    const { executeCommand } = await import("@dialup-deploy/server");
+    const { executeCommand } = await import("@keithk/deploy-server");
     const result = await executeCommand("${command}", {
       cwd: context.site?.path || ""
     });
@@ -187,7 +187,7 @@ export default defineScheduledAction({
         ? `
     // Trigger build if specified
     if (result.success) {
-      const { buildSite } = await import("@dialup-deploy/server");
+      const { buildSite } = await import("@keithk/deploy-server");
       const buildResult = await buildSite(context.site!, context);
       
       return {
@@ -211,7 +211,7 @@ export default defineScheduledAction({
     const path = options.path || "/webhook";
     const secret = options.secret ? `\n  // Secret: ${options.secret}` : "";
 
-    actionContent = `import { defineWebhookAction } from "@dialup-deploy/core";
+    actionContent = `import { defineWebhookAction } from "@keithk/deploy-core";
 
 export default defineWebhookAction({
   id: "${actionId}",
@@ -233,7 +233,7 @@ export default defineWebhookAction({
   } else if (actionType === "route") {
     const path = options.path || "/api/example";
 
-    actionContent = `import { defineRouteAction } from "@dialup-deploy/core";
+    actionContent = `import { defineRouteAction } from "@keithk/deploy-core";
 
 export default defineRouteAction({
   id: "${actionId}",
@@ -264,7 +264,7 @@ export default defineRouteAction({
   } else if (actionType === "hook") {
     const hook = options.hook || "server:after-start";
 
-    actionContent = `import { defineHookAction } from "@dialup-deploy/core";
+    actionContent = `import { defineHookAction } from "@keithk/deploy-core";
 
 export default defineHookAction({
   id: "${actionId}",

@@ -1,6 +1,6 @@
 import { join, resolve, basename, dirname } from "path";
 import { existsSync, readdirSync } from "fs";
-import type { SiteConfig } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
 import type {
   Action,
   ActionContext,
@@ -8,7 +8,7 @@ import type {
   SiteActionConfig,
   ScheduledActionConfig,
   WebhookActionConfig
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 // Using Bun.spawn instead of child_process.spawnSync
 import {
   loadBuildCache,
@@ -18,7 +18,7 @@ import {
   error,
   info,
   warn
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 import { loadEnvFile } from "../utils";
 
 /**

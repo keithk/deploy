@@ -4,7 +4,7 @@
 import { resolve } from "path";
 import { Command } from "commander";
 import { registerCommands } from "./commands";
-import { debug, info, LogLevel, setLogLevel } from "@dialup-deploy/core";
+import { debug, info, LogLevel, setLogLevel } from "@keithk/deploy-core";
 
 // Resolve the sites directory relative to the project root, not the CLI package
 const ROOT_DIR = process.env.ROOT_DIR || resolve(__dirname, "../../../sites");

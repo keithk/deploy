@@ -5,7 +5,7 @@ import { spawnSync } from "child_process";
 import {
   detectPackageManager,
   getPackageManagerCommand
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 
 /**
  * Check if node_modules exists and install dependencies if needed

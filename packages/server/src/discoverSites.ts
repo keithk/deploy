@@ -1,5 +1,5 @@
 // Re-export discoverSites from core to maintain backward compatibility
-import { discoverSites as discoverSitesCore } from "@dialup-deploy/core";
+import { discoverSites as discoverSitesCore } from "@keithk/deploy-core";
 
 /**
  * Scans the root directory and identifies all site types.

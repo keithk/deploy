@@ -1,10 +1,10 @@
 import { join } from "path";
 import { existsSync } from "fs";
-import type { SiteConfig } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
 import {
   detectPackageManager,
   getPackageManagerCommand
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 import { proxyRequest, startDevServer } from "../utils/proxy";
 
 /**

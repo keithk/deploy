@@ -1,5 +1,5 @@
 {
-  "name": "@dialup-deploy/server",
+  "name": "@keithk/deploy-server",
   "version": "0.1.1",
   "description": "Server for DialUpDeploy",
   "main": "dist/index.js",
@@ -10,8 +10,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun --minify"
   },
   "dependencies": {
-    "@dialup-deploy/actions": "workspace:*",
-    "@dialup-deploy/core": "workspace:*",
+    "@keithk/deploy-actions": "workspace:*",
+    "@keithk/deploy-core": "workspace:*",
     "croner": "^9.0.0"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 // Export types
-export * from "@dialup-deploy/core";
+export * from "@keithk/deploy-core";
 
 // Export registry
 export * from "./registry";
@@ -22,7 +22,7 @@ export { createGitHubAction } from "./handlers/github";
 // Re-export middleware
 export { webhookMiddleware } from "../middleware/webhook";
 
-import { debug, info, warn, error } from "@dialup-deploy/core";
+import { debug, info, warn, error } from "@keithk/deploy-core";
 import { processManager } from "../utils/process-manager";
 import { actionRegistry } from "./registry";
 import { hookManager } from "./hooks";

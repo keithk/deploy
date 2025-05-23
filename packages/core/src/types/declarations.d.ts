@@ -1,5 +1,5 @@
 // Type declarations for external modules
-declare module "@dialup-deploy/server" {
+declare module "@keithk/deploy-server" {
   export function discoverSites(
     sitesDir: string,
     mode?: string

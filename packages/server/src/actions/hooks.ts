@@ -3,8 +3,8 @@ import type {
   ActionContext,
   ActionHook,
   ActionResult
-} from "@dialup-deploy/core";
-import { debug, info, warn } from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
+import { debug, info, warn } from "@keithk/deploy-core";
 import { actionRegistry } from "./registry";
 
 /**

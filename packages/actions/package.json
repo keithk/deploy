@@ -1,5 +1,5 @@
 {
-  "name": "@dialup-deploy/actions",
+  "name": "@keithk/deploy-actions",
   "version": "0.1.1",
   "description": "Action utilities for DialUp Deploy",
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
   "author": "DialUp Deploy",
   "license": "MIT",
   "dependencies": {
-    "@dialup-deploy/core": "workspace:*"
+    "@keithk/deploy-core": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"

@@ -1,7 +1,7 @@
 
 import { join, resolve, basename } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
-import { SiteConfig, createSiteConfig } from "@dialup-deploy/core";
+import { SiteConfig, createSiteConfig } from "@keithk/deploy-core";
 
 // Default root directory for sites
 const DEFAULT_ROOT_DIR = resolve(process.cwd(), "sites");

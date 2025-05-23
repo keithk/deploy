@@ -1,4 +1,4 @@
-import type { Action, ActionContext } from "@dialup-deploy/core";
+import type { Action, ActionContext } from "@keithk/deploy-core";
 import { actionRegistry } from "./registry";
 import { Cron } from "croner";
 

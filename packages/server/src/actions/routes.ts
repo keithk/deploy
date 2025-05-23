@@ -1,5 +1,5 @@
-import type { Action, ActionContext, ActionRoute } from "@dialup-deploy/core";
-import { debug, info, warn } from "@dialup-deploy/core";
+import type { Action, ActionContext, ActionRoute } from "@keithk/deploy-core";
+import { debug, info, warn } from "@keithk/deploy-core";
 import { actionRegistry } from "./registry";
 import { hookManager } from "./hooks";
 

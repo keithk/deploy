@@ -1,5 +1,5 @@
 import { ActionRegistry } from "../actions/registry";
-import type { ActionContext } from "@dialup-deploy/core";
+import type { ActionContext } from "@keithk/deploy-core";
 
 /**
  * Middleware for handling webhook requests

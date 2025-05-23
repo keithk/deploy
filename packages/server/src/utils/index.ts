@@ -1,7 +1,7 @@
 export * from "./proxy";
 import { existsSync } from "fs";
 import { join } from "path";
-import { debug } from "@dialup-deploy/core";
+import { debug } from "@keithk/deploy-core";
 
 /**
  * Load environment variables from a .env file

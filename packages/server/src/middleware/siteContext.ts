@@ -1,5 +1,5 @@
-import type { SiteConfig } from "@dialup-deploy/core";
-import { debug, info, error, warn } from "@dialup-deploy/core";
+import type { SiteConfig } from "@keithk/deploy-core";
+import { debug, info, error, warn } from "@keithk/deploy-core";
 
 /**
  * Middleware that determines the site based on the subdomain or custom domain.

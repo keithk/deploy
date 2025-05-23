@@ -7,7 +7,7 @@ import {
   generateCaddyfileContent,
   discoverSites,
   type SiteConfig
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 import {
   isCaddyInstalled,
   isCaddyRunning,

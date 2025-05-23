@@ -5,7 +5,7 @@ import {
   loadBuildCache,
   needsRebuild,
   updateBuildCache
-} from "@dialup-deploy/core";
+} from "@keithk/deploy-core";
 import { ensureNodeModules } from "./package-manager";
 import { getSites } from "./site-manager";
 import { runPackageManagerCommand } from "./package-manager";
