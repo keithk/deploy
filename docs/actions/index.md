@@ -20,7 +20,7 @@ Example of using environment variables in an action:
 
 ```typescript
 // sites/mysite/.dialup/actions/api-key-action.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "api-key-action",
@@ -65,7 +65,7 @@ The `context` parameter passed to action handlers contains:
 
 ## 🚀 Action Types
 
-DialUpDeploy supports several types of actions:
+Deploy supports several types of actions:
 
 1. **[Scheduled Actions](./types/scheduled-actions.md)**: Run on a cron schedule
 2. **[Webhook Actions](./types/webhook-actions.md)**: Respond to external webhook events
@@ -99,14 +99,14 @@ Actions can execute CLI commands using the `executeCommand` utility. This is use
 
 ```typescript
 // sites/mysite/.dialup/actions/build-action.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "build-action",
   schedule: "0 3 * * *", // Run at 3 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@dialup-deploy/server");
+    const { executeCommand } = await import("@keithk/deploy-server");
 
     // Execute a command
     const result = await executeCommand("bun run build", {
@@ -126,14 +126,14 @@ export default defineScheduledAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/deploy-action.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "deploy-action",
   schedule: "0 4 * * *", // Run at 4 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@dialup-deploy/server");
+    const { executeCommand } = await import("@keithk/deploy-server");
 
     // Get environment variables from context
     const env = context.env || {};
@@ -160,14 +160,14 @@ export default defineScheduledAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/build-and-deploy.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "build-and-deploy",
   schedule: "0 5 * * *", // Run at 5 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@dialup-deploy/server");
+    const { executeCommand } = await import("@keithk/deploy-server");
 
     // Execute build command
     const buildResult = await executeCommand("bun run build", {
@@ -211,9 +211,9 @@ These packages are available to all actions:
 
 | Package                  | Description              | Import Example                                                    |
 | ------------------------ | ------------------------ | ----------------------------------------------------------------- |
-| `@dialup-deploy/core`    | Core types and utilities | `import { SiteConfig } from "@dialup-deploy/core";`               |
-| `@dialup-deploy/actions` | Action definitions       | `import { defineScheduledAction } from "@dialup-deploy/actions";` |
-| `@dialup-deploy/server`  | Server utilities         | `import { executeCommand } from "@dialup-deploy/server";`         |
+| `@keithk/deploy-core`    | Core types and utilities | `import { SiteConfig } from "@keithk/deploy-core";`               |
+| `@keithk/deploy-actions` | Action definitions       | `import { defineScheduledAction } from "@keithk/deploy-actions";` |
+| `@keithk/deploy-server`  | Server utilities         | `import { executeCommand } from "@keithk/deploy-server";`         |
 
 ### Utility Functions
 

@@ -1,4 +1,4 @@
-# 🚀 DialUpDeploy
+# 🚀 Deploy
 
 **The fastest way I've found to get a site online—HTML, React, whatever. No config required. No SSL headaches. Just websites!**
 
@@ -35,7 +35,7 @@ If you just want the CLI to manage your sites:
 curl -fsSL https://bun.sh/install | bash
 
 # Install the CLI globally
-bun install -g @dialup-deploy/cli
+bun install -g @keithk/deploy-cli
 
 # Initialize a new project
 deploy init my-project
@@ -50,7 +50,7 @@ deploy start
 
 ---
 
-## ✨ What is DialUpDeploy?
+## ✨ What is Deploy?
 
 It's a CLI tool I built because I was tired of complex deployment setups. It handles any kind of site—static HTML, React builds, or your own Node servers. Self-hosted and straightforward.
 
@@ -85,18 +85,15 @@ deploy action run [action-id]
 deploy caddyfile update
 ```
 
-## 📦 Using DialUpDeploy Packages
+## 📦 Using Deploy Packages
 
-You can install DialUpDeploy packages from GitHub Packages:
+You can install Deploy packages from npm:
 
 ```bash
-# Configure npm to use GitHub Packages
-echo "@dialup-deploy:registry=https://npm.pkg.github.com" >> .npmrc
-
 # Install packages
-bun add @dialup-deploy/cli
+bun add @keithk/deploy-cli
 # or
-bun add @dialup-deploy/core @dialup-deploy/actions @dialup-deploy/server
+bun add @keithk/deploy-core @keithk/deploy-actions @keithk/deploy-server
 ```
 
 ---

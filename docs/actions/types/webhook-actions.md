@@ -16,13 +16,19 @@ The system comes with a built-in GitHub webhook handler. Add this to your root `
 }
 ```
 
+This will automatically set up a webhook for your GitHub repository. The webhook will trigger on push events to the specified branch, and run `git pull` if you push an update. You'll want to update the URL in your GitHub settings to point to your server's webhook endpoint. The URL will look like this:
+
+```
+https://your-domain.com/webhook/github
+```
+
 ## Custom Webhook
 
 Create a custom webhook handler:
 
 ```typescript
 // sites/mysite/.dialup/actions/stripe-webhook.ts
-import { defineWebhookAction } from "@dialup-deploy/actions";
+import { defineWebhookAction } from "@keithk/deploy-actions";
 
 export default defineWebhookAction({
   id: "stripe-webhook",
@@ -56,7 +62,7 @@ When setting up webhooks, it's important to implement proper security measures:
 
 ```typescript
 // sites/mysite/.dialup/actions/github-webhook.ts
-import { defineWebhookAction } from "@dialup-deploy/actions";
+import { defineWebhookAction } from "@keithk/deploy-actions";
 import { createHmac } from "crypto";
 
 export default defineWebhookAction({
@@ -119,7 +125,7 @@ export default defineWebhookAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/stripe-webhook.ts
-import { defineWebhookAction } from "@dialup-deploy/actions";
+import { defineWebhookAction } from "@keithk/deploy-actions";
 import Stripe from "stripe";
 
 export default defineWebhookAction({

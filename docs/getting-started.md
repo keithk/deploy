@@ -91,6 +91,6 @@ That's it! Your site is live with its own subdomain and SSL certificate.
    ```
 3. Restart the app:
    ```bash
-   sudo systemctl restart dialup-deploy
+   sudo systemctl restart deploy
    ```
 4. Update your DNS settings for the new domain
