@@ -15,12 +15,11 @@
     "build:sites": "bun run src/scripts/build-sites.ts",
     "setup:local": "bun run src/index.ts setup local",
     "setup:production": "bun run src/index.ts setup production",
-    "setup": "bun run src/index.ts setup local",
-    "postinstall": "bun run build"
+    "setup": "bun run src/index.ts setup local"
   },
   "dependencies": {
-    "@dialup-deploy/core": "^0.1.1",
-    "@dialup-deploy/server": "^0.1.1",
+    "@dialup-deploy/core": "workspace:*",
+    "@dialup-deploy/server": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^11.0.0",
     "fs-extra": "^11.2.0",
