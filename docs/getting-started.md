@@ -5,13 +5,13 @@
 Spin up a new server and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash
 ```
 
 Or, with your own domain and email:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | sudo bash -s yourdomain.com your@email.com
+curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash -s yourdomain.com your@email.com
 ```
 
 This script will:
@@ -35,8 +35,8 @@ If you don't specify a domain, the script uses your server's IP with nip.io (e.g
 ## 🛠️ Manual Installation
 
 ```bash
-git clone https://github.com/keithk/flexiweb.git
-cd flexiweb
+git clone https://github.com/keithk/deploy.git
+cd deploy
 bun install
 bun run setup:macos   # or your OS
 bun run build
@@ -91,6 +91,6 @@ That's it! Your site is live with its own subdomain and SSL certificate.
    ```
 3. Restart the app:
    ```bash
-   sudo systemctl restart flexiweb
+   sudo systemctl restart dialup-deploy
    ```
 4. Update your DNS settings for the new domain

@@ -20,7 +20,10 @@
     "cleanup": "rm -rf packages/server/dist && rm -rf packages/core/dist && rm -rf packages/cli/dist && rm -rf packages/actions/dist",
     "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
     "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup production",
-    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local"
+    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
+    "version": "lerna version",
+    "publish": "lerna publish",
+    "publish:from-git": "lerna publish from-git"
   },
   "keywords": [
     "bun",
@@ -33,6 +36,7 @@
     "@types/node": "^20.17.32",
     "bun-plugin-dtsx": "^0.21.9",
     "bun-types": "latest",
+    "lerna": "^8.2.2",
     "typescript": "^5.8.3"
   }
 }

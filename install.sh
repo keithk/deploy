@@ -1,6 +1,6 @@
 #!/bin/bash
-# install.sh - One-command installation script for Flexible Web Server
-# Usage: curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | bash
+# install.sh - One-command installation script for Dial Up Deploy
+# Usage: curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | bash
 
 set -e
 
@@ -77,7 +77,7 @@ else
     log_info "You can update this later by editing the .env file and running the caddyfile update command."
   else
     log_error "Could not determine IP address and no domain provided."
-    log_info "Usage: curl -fsSL https://raw.githubusercontent.com/keithk/flexiweb/main/install.sh | sudo bash -s yourdomain.com youremail@example.com"
+    log_info "Usage: curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash -s yourdomain.com youremail@example.com"
     exit 1
   fi
 fi
@@ -137,11 +137,9 @@ log_success "Production setup completed."
 
 # Display final instructions
 log_step "Installation completed successfully!"
-log_info "Your Flexible Web server is now set up at https://$DOMAIN"
+log_info "Your DialUpDeploy server is now set up at https://$DOMAIN"
 log_info "Your sites should be accessible at:"
 log_info "- https://$DOMAIN (default site)"
-log_info "- https://blog.$DOMAIN"
-log_info "- https://api.$DOMAIN"
 log_info "- etc."
 
 log_info "\nDNS Configuration Reminder:"
@@ -149,14 +147,14 @@ log_info "1. Set up an A record for your root domain pointing to this server's I
 log_info "2. Set up a wildcard CNAME record (*.$DOMAIN) pointing to your root domain"
 
 log_info "\nTo manage your application:"
-log_info "- Start: sudo systemctl start flexiweb"
-log_info "- Stop: sudo systemctl stop flexiweb"
-log_info "- Restart: sudo systemctl restart flexiweb"
-log_info "- View logs: sudo journalctl -u flexiweb"
+log_info "- Start: sudo systemctl start dialup-deploy"
+log_info "- Stop: sudo systemctl stop dialup-deploy"
+log_info "- Restart: sudo systemctl restart dialup-deploy"
+log_info "- View logs: sudo journalctl -u dialup-deploy"
 
 log_info "\nTo update your domain in the future:"
 log_info "1. Edit the .env file in $INSTALL_DIR and update PROJECT_DOMAIN=$DOMAIN to your new domain"
 log_info "2. Run: deploy caddyfile update"
-log_info "3. Restart the application: sudo systemctl restart flexiweb"
+log_info "3. Restart the application: sudo systemctl restart dialup-deploy"
 
 log_info "\nRemember to update your DNS settings for the new domain as well!"

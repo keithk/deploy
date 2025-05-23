@@ -1,0 +1,14 @@
+{
+  "version": "independent",
+  "npmClient": "bun",
+  "command": {
+    "publish": {
+      "registry": "https://npm.pkg.github.com",
+      "message": "chore(release): publish"
+    },
+    "version": {
+      "message": "chore(release): version bump"
+    }
+  },
+  "packages": ["packages/*"]
+}

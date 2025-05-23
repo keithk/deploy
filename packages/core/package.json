@@ -10,5 +10,14 @@
   "dependencies": {},
   "devDependencies": {
     "bun-types": "latest"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithk/deploy.git",
+    "directory": "packages/core"
   }
 }

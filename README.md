@@ -85,6 +85,20 @@ deploy action run [action-id]
 deploy caddyfile update
 ```
 
+## 📦 Using DialUpDeploy Packages
+
+You can install DialUpDeploy packages from GitHub Packages:
+
+```bash
+# Configure npm to use GitHub Packages
+echo "@dialup-deploy:registry=https://npm.pkg.github.com" >> .npmrc
+
+# Install packages
+bun add @dialup-deploy/cli
+# or
+bun add @dialup-deploy/core @dialup-deploy/actions @dialup-deploy/server
+```
+
 ---
 
 ## 📚 Documentation

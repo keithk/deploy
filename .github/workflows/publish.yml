@@ -1,0 +1,53 @@
+name: Publish Packages
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump type (patch, minor, major)"
+        required: true
+        default: "patch"
+      tag:
+        description: "Tag prefix for version"
+        required: false
+        default: ""
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build packages
+        run: bun run build:all
+
+      - name: Configure npm
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > ~/.npmrc
+          echo "@dialup-deploy:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+      - name: Version and publish
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          npx lerna version ${{ github.event.inputs.version }} --yes --no-push
+          npx lerna publish from-git --yes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish from tag
+        if: github.event_name == 'release'
+        run: npx lerna publish from-git --yes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
