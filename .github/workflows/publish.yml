@@ -46,7 +46,7 @@ jobs:
       - name: Version and publish
         if: github.event_name == 'workflow_dispatch'
         run: |
-          npx lerna version ${{ github.event.inputs.version }} --yes --no-push
+          npx lerna version ${{ github.event.inputs.version }} --yes --no-push --ignore-scripts
           git add -A
           git diff --staged --quiet || git commit -m "chore: version bump after lerna"
           npx lerna publish from-git --yes
