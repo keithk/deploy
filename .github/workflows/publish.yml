@@ -33,8 +33,7 @@ jobs:
 
       - name: Configure npm
         run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > ~/.npmrc
-          echo "@keithk:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           echo "Debug: Repository is ${{ github.repository }}"
           echo "Debug: Actor is ${{ github.actor }}"
 
