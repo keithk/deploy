@@ -19,8 +19,9 @@
     "setup": "bun run src/index.ts setup local"
   },
   "dependencies": {
-    "@keithk/deploy-core": "0.0.2",
-    "@keithk/deploy-server": "0.0.2",
+    "@keithk/deploy-core": "workspace:*",
+    "@keithk/deploy-server": "workspace:*",
+    "@keithk/deploy-actions": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^11.0.0",
     "fs-extra": "^11.2.0",

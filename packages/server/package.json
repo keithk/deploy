@@ -10,8 +10,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun --minify"
   },
   "dependencies": {
-    "@keithk/deploy-actions": "0.0.2",
-    "@keithk/deploy-core": "0.0.2",
+    "@keithk/deploy-actions": "workspace:*",
+    "@keithk/deploy-core": "workspace:*",
     "croner": "^9.0.0"
   },
   "devDependencies": {

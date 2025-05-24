@@ -15,7 +15,7 @@ This module provides a centralized database functionality for the DialUpDeploy s
 The `Database` class is implemented as a singleton to ensure a single database connection throughout the application:
 
 ```typescript
-import { Database } from "@dialup-deploy/core";
+import { Database } from "@keithk/dailup-core";
 
 // Get the database instance
 const db = Database.getInstance();
@@ -32,7 +32,7 @@ const results = db.query("SELECT * FROM my_table");
 The `ProcessModel` provides methods for managing process records:
 
 ```typescript
-import { processModel } from "@dialup-deploy/core";
+import { processModel } from "@keithk/dailup-core";
 
 // Save a process
 processModel.save("my-site:3000", {

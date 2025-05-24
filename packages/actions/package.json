@@ -15,7 +15,7 @@
   "author": "DialUp Deploy",
   "license": "MIT",
   "dependencies": {
-    "@keithk/deploy-core": "0.0.2"
+    "@keithk/deploy-core": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"

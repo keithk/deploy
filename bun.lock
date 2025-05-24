@@ -13,7 +13,7 @@
     },
     "packages/actions": {
       "name": "@keithk/deploy-actions",
-      "version": "0.1.1",
+      "version": "0.0.2",
       "dependencies": {
         "@keithk/deploy-core": "workspace:*",
       },
@@ -23,12 +23,13 @@
     },
     "packages/cli": {
       "name": "@keithk/deploy-cli",
-      "version": "0.1.1",
+      "version": "0.0.2",
       "bin": {
         "deploy": "./dist/index.js",
         "dd-cli": "./dist/index.js",
       },
       "dependencies": {
+        "@keithk/deploy-actions": "workspace:*",
         "@keithk/deploy-core": "workspace:*",
         "@keithk/deploy-server": "workspace:*",
         "chalk": "^5.3.0",
@@ -43,14 +44,14 @@
     },
     "packages/core": {
       "name": "@keithk/deploy-core",
-      "version": "0.1.1",
+      "version": "0.0.2",
       "devDependencies": {
         "bun-types": "latest",
       },
     },
     "packages/server": {
       "name": "@keithk/deploy-server",
-      "version": "0.1.1",
+      "version": "0.0.2",
       "dependencies": {
         "@keithk/deploy-actions": "workspace:*",
         "@keithk/deploy-core": "workspace:*",

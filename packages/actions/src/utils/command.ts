@@ -58,6 +58,12 @@ let serverExecuteCommand: (
   options: ExecuteCommandOptions
 ) => Promise<ExecuteCommandResult>;
 
+// This will be set by the server when it initializes the actions package
+let serverBuildSite: (
+  site: any,
+  context: any
+) => Promise<{ success: boolean; message: string }>;
+
 /**
  * Set the server's executeCommand function
  * This is called by the server when it initializes the actions package
@@ -69,6 +75,19 @@ export function setServerExecuteCommand(
   ) => Promise<ExecuteCommandResult>
 ): void {
   serverExecuteCommand = fn;
+}
+
+/**
+ * Set the server's buildSite function
+ * This is called by the server when it initializes the actions package
+ */
+export function setServerBuildSite(
+  fn: (
+    site: any,
+    context: any
+  ) => Promise<{ success: boolean; message: string }>
+): void {
+  serverBuildSite = fn;
 }
 
 /**
@@ -88,4 +107,23 @@ export async function executeCommand(
   }
 
   return serverExecuteCommand(command, options);
+}
+
+/**
+ * Build a site
+ * @param site The site configuration
+ * @param context The action context
+ * @returns Result of the build operation
+ */
+export async function buildSite(
+  site: any,
+  context: any
+): Promise<{ success: boolean; message: string }> {
+  if (!serverBuildSite) {
+    throw new Error(
+      "buildSite not initialized. This method can only be called from within the server context."
+    );
+  }
+
+  return serverBuildSite(site, context);
 }

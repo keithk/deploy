@@ -1,4 +1,4 @@
-declare module "@dialup-deploy/core" {
+declare module "@keithk/dailup-core" {
   export interface ActionContext {
     rootDir: string;
     mode: "serve" | "dev";

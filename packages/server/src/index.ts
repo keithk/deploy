@@ -3,7 +3,8 @@ import { discoverSites } from "./discoverSites";
 import { info, LogLevel } from "@keithk/deploy-core";
 import {
   processManager as actionsProcessManager,
-  setServerExecuteCommand
+  setServerExecuteCommand,
+  setServerBuildSite
 } from "@keithk/deploy-actions";
 import { processManager } from "./utils/process-manager";
 
@@ -11,8 +12,9 @@ import { processManager } from "./utils/process-manager";
 actionsProcessManager.setServerProcessManager(processManager);
 
 // Initialize the actions package with the server's executeCommand function
-import { executeCommand as serverExecuteCommand } from "./actions";
+import { executeCommand as serverExecuteCommand, buildSite as serverBuildSite } from "./actions";
 setServerExecuteCommand(serverExecuteCommand);
+setServerBuildSite(serverBuildSite);
 
 // Export server creation function
 export async function startServer(
@@ -42,7 +44,9 @@ export {
   actionRegistry,
   loadRootConfig,
   discoverActions,
-  initializeGitHubAction
+  initializeGitHubAction,
+  executeCommand,
+  buildSite
 } from "./actions";
 
 // Export types
@@ -50,6 +54,3 @@ export type { ActionRegistry } from "./actions/registry";
 
 // Re-export logging utilities from core
 export { LogLevel, setLogLevel } from "@keithk/deploy-core";
-
-// Re-export everything from the actions package
-export * from "@keithk/deploy-actions";

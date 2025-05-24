@@ -4,8 +4,14 @@ import {
   actionRegistry,
   loadRootConfig,
   discoverActions,
-  initializeGitHubAction
+  initializeGitHubAction,
+  executeCommand as serverExecuteCommand,
+  buildSite as serverBuildSite
 } from "@keithk/deploy-server";
+import {
+  setServerExecuteCommand,
+  setServerBuildSite
+} from "@keithk/deploy-actions";
 import { getSites } from "./site-manager";
 
 // Default root directory for sites
@@ -17,6 +23,10 @@ const DEFAULT_ROOT_DIR = process.env.ROOT_DIR || join(process.cwd(), "sites");
 export async function initializeActionRegistry(
   rootDir = DEFAULT_ROOT_DIR
 ): Promise<void> {
+  // Initialize the actions package with server functions
+  setServerExecuteCommand(serverExecuteCommand);
+  setServerBuildSite(serverBuildSite);
+
   // Load root config
   const rootConfig = await loadRootConfig();
 
@@ -170,14 +180,13 @@ export async function createSiteAction(
     const triggerBuild =
       options.triggerBuild !== undefined ? options.triggerBuild : true;
 
-    actionContent = `import { defineScheduledAction } from "@keithk/deploy-core";
+    actionContent = `import { defineScheduledAction, executeCommand, buildSite } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "${actionId}",
   schedule: "${schedule}",
   async handler(payload, context) {
     // Execute the command
-    const { executeCommand } = await import("@keithk/deploy-server");
     const result = await executeCommand("${command}", {
       cwd: context.site?.path || ""
     });
@@ -187,7 +196,6 @@ export default defineScheduledAction({
         ? `
     // Trigger build if specified
     if (result.success) {
-      const { buildSite } = await import("@keithk/deploy-server");
       const buildResult = await buildSite(context.site!, context);
       
       return {
@@ -211,7 +219,7 @@ export default defineScheduledAction({
     const path = options.path || "/webhook";
     const secret = options.secret ? `\n  // Secret: ${options.secret}` : "";
 
-    actionContent = `import { defineWebhookAction } from "@keithk/deploy-core";
+    actionContent = `import { defineWebhookAction } from "@keithk/deploy-actions";
 
 export default defineWebhookAction({
   id: "${actionId}",
@@ -233,7 +241,7 @@ export default defineWebhookAction({
   } else if (actionType === "route") {
     const path = options.path || "/api/example";
 
-    actionContent = `import { defineRouteAction } from "@keithk/deploy-core";
+    actionContent = `import { defineRouteAction } from "@keithk/deploy-actions";
 
 export default defineRouteAction({
   id: "${actionId}",
@@ -264,7 +272,7 @@ export default defineRouteAction({
   } else if (actionType === "hook") {
     const hook = options.hook || "server:after-start";
 
-    actionContent = `import { defineHookAction } from "@keithk/deploy-core";
+    actionContent = `import { defineHookAction } from "@keithk/deploy-actions";
 
 export default defineHookAction({
   id: "${actionId}",

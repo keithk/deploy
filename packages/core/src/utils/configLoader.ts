@@ -132,8 +132,6 @@ export async function createSiteConfig(
   // Calculate default ports (3000 + site index)
   const basePort = 3000 + siteIndex + 1;
 
-  console.log("site config", config);
-
   // Create the complete site configuration
   return {
     type,

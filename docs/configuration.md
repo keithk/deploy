@@ -33,7 +33,7 @@ The project-level configuration is stored in `.dialup/config.json`:
     "webhookPath": "/webhook"
   },
   "github": {
-    "repository": "username/flexiweb",
+    "repository": "username/deploy",
     "branch": "main",
     "secret": "your-github-webhook-secret"
   }

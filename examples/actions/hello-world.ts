@@ -4,7 +4,7 @@ import {
   defineHookAction,
   ActionContext,
   ActionResult
-} from "@dialup-deploy/core";
+} from "@keithk/dailup-core";
 
 /**
  * Example 1: Basic action
