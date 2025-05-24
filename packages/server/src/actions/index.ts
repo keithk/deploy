@@ -28,6 +28,9 @@ import { actionRegistry } from "./registry";
 import { hookManager } from "./hooks";
 import { routeManager } from "./routes";
 
+// Re-export buildSite from discovery
+export { buildSite } from "./discovery";
+
 // Set up circular dependencies
 actionRegistry.setHookManager(hookManager);
 actionRegistry.setRouteManager(routeManager);
