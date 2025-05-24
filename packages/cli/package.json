@@ -1,6 +1,6 @@
 {
   "name": "@keithk/deploy-cli",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "CLI for DialUpDeploy - The fastest way to get a site online",
   "main": "dist/index.js",
   "type": "module",
