@@ -1,64 +1,77 @@
 # 🚀 Deploy
 
-**The fastest way I've found to get a site online—HTML, React, whatever. No config required. No SSL headaches. Just websites!**
+**Drop websites into a folder. They're instantly live with SSL. That's it.**
 
-_I built this to solve my own personal website hosting needs. You'll notice there are no tests. Feel free to make an issue or PR, but this isn't actively developed OSS—it's just my personal tool that I'm sharing. Take it, fork it, build a user system on top and host sites for your friends in your `/sites` folder. Add fediverse webhooks and turn it into a social network. Do whatever! I don't know!_
+The simplest way to host multiple websites on one server. No config files, no SSL headaches, no complex setups. Just a `/sites` folder where every subdirectory becomes a live website.
+
+_I built this to solve my own personal website hosting needs. You'll notice there are no tests. Feel free to make an issue or PR, but this isn't actively developed OSS—it's just my personal tool that I'm sharing. Take it, fork it, build a user system on top and host sites for your friends in your /sites folder. Add fediverse webhooks and turn it into a social network. Do whatever! I don't know!_
 
 ---
 
-## 🟢 Installation Options
+## 🚀 Quick Start
 
-### Option 1: One-Command Server Install (Ubuntu/DigitalOcean)
+### Get a server running in 2 minutes
 
-Spin up a new server and run:
+Spin up any Ubuntu server ($5 DigitalOcean droplet works great) and run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash
 ```
 
-Or, with your own domain and email:
+Or with your own domain:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash -s yourdomain.com your@email.com
 ```
 
-- Installs everything (Bun, Caddy, dependencies)
-- Sets up wildcard SSL with Caddy (no manual certs, ever)
-- You get instant subdomains, custom domains, and HTTPS—automagically
+Done! You now have:
 
-### Option 2: Install CLI Only
+- ✅ Automatic SSL for any domain you point at it
+- ✅ A `/sites` folder where you drop websites
+- ✅ Instant subdomains for every site
 
-If you just want the CLI to manage your sites:
+### Add your first site
 
 ```bash
-# Install Bun if you don't have it
-curl -fsSL https://bun.sh/install | bash
+# Go to your sites folder
+cd /opt/deploy/sites
 
-# Install the CLI globally
+# Create a new site (just make a folder!)
+mkdir my-awesome-site
+echo "<h1>Hello World!</h1>" > my-awesome-site/index.html
+
+# Tell Deploy about it
+deploy site create my-awesome-site --type static
+
+# That's it! Live at my-awesome-site.yourdomain.com
+```
+
+### Or develop locally
+
+```bash
+# Install Bun and the CLI
+curl -fsSL https://bun.sh/install | bash
 bun install -g @keithk/deploy-cli
 
-# Initialize a new project
+# Start a new project
 deploy init my-project
 cd my-project
 
-# Create your first site
+# Add sites to the sites/ folder, then:
 deploy site create my-site
-
-# Start the server
 deploy start
 ```
 
 ---
 
-## ✨ What is Deploy?
+## ✨ What makes this special?
 
-It's a CLI tool I built because I was tired of complex deployment setups. It handles any kind of site—static HTML, React builds, or your own Node servers. Self-hosted and straightforward.
-
-- Create sites with a single command
-- Get a subdomain and SSL instantly (thanks to Caddy)
-- Custom domains? Just add them—SSL is handled automatically
-- Built-in actions & webhooks for automation
-- Built for my specific needs, but maybe it works for yours too
+- **Drop and go**: Copy files to `/sites/sitename/`, run one command, it's live
+- **Zero config**: HTML, React, Node.js—whatever you put in works
+- **Instant SSL**: Point any domain at your server, certificates happen automatically
+- **Git-friendly**: Everything lives in a git repo, deploy with `git push`
+- **Subdomain magic**: Every site gets `sitename.yourdomain.com` automatically
+- **Actually simple**: No YAML, no Docker, no complex CI/CD
 
 ## 🛠️ CLI Commands
 
