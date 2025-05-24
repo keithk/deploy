@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { resolve } from "path";
 import { existsSync, readFileSync, mkdirSync } from "fs";
+import { spawn } from "bun";
 import {
   isCaddyRunning,
   startCaddy,
@@ -15,6 +16,56 @@ import {
   LogLevel,
   processModel
 } from "@keithk/deploy-core";
+import { startServer } from "@keithk/deploy-server";
+import { processManager } from "@keithk/deploy-server/src/utils/process-manager";
+
+async function restartProcesses() {
+  info("Checking for processes to restart...");
+  try {
+    const runningProcesses = processModel.getByStatus("running");
+    if (runningProcesses.length > 0) {
+      info(`Found ${runningProcesses.length} processes to restart`);
+
+      for (const proc of runningProcesses) {
+        info(
+          `Restarting process ${proc.id} (${proc.site} on port ${proc.port})`
+        );
+        const success = await processManager.startProcess(
+          proc.site,
+          proc.port,
+          proc.script,
+          proc.cwd,
+          proc.type,
+          {} // We don't store env variables in the database for security reasons
+        );
+
+        if (success) {
+          info(`Successfully restarted process ${proc.id}`);
+        } else {
+          warn(`Failed to restart process ${proc.id}`);
+        }
+      }
+    } else {
+      info("No processes found to restart");
+    }
+  } catch (err) {
+    warn("Error restarting processes:", err);
+  }
+}
+
+async function setupLogsDirectory() {
+  const logsDir = resolve(process.cwd(), "logs");
+  if (!existsSync(logsDir)) {
+    mkdirSync(logsDir, { recursive: true });
+  }
+  return logsDir;
+}
+
+function getRootDir() {
+  return process.env.ROOT_DIR
+    ? resolve(process.env.ROOT_DIR)
+    : resolve(__dirname, "../../../../sites");
+}
 
 /**
  * Register the server commands
@@ -29,8 +80,35 @@ export function registerServerCommands(program: Command): void {
       "Set logging level (0=none, 1=error, 2=warn, 3=info, 4=debug)",
       "3"
     )
+    .option(
+      "--daemon",
+      "Run server in daemon mode (background process)",
+      true
+    )
+    .option(
+      "--foreground",
+      "Run server in foreground mode (opposite of daemon)"
+    )
     .action(async (options) => {
       try {
+        // Handle daemon vs foreground mode
+        const isDaemon = options.foreground ? false : options.daemon;
+        
+        if (isDaemon) {
+          info("Starting server in daemon mode...");
+          
+          // Spawn the process in daemon mode using Bun
+          const proc = spawn({
+            cmd: ["bun", "run", "deploy", "start", "--foreground", "--log-level", options.logLevel],
+            stdio: ["ignore", "ignore", "ignore"],
+            detached: true
+          });
+          
+          proc.unref();
+          info(`Server started in daemon mode with PID ${proc.pid}`);
+          process.exit(0);
+        }
+
         // Start Caddy if needed
         if (!(await isCaddyRunning())) {
           await startCaddyProduction();
@@ -41,69 +119,25 @@ export function registerServerCommands(program: Command): void {
         // Start the server
         info("Starting server in production mode...");
 
-        // Create logs directory if it doesn't exist
-        const logsDir = resolve(process.cwd(), "logs");
-        if (!existsSync(logsDir)) {
-          mkdirSync(logsDir, { recursive: true });
-        }
-
-        const { startServer } = await import("@keithk/deploy-server");
-        // Ensure rootDir is properly resolved
-        const rootDir = process.env.ROOT_DIR
-          ? resolve(process.env.ROOT_DIR)
-          : resolve(__dirname, "../../../../sites");
+        const logsDir = await setupLogsDirectory();
+        const rootDir = getRootDir();
 
         debug(`Using root directory: ${rootDir}`);
         const logLevel = parseInt(options.logLevel);
         const server = await startServer("serve", { rootDir, logLevel });
 
-        // Restart any processes that were running before
-        info("Checking for processes to restart...");
-        try {
-          const runningProcesses = processModel.getByStatus("running");
-          if (runningProcesses.length > 0) {
-            info(`Found ${runningProcesses.length} processes to restart`);
-
-            // Import the process manager directly from the utils
-            const { processManager } = await import(
-              "@keithk/deploy-server/src/utils/process-manager"
-            );
-
-            // Restart each process
-            for (const proc of runningProcesses) {
-              info(
-                `Restarting process ${proc.id} (${proc.site} on port ${proc.port})`
-              );
-              const success = await processManager.startProcess(
-                proc.site,
-                proc.port,
-                proc.script,
-                proc.cwd,
-                proc.type,
-                {} // We don't store env variables in the database for security reasons
-              );
-
-              if (success) {
-                info(`Successfully restarted process ${proc.id}`);
-              } else {
-                warn(`Failed to restart process ${proc.id}`);
-              }
-            }
-          } else {
-            info("No processes found to restart");
-          }
-        } catch (err) {
-          warn("Error restarting processes:", err);
-        }
+        await restartProcesses();
 
         info(`Server is now active and ready to handle requests`);
         info(`Logs are being written to: ${logsDir}`);
 
-        // Handle graceful shutdown
-        process.on("SIGINT", () => {
-          info("Shutting down server...");
-          process.exit(0);
-        });
+        // Only handle graceful shutdown in foreground mode
+        if (!isDaemon) {
+          process.on("SIGINT", () => {
+            info("Shutting down server...");
+            process.exit(0);
+          });
+        }
       } catch (err) {
         error("Failed to start server:", err);
         process.exit(1);
@@ -209,6 +243,52 @@ export function registerServerCommands(program: Command): void {
         });
       } catch (err) {
         error("Failed to start development server:", err);
+        process.exit(1);
+      }
+    });
+
+  // Restart command
+  program
+    .command("restart")
+    .description("Restart the server (kills any running processes and starts fresh)")
+    .option(
+      "--log-level <level>",
+      "Set logging level (0=none, 1=error, 2=warn, 3=info, 4=debug)",
+      "3"
+    )
+    .action(async (options) => {
+      try {
+        info("Restarting server...");
+        
+        // Kill any existing deploy processes using Bun
+        try {
+          const proc = spawn({
+            cmd: ["pkill", "-f", "deploy.*start"],
+            stdio: ["pipe", "pipe", "pipe"]
+          });
+          
+          await proc.exited;
+          info("Killed existing server processes");
+          
+          // Wait a moment for processes to clean up
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (err) {
+          info("No existing server processes to kill");
+        }
+        
+        // Start the server again
+        info("Starting server...");
+        const proc = spawn({
+          cmd: ["bun", "run", "deploy", "start", "--log-level", options.logLevel],
+          stdio: ["ignore", "ignore", "ignore"],
+          detached: true
+        });
+        
+        proc.unref();
+        info(`Server restarted successfully with PID ${proc.pid}`);
+        process.exit(0);
+      } catch (err) {
+        error("Failed to restart server:", err);
         process.exit(1);
       }
     });

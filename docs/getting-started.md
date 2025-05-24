@@ -49,7 +49,7 @@ bun run build
 ```bash
 # Using the CLI
 deploy setup local
-deploy start
+deploy dev
 ```
 
 ---
@@ -68,7 +68,7 @@ deploy start
 
 1. Make a new folder in `sites` (name it whatever you want)
 2. Add a `config.json` file with your configuration
-3. Restart the server with `deploy start`
+3. Restart the server with `deploy restart`
 
 That's it! Your site is live with its own subdomain and SSL certificate.
 
@@ -91,6 +91,6 @@ That's it! Your site is live with its own subdomain and SSL certificate.
    ```
 3. Restart the app:
    ```bash
-   sudo systemctl restart deploy
+   deploy restart
    ```
 4. Update your DNS settings for the new domain

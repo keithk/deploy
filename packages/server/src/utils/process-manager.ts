@@ -1,7 +1,7 @@
 import { debug, info, warn, error } from "./logging";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import { appendFile } from "fs/promises";
+import { appendFile, writeFile } from "fs/promises";
 import {
   processModel,
   ProcessInfo as DbProcessInfo,
@@ -62,10 +62,15 @@ interface ProcessInfo {
   env: Record<string, string>;
   lastRestart?: Date;
   startTime: Date;
+  logWriters?: {
+    stdout: BunFile;
+    stderr: BunFile;
+  };
   healthChecks: {
     total: number;
     failed: number;
     lastCheck?: Date;
+    consecutiveFailed: number;
   };
 }
 
@@ -93,6 +98,7 @@ export class ProcessManager {
   private maxRestarts = 3; // Maximum number of restarts within restart window
   private restartWindow = 60000; // 1 minute window for restart counting
   private restartHistory: Map<string, number[]> = new Map(); // Track restart timestamps
+  private isShuttingDown = false;
 
   constructor(options: { logsDir?: string } = {}) {
     // Set up logs directory
@@ -136,21 +142,25 @@ export class ProcessManager {
     }
 
     // Set up log files
-    const stdout = join(this.logsDir, `${site}-${port}.out.log`);
-    const stderr = join(this.logsDir, `${site}-${port}.err.log`);
+    const stdoutPath = join(this.logsDir, `${site}-${port}.out.log`);
+    const stderrPath = join(this.logsDir, `${site}-${port}.err.log`);
 
     // Add timestamp to log files
     const timestamp = new Date().toISOString();
-    await appendFile(
-      stdout,
-      `\n\n--- Process started at ${timestamp} ---\n\n`,
-      "utf8"
-    ).catch((err) => error(`Failed to write to stdout log: ${err}`));
-    await appendFile(
-      stderr,
-      `\n\n--- Process started at ${timestamp} ---\n\n`,
-      "utf8"
-    ).catch((err) => error(`Failed to write to stderr log: ${err}`));
+    try {
+      await appendFile(
+        stdoutPath,
+        `\n\n--- Process started at ${timestamp} ---\n\n`,
+        "utf8"
+      );
+      await appendFile(
+        stderrPath,
+        `\n\n--- Process started at ${timestamp} ---\n\n`,
+        "utf8"
+      );
+    } catch (err) {
+      error(`Failed to initialize log files: ${err}`);
+    }
 
     // Prepare environment variables
     const processEnv = {
@@ -184,58 +194,17 @@ export class ProcessManager {
     );
 
     try {
-      // Create file streams for logs
-      const stdoutStream = Bun.file(stdout).writer();
-      const stderrStream = Bun.file(stderr).writer();
-
-      // Start the process
+      // Start the process with simplified logging
       const process = Bun.spawn({
         cmd,
         cwd,
         env: processEnv,
-        stdout: "pipe",
-        stderr: "pipe"
+        stdout: Bun.file(stdoutPath),
+        stderr: Bun.file(stderrPath)
       });
 
-      // Pipe stdout and stderr to log files
-      if (process.stdout) {
-        // Use a more compatible approach for piping
-        (async () => {
-          try {
-            const reader = process.stdout!.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              await stdoutStream.write(value);
-            }
-          } catch (err) {
-            error(`Failed to pipe stdout: ${err}`);
-          } finally {
-            stdoutStream.end();
-          }
-        })();
-      }
-
-      if (process.stderr) {
-        // Use a more compatible approach for piping
-        (async () => {
-          try {
-            const reader = process.stderr!.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              await stderrStream.write(value);
-            }
-          } catch (err) {
-            error(`Failed to pipe stderr: ${err}`);
-          } finally {
-            stderrStream.end();
-          }
-        })();
-      }
-
       // Store process info
-      this.processes.set(processId, {
+      const processInfo: ProcessInfo = {
         process,
         site,
         port,
@@ -246,9 +215,12 @@ export class ProcessManager {
         startTime: new Date(),
         healthChecks: {
           total: 0,
-          failed: 0
+          failed: 0,
+          consecutiveFailed: 0
         }
-      });
+      };
+      
+      this.processes.set(processId, processInfo);
 
       // Save to database
       try {
@@ -274,27 +246,53 @@ export class ProcessManager {
         // Remove from processes map if it's the current process
         const currentProcess = this.processes.get(processId);
         if (currentProcess && currentProcess.process === process) {
-          this.processes.delete(processId);
+          this.cleanupProcess(processId);
 
           // Update status in database
-          try {
-            processModel.updateStatus(processId, "stopped");
-            debug(`Updated process ${processId} status to stopped`);
-          } catch (err) {
-            error(`Failed to update process status: ${err}`);
-          }
+          this.updateProcessStatus(processId, "stopped");
 
-          // Attempt to restart if exit was unexpected
-          if (code !== 0) {
+          // Attempt to restart if exit was unexpected and we're not shutting down
+          if (code !== 0 && !this.isShuttingDown) {
             this.attemptRestart(site, port, script, cwd, type, env);
           }
         }
+      }).catch((err) => {
+        error(`Error handling process exit for ${processId}: ${err}`);
       });
 
       return true;
     } catch (err) {
       error(`Failed to start process for ${site} on port ${port}: ${err}`);
       return false;
+    }
+  }
+
+  /**
+   * Clean up process resources
+   */
+  private cleanupProcess(processId: string): void {
+    const processInfo = this.processes.get(processId);
+    if (processInfo) {
+      // Clean up any log writers if they exist
+      if (processInfo.logWriters) {
+        // Log writers cleanup would go here if we had them
+        // For now, Bun handles file cleanup automatically
+      }
+      
+      this.processes.delete(processId);
+      debug(`Cleaned up process ${processId}`);
+    }
+  }
+
+  /**
+   * Update process status in database with error handling
+   */
+  private updateProcessStatus(processId: string, status: string): void {
+    try {
+      processModel.updateStatus(processId, status);
+      debug(`Updated process ${processId} status to ${status}`);
+    } catch (err) {
+      error(`Failed to update process status for ${processId}: ${err}`);
     }
   }
 
@@ -309,6 +307,11 @@ export class ProcessManager {
     type: string,
     env: Record<string, string>
   ): Promise<void> {
+    if (this.isShuttingDown) {
+      debug(`Skipping restart for ${site}:${port} - shutting down`);
+      return;
+    }
+
     const processId = this.generateProcessId(site, port);
     const now = Date.now();
 
@@ -329,6 +332,7 @@ export class ProcessManager {
     // Check if we've exceeded max restarts
     if (recentRestarts.length > this.maxRestarts) {
       error(`Too many restart attempts for ${site} on port ${port}, giving up`);
+      this.updateProcessStatus(processId, "failed");
       return;
     }
 
@@ -345,14 +349,20 @@ export class ProcessManager {
 
     // Wait and restart
     setTimeout(async () => {
-      await this.startProcess(site, port, script, cwd, type, env);
+      if (!this.isShuttingDown) {
+        try {
+          await this.startProcess(site, port, script, cwd, type, env);
+        } catch (err) {
+          error(`Failed to restart process ${processId}: ${err}`);
+        }
+      }
     }, delay);
   }
 
   /**
-   * Stop a process
+   * Stop a process with graceful shutdown
    */
-  async stopProcess(siteId: string): Promise<boolean> {
+  async stopProcess(siteId: string, timeout: number = 10000): Promise<boolean> {
     const processInfo = this.processes.get(siteId);
     if (!processInfo) {
       warn(`No process found for ${siteId}`);
@@ -360,33 +370,37 @@ export class ProcessManager {
     }
 
     try {
+      info(`Stopping process ${siteId} gracefully...`);
+      
       // Send SIGTERM to allow graceful shutdown
       processInfo.process.kill("SIGTERM" as Signals);
 
-      // Wait for process to exit (with timeout)
+      // Wait for process to exit (with configurable timeout)
       const exited = await Promise.race([
         processInfo.process.exited,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeout))
       ]);
 
       // If process didn't exit, force kill
       if (exited === null) {
-        warn(`Process ${siteId} didn't exit gracefully, forcing kill`);
+        warn(`Process ${siteId} didn't exit gracefully within ${timeout}ms, forcing kill`);
         processInfo.process.kill("SIGKILL" as Signals);
+        
+        // Wait a bit more for force kill
+        await Promise.race([
+          processInfo.process.exited,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+        ]);
       }
 
-      this.processes.delete(siteId);
-
-      // Update status in database
-      try {
-        processModel.updateStatus(siteId, "stopped");
-        debug(`Updated process ${siteId} status to stopped`);
-      } catch (err) {
-        error(`Failed to update process status: ${err}`);
-      }
+      this.cleanupProcess(siteId);
+      this.updateProcessStatus(siteId, "stopped");
+      
+      info(`Process ${siteId} stopped successfully`);
       return true;
     } catch (err) {
       error(`Failed to stop process ${siteId}: ${err}`);
+      this.cleanupProcess(siteId);
       return false;
     }
   }
@@ -423,7 +437,21 @@ export class ProcessManager {
     }
 
     // Check if process is still running
-    return processInfo.process.pid !== undefined && !processInfo.process.killed;
+    const isRunning = processInfo.process.pid !== undefined && !processInfo.process.killed;
+    
+    // Additional health check: verify PID is still valid
+    if (isRunning && processInfo.process.pid) {
+      try {
+        // Send signal 0 to check if process exists
+        process.kill(processInfo.process.pid, 0);
+        return true;
+      } catch (err) {
+        debug(`Process ${siteId} PID ${processInfo.process.pid} no longer exists`);
+        return false;
+      }
+    }
+    
+    return isRunning;
   }
 
   /**
@@ -598,41 +626,53 @@ export class ProcessManager {
    * Check health of all processes
    */
   private checkAllProcesses(): void {
+    if (this.isShuttingDown) {
+      return;
+    }
+
     for (const [id, info] of this.processes.entries()) {
-      const isHealthy = this.isProcessHealthy(id);
+      try {
+        const isHealthy = this.isProcessHealthy(id);
 
-      // Update health check stats
-      info.healthChecks.total++;
-      info.healthChecks.lastCheck = new Date();
+        // Update health check stats
+        info.healthChecks.total++;
+        info.healthChecks.lastCheck = new Date();
 
-      if (!isHealthy) {
-        info.healthChecks.failed++;
-        warn(
-          `Process ${id} is unhealthy (${info.healthChecks.failed}/${info.healthChecks.total} failed checks)`
-        );
+        if (!isHealthy) {
+          info.healthChecks.failed++;
+          info.healthChecks.consecutiveFailed++;
+          
+          warn(
+            `Process ${id} is unhealthy (${info.healthChecks.consecutiveFailed} consecutive failures, ${info.healthChecks.failed}/${info.healthChecks.total} total)`
+          );
 
-        // If more than 3 consecutive failed checks, restart
-        if (info.healthChecks.failed >= 3) {
-          warn(`Restarting unhealthy process ${id}`);
-          this.restartProcess(id).catch((err) => {
-            error(`Failed to restart process ${id}: ${err}`);
-          });
+          // If more than 3 consecutive failed checks, restart
+          if (info.healthChecks.consecutiveFailed >= 3) {
+            warn(`Restarting unhealthy process ${id} after ${info.healthChecks.consecutiveFailed} consecutive failures`);
+            
+            this.restartProcess(id).catch((err) => {
+              error(`Failed to restart process ${id}: ${err}`);
+            });
 
-          // Reset failed count after restart attempt
-          info.healthChecks.failed = 0;
+            // Reset consecutive failed count after restart attempt
+            info.healthChecks.consecutiveFailed = 0;
+          }
+        } else {
+          // Reset consecutive failed count on successful check
+          info.healthChecks.consecutiveFailed = 0;
         }
-      } else {
-        // Reset failed count on successful check
-        info.healthChecks.failed = 0;
+      } catch (err) {
+        error(`Error during health check for process ${id}: ${err}`);
       }
     }
   }
 
   /**
-   * Shutdown all processes
+   * Shutdown all processes gracefully
    */
-  async shutdownAll(): Promise<void> {
+  async shutdownAll(timeout: number = 15000): Promise<void> {
     info(`Shutting down all processes (${this.processes.size} total)`);
+    this.isShuttingDown = true;
 
     // Stop health check interval
     if (this.healthCheckInterval) {
@@ -640,15 +680,31 @@ export class ProcessManager {
       this.healthCheckInterval = null;
     }
 
-    // Stop all processes
-    const promises = Array.from(this.processes.keys()).map((id) =>
-      this.stopProcess(id).catch((err) => {
+    if (this.processes.size === 0) {
+      info("No processes to shutdown");
+      return;
+    }
+
+    // Stop all processes with timeout
+    const startTime = Date.now();
+    const promises = Array.from(this.processes.keys()).map(async (id) => {
+      try {
+        const remainingTimeout = Math.max(1000, timeout - (Date.now() - startTime));
+        return await this.stopProcess(id, remainingTimeout);
+      } catch (err) {
         error(`Error stopping process ${id}: ${err}`);
         return false;
-      })
-    );
+      }
+    });
 
-    await Promise.all(promises);
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value));
+    
+    if (failed.length > 0) {
+      warn(`Failed to gracefully shutdown ${failed.length} processes`);
+    }
+    
+    info(`Process shutdown completed in ${Date.now() - startTime}ms`);
   }
 }
 
@@ -656,16 +712,34 @@ export class ProcessManager {
  * Detect package manager from package.json and lock files
  */
 function detectPackageManager(dir: string): string {
-  if (existsSync(join(dir, "bun.lock"))) {
-    return "bun";
-  } else if (existsSync(join(dir, "yarn.lock"))) {
-    return "yarn";
-  } else if (existsSync(join(dir, "pnpm-lock.yaml"))) {
-    return "pnpm";
-  } else {
-    return "npm";
+  try {
+    if (existsSync(join(dir, "bun.lock"))) {
+      return "bun";
+    } else if (existsSync(join(dir, "yarn.lock"))) {
+      return "yarn";
+    } else if (existsSync(join(dir, "pnpm-lock.yaml"))) {
+      return "pnpm";
+    } else {
+      return "npm";
+    }
+  } catch (err) {
+    debug(`Error detecting package manager in ${dir}: ${err}`);
+    return "npm"; // Default fallback
   }
 }
 
 // Create a singleton instance
 export const processManager = new ProcessManager();
+
+// Handle graceful shutdown on process signals
+process.on('SIGTERM', async () => {
+  info('Received SIGTERM, shutting down process manager...');
+  await processManager.shutdownAll();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  info('Received SIGINT, shutting down process manager...');
+  await processManager.shutdownAll();
+  process.exit(0);
+});
