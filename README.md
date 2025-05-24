@@ -40,10 +40,8 @@ cd /opt/deploy/sites
 mkdir my-awesome-site
 echo "<h1>Hello World!</h1>" > my-awesome-site/index.html
 
-# Tell Deploy about it
-deploy site create my-awesome-site --type static
-
 # That's it! Live at my-awesome-site.yourdomain.com
+# (Deploy automatically detects and serves new sites)
 ```
 
 ### Or develop locally
@@ -58,7 +56,6 @@ deploy init my-project
 cd my-project
 
 # Add sites to the sites/ folder, then:
-deploy site create my-site
 deploy start
 ```
 
