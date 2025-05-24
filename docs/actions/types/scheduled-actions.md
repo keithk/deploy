@@ -8,7 +8,7 @@ Create a file in your site's `.dialup/actions` directory:
 
 ```typescript
 // sites/mysite/.dialup/actions/nightly-build.ts
-import { defineScheduledAction, executeCommand } from "@keithk/deploy-actions";
+import { defineScheduledAction, executeCommand, buildSite } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
   id: "nightly-build",
@@ -19,6 +19,9 @@ export default defineScheduledAction({
     const result = await executeCommand("bun run build", {
       cwd: context.site?.path || ""
     });
+
+    // Or trigger a site build for static-build sites:
+    // const buildResult = await buildSite(context.site!, context);
 
     return {
       success: result.success,
