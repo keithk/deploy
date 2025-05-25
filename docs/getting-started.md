@@ -66,11 +66,27 @@ deploy start
 
 ## 💫 Adding a New Site (3 Steps!)
 
+### Option 1: Clone from GitHub (Recommended!)
+
+1. **Clone your repo**: `git clone https://github.com/yourusername/your-site.git sites/your-site`
+2. **Add config**: `echo '{"type": "static"}' > sites/your-site/config.json`
+3. **Go live**: Your site is instantly available at `your-site.yourdomain.com`
+
+### Option 2: Create from scratch
+
 1. Make a new folder in `sites` (name it whatever you want)
 2. Add a `config.json` file with your configuration
-3. Restart the server with `deploy restart`
+3. Add your website files
 
 That's it! Your site is live with its own subdomain and SSL certificate.
+
+### 🚀 Pro Tip: Git-powered deployments
+
+Once your site is cloned from GitHub:
+- **Update**: `cd sites/your-site && git pull` (changes are live instantly)
+- **Rollback**: `git checkout previous-commit` (instant rollbacks)
+- **Branches**: Switch branches to test different versions
+- **Automation**: Set up webhooks to auto-deploy on push
 
 ---
 

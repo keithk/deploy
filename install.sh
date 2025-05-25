@@ -112,7 +112,7 @@ cd "$INSTALL_DIR"
 
 # Install the CLI globally
 log_info "Installing CLI globally..."
-bun install -g @dialup-deploy/cli
+bun install -g @keithk/deploy-cli
 log_success "CLI installed globally."
 
 # Initialize a new project

@@ -33,7 +33,7 @@ Caddy will automatically request and install a valid SSL certificate for your do
    ```
 3. Restart the app:
    ```bash
-   sudo systemctl restart flexiweb
+   deploy restart
    ```
 4. Update your DNS settings for the new domain
 

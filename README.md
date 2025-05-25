@@ -44,6 +44,22 @@ echo "<h1>Hello World!</h1>" > my-awesome-site/index.html
 # (Deploy automatically detects and serves new sites)
 ```
 
+### Or clone from GitHub (the developer way!)
+
+```bash
+# Go to your sites folder
+cd /opt/deploy/sites
+
+# Clone your site directly from GitHub
+git clone https://github.com/yourusername/your-site.git
+
+# Add a simple config.json to tell Deploy what type of site it is
+echo '{"type": "static"}' > your-site/config.json
+
+# Boom! Your GitHub repo is now live at your-site.yourdomain.com
+# Deploy with git push, update with git pull
+```
+
 ### Or develop locally
 
 ```bash
@@ -63,14 +79,15 @@ deploy start
 
 ## ✨ What makes this special?
 
-- **Drop and go**: Copy files to `/sites/sitename/`, run one command, it's live
-- **Zero config**: HTML, React, Node.js—whatever you put in works
+- **Drop and go**: Copy files to `/sites/sitename/`, it's instantly live
+- **Git native**: `git clone` your sites, `git pull` to deploy updates
+- **Zero config**: HTML, React, Node.js, Astro—whatever you put in works
 - **Instant SSL**: Point any domain at your server, certificates happen automatically
-- **Git-friendly**: Everything lives in a git repo, deploy with `git push`
 - **Subdomain magic**: Every site gets `sitename.yourdomain.com` automatically
-- **Actually simple**: No YAML, no Docker, no complex CI/CD
+- **Actually simple**: No YAML, no Docker, no complex CI/CD pipelines
 - **Solid process management**: CPU/memory monitoring, auto-restarts, health checks
 - **Real-time monitoring**: Watch your processes live with `deploy processes watch`
+- **DigitalOcean ready**: One-command install on any $5 droplet
 
 ## 🛠️ CLI Commands
 
@@ -160,9 +177,20 @@ bun add @keithk/deploy-core @keithk/deploy-actions @keithk/deploy-server
 - [Site Types](docs/site-types.md)
 - [Custom Domains & SSL](docs/custom-domains.md)
 - [Actions & Automation](docs/actions/index.md)
-- [Bluesky Integration](docs/bluesky.md)
 
 ---
+
+## 🦄 Real-world examples
+
+**Personal portfolio**: `git clone` your GitHub portfolio, add `{"type": "static"}` config, done.
+
+**Astro blog**: Clone your Astro site, add `{"type": "static-build", "buildDir": "dist"}`, it builds and deploys automatically.
+
+**Next.js app**: `{"type": "passthrough", "proxyPort": 3000}` and it proxies to your running Next.js server.
+
+**API microservice**: `{"type": "dynamic"}` with a simple `handleRequest` function for custom server logic.
+
+**Multiple sites**: Drop 5 different projects in `/sites`, each gets its own subdomain with SSL.
 
 ## 🦄 Why is this cool?
 

@@ -1,14 +1,14 @@
-# Flexible Web CLI
+# Deploy CLI
 
-Welcome to the Flexible Web CLI! This is your command-line toolkit for managing, building, and running your Flexible Web server and sites with ease. Inspired by the spirit of the old internet, our CLI makes it simple for anyone to get started hosting and customizing their own web playground.
+Welcome to the Deploy CLI! This is your command-line toolkit for managing, building, and running your Deploy server and sites with ease. Inspired by the spirit of the old internet, our CLI makes it simple for anyone to get started hosting and customizing their own web playground.
 
 ## Getting Started
 
 Install dependencies at the project root:
 
 ```bash
-git clone https://github.com/yourusername/flexible-web.git
-cd flexible-web
+git clone https://github.com/keithk/deploy.git
+cd deploy
 bun install
 ```
 
@@ -23,7 +23,7 @@ bun packages/cli/src/index.ts <command> [options]
 Or, if you have a global install:
 
 ```bash
-flexiweb <command> [options]
+deploy <command> [options]
 ```
 
 ### Available Commands
@@ -31,9 +31,16 @@ flexiweb <command> [options]
 ```
 list                     List all available sites and their commands
 run <site> <command>     Run a command for a specific site
-start                    Start the web server (serve mode)
-dev                      Start the web server in development mode
-build                    Build all static-build sites
+init [directory]         Initialize a new project
+setup [local|production] Set up the project for local development or production
+site create <name>       Create a new site
+site list                List all sites
+start                    Start the server
+dev                      Start the server in development mode
+action run [action-id]   Run actions
+caddyfile update         Update Caddyfile
+processes list           List all processes
+processes watch          Real-time monitoring dashboard
 help                     Show this help message
 
 Options:
@@ -68,7 +75,7 @@ The CLI is your gateway to building and customizing your own sites! Just add a f
 
 ## The Spirit of the Old Internet
 
-Flexible Web is about making it easy and fun to carve out your own corner of the web. Hack, remix, and share—just like the early days. See `/sites` for examples and inspiration!
+Deploy is about making it easy and fun to carve out your own corner of the web. Hack, remix, and share—just like the early days. See `/sites` for examples and inspiration!
 
 ---
 
