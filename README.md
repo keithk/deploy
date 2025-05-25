@@ -69,6 +69,8 @@ deploy start
 - **Git-friendly**: Everything lives in a git repo, deploy with `git push`
 - **Subdomain magic**: Every site gets `sitename.yourdomain.com` automatically
 - **Actually simple**: No YAML, no Docker, no complex CI/CD
+- **Solid process management**: CPU/memory monitoring, auto-restarts, health checks
+- **Real-time monitoring**: Watch your processes live with `deploy processes watch`
 
 ## 🛠️ CLI Commands
 
@@ -93,7 +95,51 @@ deploy action run [action-id]
 
 # Update Caddyfile
 deploy caddyfile update
+
+# Process management
+deploy processes list --resources --health    # List with CPU/memory usage
+deploy processes watch --resources            # Real-time monitoring dashboard
+deploy processes stats <site:port>            # Detailed process statistics
+deploy processes restart <site:port>          # Restart a specific process
+deploy processes stop <site:port>             # Stop a process
+deploy processes kill <site:port>             # Force kill a process
+deploy processes logs <site> <port>           # View process logs
 ```
+
+## 📊 Process Management & Monitoring
+
+Deploy includes built-in process management for keeping your sites running smoothly in production:
+
+### Real-time Monitoring
+```bash
+# Watch all processes with live CPU/memory stats
+deploy processes watch --resources
+
+# View detailed statistics for a specific process
+deploy processes stats my-site:3000
+
+# List all processes with health and resource info
+deploy processes list --resources --health
+```
+
+### Resource Management
+Set resource limits via environment variables in your site's configuration:
+
+```bash
+# In your site's .env or process environment
+MAX_MEMORY=536870912        # 512MB memory limit
+MAX_CPU=80                  # 80% CPU limit
+RESTART_ON_LIMIT=true       # Auto-restart when exceeded
+MAX_RESTARTS=5              # Max restart attempts
+RESTART_WINDOW=300000       # 5-minute restart window
+```
+
+### Health Monitoring
+- Automatic health checks every 30 seconds
+- Exponential backoff for failed restarts
+- Process resource tracking and history
+- Graceful shutdown handling
+- Comprehensive error logging
 
 ## 📦 Using Deploy Packages
 
@@ -124,6 +170,8 @@ bun add @keithk/deploy-core @keithk/deploy-actions @keithk/deploy-server
 - **Simplicity**: Just drop in a site and go.
 - **Use what you love**: HTML, React, or anything that serves files.
 - **Automate everything**: Scheduled builds, webhooks, and more.
+- **Smart monitoring**: Track CPU/memory usage, set resource limits, get restart statistics.
+- **Developer experience**: Beautiful CLI with real-time dashboards and colored output.
 
 ---
 

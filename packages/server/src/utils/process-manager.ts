@@ -7,6 +7,10 @@ import {
   ProcessInfo as DbProcessInfo,
   ProcessRegistryEntry as DbProcessRegistryEntry
 } from "@keithk/deploy-core";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // Define Bun.Process type since it's not in the TypeScript definitions
 type Signals =
@@ -51,6 +55,18 @@ type BunProcess = {
   stderr?: ReadableStream<Uint8Array>;
 };
 
+type BunFile = {
+  size: number;
+  type: string;
+};
+
+// Interface for process resource usage
+interface ProcessResources {
+  cpu: number; // CPU usage percentage
+  memory: number; // Memory usage in bytes
+  timestamp: Date;
+}
+
 // Interface for process information
 interface ProcessInfo {
   process: BunProcess;
@@ -71,6 +87,22 @@ interface ProcessInfo {
     failed: number;
     lastCheck?: Date;
     consecutiveFailed: number;
+  };
+  resources: {
+    current: ProcessResources | null;
+    history: ProcessResources[];
+    maxHistory: number;
+  };
+  limits: {
+    maxMemory?: number; // Max memory in bytes
+    maxCpu?: number; // Max CPU percentage
+    restartOnLimit: boolean;
+  };
+  restartPolicy: {
+    maxRestarts: number;
+    restartWindow: number; // milliseconds
+    backoffMultiplier: number;
+    enabled: boolean;
   };
 }
 
@@ -95,10 +127,13 @@ export class ProcessManager {
   private processes: Map<string, ProcessInfo> = new Map();
   private logsDir: string;
   private healthCheckInterval: NodeJS.Timeout | null = null;
+  private resourceMonitorInterval: NodeJS.Timeout | null = null;
   private maxRestarts = 3; // Maximum number of restarts within restart window
   private restartWindow = 60000; // 1 minute window for restart counting
   private restartHistory: Map<string, number[]> = new Map(); // Track restart timestamps
   private isShuttingDown = false;
+  private resourceCheckInterval = 5000; // 5 seconds
+  private maxResourceHistory = 60; // Keep 5 minutes of data (60 * 5s)
 
   constructor(options: { logsDir?: string } = {}) {
     // Set up logs directory
@@ -111,8 +146,9 @@ export class ProcessManager {
       }
     }
 
-    // Start health check interval
+    // Start health check and resource monitoring intervals
     this.startHealthChecks();
+    this.startResourceMonitoring();
   }
 
   /**
@@ -201,7 +237,7 @@ export class ProcessManager {
         env: processEnv,
         stdout: Bun.file(stdoutPath),
         stderr: Bun.file(stderrPath)
-      });
+      }) as any as BunProcess;
 
       // Store process info
       const processInfo: ProcessInfo = {
@@ -217,6 +253,22 @@ export class ProcessManager {
           total: 0,
           failed: 0,
           consecutiveFailed: 0
+        },
+        resources: {
+          current: null,
+          history: [],
+          maxHistory: this.maxResourceHistory
+        },
+        limits: {
+          maxMemory: env.MAX_MEMORY ? parseInt(env.MAX_MEMORY) : undefined,
+          maxCpu: env.MAX_CPU ? parseFloat(env.MAX_CPU) : undefined,
+          restartOnLimit: env.RESTART_ON_LIMIT !== "false"
+        },
+        restartPolicy: {
+          maxRestarts: env.MAX_RESTARTS ? parseInt(env.MAX_RESTARTS) : this.maxRestarts,
+          restartWindow: env.RESTART_WINDOW ? parseInt(env.RESTART_WINDOW) : this.restartWindow,
+          backoffMultiplier: env.BACKOFF_MULTIPLIER ? parseFloat(env.BACKOFF_MULTIPLIER) : 2,
+          enabled: env.DISABLE_RESTART !== "true"
         }
       };
       
@@ -245,7 +297,7 @@ export class ProcessManager {
 
         // Remove from processes map if it's the current process
         const currentProcess = this.processes.get(processId);
-        if (currentProcess && currentProcess.process === process) {
+        if (currentProcess && currentProcess.process.pid === process.pid) {
           this.cleanupProcess(processId);
 
           // Update status in database
@@ -313,6 +365,22 @@ export class ProcessManager {
     }
 
     const processId = this.generateProcessId(site, port);
+    const processInfo = this.processes.get(processId);
+    
+    // Check if restart policy is enabled
+    if (processInfo && !processInfo.restartPolicy.enabled) {
+      info(`Restart disabled for process ${processId}`);
+      this.updateProcessStatus(processId, "failed");
+      return;
+    }
+    
+    const restartPolicy = processInfo?.restartPolicy || {
+      maxRestarts: this.maxRestarts,
+      restartWindow: this.restartWindow,
+      backoffMultiplier: 2,
+      enabled: true
+    };
+    
     const now = Date.now();
 
     // Initialize restart history if needed
@@ -325,13 +393,13 @@ export class ProcessManager {
     history.push(now);
 
     // Clean up old restart timestamps
-    const cutoff = now - this.restartWindow;
+    const cutoff = now - restartPolicy.restartWindow;
     const recentRestarts = history.filter((time) => time >= cutoff);
     this.restartHistory.set(processId, recentRestarts);
 
     // Check if we've exceeded max restarts
-    if (recentRestarts.length > this.maxRestarts) {
-      error(`Too many restart attempts for ${site} on port ${port}, giving up`);
+    if (recentRestarts.length > restartPolicy.maxRestarts) {
+      error(`Too many restart attempts for ${site} on port ${port} (${recentRestarts.length}/${restartPolicy.maxRestarts}), giving up`);
       this.updateProcessStatus(processId, "failed");
       return;
     }
@@ -339,12 +407,12 @@ export class ProcessManager {
     // Calculate backoff delay (exponential with jitter)
     const baseDelay = 1000; // 1 second
     const factor = Math.min(recentRestarts.length, 6); // Cap at 64 seconds
-    const maxDelay = baseDelay * Math.pow(2, factor);
+    const maxDelay = baseDelay * Math.pow(restartPolicy.backoffMultiplier, factor);
     const jitter = Math.random() * 0.3 + 0.85; // 0.85-1.15 randomization
     const delay = Math.floor(maxDelay * jitter);
 
     warn(
-      `Restarting process for ${site} on port ${port} in ${delay}ms (attempt ${recentRestarts.length})`
+      `Restarting process for ${site} on port ${port} in ${delay}ms (attempt ${recentRestarts.length}/${restartPolicy.maxRestarts})`
     );
 
     // Wait and restart
@@ -455,7 +523,160 @@ export class ProcessManager {
   }
 
   /**
-   * Get all processes
+   * Get resource usage for a process using native system calls
+   */
+  private async getProcessResources(pid: number): Promise<ProcessResources | null> {
+    try {
+      // Use ps command for cross-platform compatibility
+      const { stdout } = await execAsync(`ps -p ${pid} -o pid=,pcpu=,rss=`);
+      const lines = stdout.trim().split('\n');
+      
+      if (lines.length === 0) {
+        return null;
+      }
+      
+      const parts = lines[0].trim().split(/\s+/);
+      if (parts.length >= 3) {
+        const cpu = parseFloat(parts[1]) || 0;
+        const memoryKB = parseInt(parts[2]) || 0;
+        const memory = memoryKB * 1024; // Convert KB to bytes
+        
+        return {
+          cpu,
+          memory,
+          timestamp: new Date()
+        };
+      }
+      
+      return null;
+    } catch (err) {
+      debug(`Failed to get resource usage for PID ${pid}: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Start resource monitoring for all processes
+   */
+  private startResourceMonitoring(): void {
+    if (this.resourceMonitorInterval) {
+      clearInterval(this.resourceMonitorInterval);
+    }
+
+    this.resourceMonitorInterval = setInterval(async () => {
+      await this.monitorAllResources();
+    }, this.resourceCheckInterval);
+  }
+
+  /**
+   * Monitor resources for all processes
+   */
+  private async monitorAllResources(): Promise<void> {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    for (const [id, info] of this.processes.entries()) {
+      if (!info.process.pid) {
+        continue;
+      }
+
+      try {
+        const resources = await this.getProcessResources(info.process.pid);
+        
+        if (resources) {
+          // Update current resources
+          info.resources.current = resources;
+          
+          // Add to history
+          info.resources.history.push(resources);
+          
+          // Trim history to max length
+          if (info.resources.history.length > info.resources.maxHistory) {
+            info.resources.history = info.resources.history.slice(-info.resources.maxHistory);
+          }
+          
+          // Check resource limits
+          await this.checkResourceLimits(id, info, resources);
+        }
+      } catch (err) {
+        debug(`Error monitoring resources for process ${id}: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Check if process exceeds resource limits
+   */
+  private async checkResourceLimits(
+    processId: string,
+    info: ProcessInfo,
+    resources: ProcessResources
+  ): Promise<void> {
+    const { limits } = info;
+    
+    let shouldRestart = false;
+    const violations: string[] = [];
+    
+    // Check memory limit
+    if (limits.maxMemory && resources.memory > limits.maxMemory) {
+      violations.push(`Memory: ${Math.round(resources.memory / 1024 / 1024)}MB > ${Math.round(limits.maxMemory / 1024 / 1024)}MB`);
+      shouldRestart = true;
+    }
+    
+    // Check CPU limit (average over last 3 measurements to avoid spikes)
+    if (limits.maxCpu && info.resources.history.length >= 3) {
+      const recentCpu = info.resources.history.slice(-3);
+      const avgCpu = recentCpu.reduce((sum, r) => sum + r.cpu, 0) / recentCpu.length;
+      
+      if (avgCpu > limits.maxCpu) {
+        violations.push(`CPU: ${avgCpu.toFixed(1)}% > ${limits.maxCpu}%`);
+        shouldRestart = true;
+      }
+    }
+    
+    if (shouldRestart && limits.restartOnLimit && info.restartPolicy.enabled) {
+      warn(`Process ${processId} exceeded limits: ${violations.join(', ')}. Restarting...`);
+      
+      try {
+        await this.restartProcess(processId);
+      } catch (err) {
+        error(`Failed to restart process ${processId} due to resource limit violation: ${err}`);
+      }
+    } else if (violations.length > 0) {
+      warn(`Process ${processId} exceeded limits: ${violations.join(', ')} (restart disabled)`);
+    }
+  }
+
+  /**
+   * Get average resource usage over time period
+   */
+  getAverageResources(processId: string, minutes: number = 5): { cpu: number; memory: number } | null {
+    const processInfo = this.processes.get(processId);
+    if (!processInfo) {
+      return null;
+    }
+    
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+    const relevantHistory = processInfo.resources.history.filter(
+      r => r.timestamp >= cutoff
+    );
+    
+    if (relevantHistory.length === 0) {
+      return processInfo.resources.current ? {
+        cpu: processInfo.resources.current.cpu,
+        memory: processInfo.resources.current.memory
+      } : null;
+    }
+    
+    const avgCpu = relevantHistory.reduce((sum, r) => sum + r.cpu, 0) / relevantHistory.length;
+    const avgMemory = relevantHistory.reduce((sum, r) => sum + r.memory, 0) / relevantHistory.length;
+    
+    return { cpu: avgCpu, memory: avgMemory };
+  }
+
+  /**
+   * Get all processes with enhanced resource information
    */
   getProcesses(): Array<{
     id: string;
@@ -463,6 +684,19 @@ export class ProcessManager {
     port: number;
     status: string;
     uptime: number;
+    pid?: number;
+    resources?: {
+      cpu: number;
+      memory: number;
+      memoryMB: number;
+    };
+    healthChecks?: {
+      total: number;
+      failed: number;
+      consecutiveFailed: number;
+      lastCheck?: Date;
+    };
+    restartCount?: number;
   }> {
     // First, check memory processes
     const memoryProcesses = Array.from(this.processes.entries()).map(
@@ -479,12 +713,28 @@ export class ProcessManager {
           error(`Failed to update process status: ${err}`);
         }
 
+        // Get restart count from history
+        const restartCount = this.restartHistory.get(id)?.length || 0;
+        
         return {
           id,
           site: info.site,
           port: info.port,
           status,
-          uptime: Math.floor(uptime / 1000) // uptime in seconds
+          uptime: Math.floor(uptime / 1000), // uptime in seconds
+          pid: info.process.pid,
+          resources: info.resources.current ? {
+            cpu: Math.round(info.resources.current.cpu * 10) / 10, // Round to 1 decimal
+            memory: info.resources.current.memory,
+            memoryMB: Math.round(info.resources.current.memory / 1024 / 1024 * 10) / 10
+          } : undefined,
+          healthChecks: {
+            total: info.healthChecks.total,
+            failed: info.healthChecks.failed,
+            consecutiveFailed: info.healthChecks.consecutiveFailed,
+            lastCheck: info.healthChecks.lastCheck
+          },
+          restartCount
         };
       }
     );
@@ -521,12 +771,17 @@ export class ProcessManager {
 
         const uptime = Math.floor((Date.now() - entry.startTime) / 1000);
 
+        // Get restart count from history
+        const restartCount = this.restartHistory.get(entry.id)?.length || 0;
+        
         return {
           id: entry.id,
           site: entry.site,
           port: entry.port,
           status,
-          uptime
+          uptime,
+          pid: entry.pid,
+          restartCount
         };
       });
     } catch (err) {
@@ -646,8 +901,8 @@ export class ProcessManager {
             `Process ${id} is unhealthy (${info.healthChecks.consecutiveFailed} consecutive failures, ${info.healthChecks.failed}/${info.healthChecks.total} total)`
           );
 
-          // If more than 3 consecutive failed checks, restart
-          if (info.healthChecks.consecutiveFailed >= 3) {
+          // If more than 3 consecutive failed checks, restart (if policy allows)
+          if (info.healthChecks.consecutiveFailed >= 3 && info.restartPolicy.enabled) {
             warn(`Restarting unhealthy process ${id} after ${info.healthChecks.consecutiveFailed} consecutive failures`);
             
             this.restartProcess(id).catch((err) => {
@@ -656,6 +911,8 @@ export class ProcessManager {
 
             // Reset consecutive failed count after restart attempt
             info.healthChecks.consecutiveFailed = 0;
+          } else if (info.healthChecks.consecutiveFailed >= 3) {
+            warn(`Process ${id} unhealthy but restart policy disabled`);
           }
         } else {
           // Reset consecutive failed count on successful check
@@ -678,6 +935,12 @@ export class ProcessManager {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
+    }
+    
+    // Stop resource monitoring interval
+    if (this.resourceMonitorInterval) {
+      clearInterval(this.resourceMonitorInterval);
+      this.resourceMonitorInterval = null;
     }
 
     if (this.processes.size === 0) {

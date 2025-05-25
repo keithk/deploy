@@ -18,6 +18,19 @@ export interface ProcessInfo {
   env: Record<string, string>;
   startTime: Date;
   lastRestart?: Date;
+  // Enhanced fields for monitoring
+  resources?: {
+    cpu: number;
+    memory: number;
+    memoryMB: number;
+  };
+  healthChecks?: {
+    total: number;
+    failed: number;
+    consecutiveFailed: number;
+    lastCheck?: Date;
+  };
+  restartCount?: number;
 }
 
 /**
@@ -82,4 +95,47 @@ export interface ProcessManager {
     success: boolean;
     results: { [processId: string]: boolean };
   }>;
+
+  /**
+   * Get resource usage for a process
+   */
+  getProcessResources(processId: string): { cpu: number; memory: number } | null;
+
+  /**
+   * Get average resource usage over time period
+   */
+  getAverageResources(processId: string, minutes?: number): { cpu: number; memory: number } | null;
+
+  /**
+   * Get health check statistics for a process
+   */
+  getHealthStats(processId: string): {
+    total: number;
+    failed: number;
+    successRate: number;
+    consecutiveFailed: number;
+    lastCheck?: Date;
+  } | null;
+
+  /**
+   * Get processes by site
+   */
+  getProcessesBySite(site: string): ProcessInfo[];
+
+  /**
+   * Get processes by status
+   */
+  getProcessesByStatus(status: string): ProcessInfo[];
+
+  /**
+   * Get system resource summary
+   */
+  getSystemResourceSummary(): {
+    totalProcesses: number;
+    runningProcesses: number;
+    totalCpu: number;
+    totalMemoryMB: number;
+    averageCpu: number;
+    averageMemoryMB: number;
+  };
 }

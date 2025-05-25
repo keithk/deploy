@@ -11,12 +11,18 @@ interface ProcessInfo {
   status: string;
   uptime: number;
   pid?: number;
+  resources?: {
+    cpu: number;
+    memory: number;
+    memoryMB: number;
+  };
   healthChecks?: {
     total: number;
     failed: number;
     consecutiveFailed: number;
     lastCheck?: Date;
   };
+  restartCount?: number;
 }
 
 /**
@@ -36,6 +42,8 @@ export function registerProcessesCommand(program: Command): void {
     .option("--all", "Show all processes, including stopped ones", false)
     .option("--json", "Output as JSON", false)
     .option("--health", "Show health check information", false)
+    .option("--resources", "Show CPU and memory usage", false)
+    .option("--watch", "Watch and update in real-time", false)
     .action(async (options) => {
       try {
         const { processManager } = await import(
@@ -91,6 +99,20 @@ export function registerProcessesCommand(program: Command): void {
           console.log(`  ${chalk.dim("Status:")}  ${status}`);
           console.log(`  ${chalk.dim("Uptime:")}  ${formatUptime(proc.uptime)}`);
           
+          // Show resource usage if available and requested
+          if (options.resources && proc.resources) {
+            const cpuColor = proc.resources.cpu > 80 ? chalk.red : proc.resources.cpu > 50 ? chalk.yellow : chalk.green;
+            const memColor = proc.resources.memoryMB > 512 ? chalk.red : proc.resources.memoryMB > 256 ? chalk.yellow : chalk.green;
+            console.log(`  ${chalk.dim("CPU:")}     ${cpuColor(proc.resources.cpu.toFixed(1) + "%")}`);
+            console.log(`  ${chalk.dim("Memory:")}  ${memColor(proc.resources.memoryMB.toFixed(1) + "MB")}`);
+          }
+          
+          // Show restart count if available
+          if (proc.restartCount !== undefined && proc.restartCount > 0) {
+            const restartColor = proc.restartCount > 5 ? chalk.red : proc.restartCount > 2 ? chalk.yellow : chalk.dim;
+            console.log(`  ${chalk.dim("Restarts:")} ${restartColor(proc.restartCount.toString())}`);
+          }
+          
           if (options.health && proc.healthChecks) {
             const successRate = proc.healthChecks.total > 0 
               ? ((proc.healthChecks.total - proc.healthChecks.failed) / proc.healthChecks.total * 100).toFixed(1)
@@ -104,13 +126,98 @@ export function registerProcessesCommand(program: Command): void {
         });
 
         console.log(`${chalk.dim("Total:")} ${filteredProcesses.length} process(es)`);
+        
+        if (options.resources) {
+          const totalCpu = filteredProcesses
+            .filter(p => p.resources)
+            .reduce((sum, p) => sum + (p.resources?.cpu || 0), 0);
+          const totalMemory = filteredProcesses
+            .filter(p => p.resources)
+            .reduce((sum, p) => sum + (p.resources?.memoryMB || 0), 0);
+          
+          if (totalCpu > 0 || totalMemory > 0) {
+            console.log(`${chalk.dim("Total CPU:")} ${totalCpu.toFixed(1)}% | ${chalk.dim("Total Memory:")} ${totalMemory.toFixed(1)}MB`);
+          }
+        }
+        
         console.log(
-          `\n${chalk.dim("Commands:")} deploy processes restart <id> | stop <id> | logs <site> <port>`
+          `\n${chalk.dim("Commands:")} deploy processes restart <id> | stop <id> | logs <site> <port> | stats <id>`
         );
       } catch (err) {
         console.error(chalk.red("Failed to list processes:"), err);
         process.exit(1);
       }
+    });
+    
+  // Watch processes (real-time updates)
+  processesCommand
+    .command("watch")
+    .description("Watch processes in real-time")
+    .option("--interval <seconds>", "Update interval in seconds", "2")
+    .option("--resources", "Show CPU and memory usage", false)
+    .action(async (options) => {
+      const interval = parseInt(options.interval) * 1000;
+      
+      // Clear screen and hide cursor
+      process.stdout.write('\x1B[2J\x1B[0f\x1B[?25l');
+      
+      const update = async () => {
+        try {
+          // Move cursor to top
+          process.stdout.write('\x1B[H');
+          
+          const { processManager } = await import(
+            "@keithk/deploy-server/src/utils/process-manager"
+          );
+          
+          const processes = processManager.getProcesses();
+          const runningProcesses = processes.filter(p => p.status === "running" || p.status === "unhealthy");
+          
+          console.log(chalk.bold(`🔄 Process Monitor (updating every ${options.interval}s)`));
+          console.log(chalk.dim(`${new Date().toLocaleTimeString()} | Press Ctrl+C to exit`));
+          console.log("=".repeat(60));
+          
+          if (runningProcesses.length === 0) {
+            console.log(chalk.yellow("No processes are currently running."));
+            return;
+          }
+          
+          runningProcesses.forEach((proc) => {
+            const statusColor = getStatusColor(proc.status);
+            const status = statusColor(proc.status.toUpperCase());
+            
+            let line = `${chalk.bold.blue(proc.id.padEnd(20))} ${status.padEnd(15)} ${formatUptime(proc.uptime).padEnd(15)}`;
+            
+            if (options.resources && proc.resources) {
+              const cpuColor = proc.resources.cpu > 80 ? chalk.red : proc.resources.cpu > 50 ? chalk.yellow : chalk.green;
+              const memColor = proc.resources.memoryMB > 512 ? chalk.red : proc.resources.memoryMB > 256 ? chalk.yellow : chalk.green;
+              line += ` ${cpuColor((proc.resources.cpu.toFixed(1) + "%").padEnd(8))} ${memColor((proc.resources.memoryMB.toFixed(1) + "MB").padEnd(10))}`;
+            }
+            
+            console.log(line);
+          });
+          
+          // Clear rest of screen
+          process.stdout.write('\x1B[J');
+          
+        } catch (err) {
+          console.error(chalk.red("Error updating processes:"), err);
+        }
+      };
+      
+      // Initial update
+      await update();
+      
+      // Set up interval
+      const updateInterval = setInterval(update, interval);
+      
+      // Handle exit
+      process.on('SIGINT', () => {
+        clearInterval(updateInterval);
+        process.stdout.write('\x1B[?25h'); // Show cursor
+        console.log('\n');
+        process.exit(0);
+      });
     });
 
   // Restart a process
@@ -268,6 +375,103 @@ export function registerProcessesCommand(program: Command): void {
         }
       }
     );
+
+  // Process statistics command
+  processesCommand
+    .command("stats <id>")
+    .description("Show detailed statistics for a process")
+    .option("--minutes <minutes>", "Show average over last N minutes", "5")
+    .action(async (id: string, options) => {
+      try {
+        const { processManager } = await import(
+          "@keithk/deploy-server/src/utils/process-manager"
+        );
+        
+        const processes = processManager.getProcesses();
+        const proc = processes.find(p => p.id === id);
+        
+        if (!proc) {
+          console.error(chalk.red(`Process ${id} not found`));
+          process.exit(1);
+        }
+        
+        console.log(chalk.bold(`\n📊 Process Statistics: ${proc.id}`));
+        console.log("=".repeat(50));
+        console.log(`${chalk.dim("Site:")}     ${proc.site}`);
+        console.log(`${chalk.dim("Port:")}     ${proc.port}`);
+        console.log(`${chalk.dim("PID:")}      ${proc.pid || 'N/A'}`);
+        console.log(`${chalk.dim("Status:")}   ${getStatusColor(proc.status)(proc.status)}`);
+        console.log(`${chalk.dim("Uptime:")}   ${formatUptime(proc.uptime)}`);
+        
+        if (proc.restartCount !== undefined) {
+          const restartColor = proc.restartCount > 5 ? chalk.red : proc.restartCount > 2 ? chalk.yellow : chalk.green;
+          console.log(`${chalk.dim("Restarts:")} ${restartColor(proc.restartCount.toString())}`);
+        }
+        
+        if (proc.resources) {
+          console.log("\n" + chalk.bold("Current Resources:"));
+          const cpuColor = proc.resources.cpu > 80 ? chalk.red : proc.resources.cpu > 50 ? chalk.yellow : chalk.green;
+          const memColor = proc.resources.memoryMB > 512 ? chalk.red : proc.resources.memoryMB > 256 ? chalk.yellow : chalk.green;
+          console.log(`${chalk.dim("CPU:")}      ${cpuColor(proc.resources.cpu.toFixed(1) + "%")}`);
+          console.log(`${chalk.dim("Memory:")}   ${memColor(proc.resources.memoryMB.toFixed(1) + "MB")} (${(proc.resources.memory / 1024 / 1024 / 1024).toFixed(2)}GB)`);
+        }
+        
+        if (proc.healthChecks && proc.healthChecks.total > 0) {
+          console.log("\n" + chalk.bold("Health Checks:"));
+          const successRate = ((proc.healthChecks.total - proc.healthChecks.failed) / proc.healthChecks.total * 100).toFixed(1);
+          const healthColor = parseFloat(successRate) > 95 ? chalk.green : parseFloat(successRate) > 80 ? chalk.yellow : chalk.red;
+          console.log(`${chalk.dim("Success Rate:")} ${healthColor(successRate + "%")} (${proc.healthChecks.failed}/${proc.healthChecks.total} failed)`);
+          
+          if (proc.healthChecks.consecutiveFailed > 0) {
+            console.log(`${chalk.dim("Consecutive Fails:")} ${chalk.red(proc.healthChecks.consecutiveFailed.toString())}`);
+          }
+          
+          if (proc.healthChecks.lastCheck) {
+            console.log(`${chalk.dim("Last Check:")} ${proc.healthChecks.lastCheck.toLocaleString()}`);
+          }
+        }
+        
+        console.log("");
+        
+      } catch (err) {
+        console.error(chalk.red("Failed to get process statistics:"), err);
+        process.exit(1);
+      }
+    });
+
+  // Kill a process forcefully
+  processesCommand
+    .command("kill <id>")
+    .description("Force kill a specific process")
+    .action(async (id: string) => {
+      try {
+        const { processManager } = await import(
+          "@keithk/deploy-server/src/utils/process-manager"
+        );
+        
+        const processes = processManager.getProcesses();
+        const processInfo = processes.find(p => p.id === id);
+        
+        if (!processInfo || !processInfo.pid) {
+          console.error(chalk.red(`Process ${id} not found or has no PID`));
+          process.exit(1);
+        }
+        
+        console.log(`Force killing process: ${id} (PID: ${processInfo.pid})`);
+        
+        try {
+          process.kill(processInfo.pid, 'SIGKILL');
+          console.log(chalk.green(`Process ${id} killed successfully`));
+        } catch (err) {
+          console.error(chalk.red(`Failed to kill process ${id}: ${err}`));
+          process.exit(1);
+        }
+        
+      } catch (err) {
+        console.error("Failed to kill process:", err);
+        process.exit(1);
+      }
+    });
 
   // Add bulk operations
   processesCommand

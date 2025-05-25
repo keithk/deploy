@@ -119,7 +119,7 @@ class ProcessManagerImpl implements ProcessManager {
   }
 
   /**
-   * Get all processes
+   * Get all processes with enhanced information
    */
   getProcesses(): ProcessInfo[] {
     this.ensureInitialized();
@@ -138,7 +138,20 @@ class ProcessManagerImpl implements ProcessManager {
         cwd: p.cwd || "",
         env: p.env || {},
         startTime: new Date(Date.now() - p.uptime * 1000),
-        lastRestart: p.lastRestart ? new Date(p.lastRestart) : undefined
+        lastRestart: p.lastRestart ? new Date(p.lastRestart) : undefined,
+        // Enhanced fields
+        resources: p.resources ? {
+          cpu: p.resources.cpu,
+          memory: p.resources.memory,
+          memoryMB: p.resources.memoryMB
+        } : undefined,
+        healthChecks: p.healthChecks ? {
+          total: p.healthChecks.total,
+          failed: p.healthChecks.failed,
+          consecutiveFailed: p.healthChecks.consecutiveFailed,
+          lastCheck: p.healthChecks.lastCheck
+        } : undefined,
+        restartCount: p.restartCount || 0
       }));
     } catch (error) {
       console.error(`Error getting processes: ${error}`);
@@ -164,7 +177,7 @@ class ProcessManagerImpl implements ProcessManager {
   }
 
   /**
-   * Check if a process is running
+   * Check if a process is running and healthy
    */
   isProcessRunning(processId: string): boolean {
     this.ensureInitialized();
@@ -176,6 +189,94 @@ class ProcessManagerImpl implements ProcessManager {
         `Error checking if process ${processId} is running: ${error}`
       );
       return false;
+    }
+  }
+
+  /**
+   * Get resource usage for a process
+   */
+  getProcessResources(processId: string): { cpu: number; memory: number } | null {
+    this.ensureInitialized();
+
+    try {
+      const processes = this.getProcesses();
+      const process = processes.find(p => p.id === processId);
+      
+      if (!process || !process.resources) {
+        return null;
+      }
+      
+      return {
+        cpu: process.resources.cpu,
+        memory: process.resources.memory
+      };
+    } catch (error) {
+      console.error(
+        `Error getting resources for process ${processId}: ${error}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get average resource usage over time period
+   */
+  getAverageResources(
+    processId: string,
+    minutes: number = 5
+  ): { cpu: number; memory: number } | null {
+    this.ensureInitialized();
+
+    try {
+      if (typeof this.serverProcessManager.getAverageResources === 'function') {
+        return this.serverProcessManager.getAverageResources(processId, minutes);
+      }
+      
+      // Fallback to current resources if historical data not available
+      return this.getProcessResources(processId);
+    } catch (error) {
+      console.error(
+        `Error getting average resources for process ${processId}: ${error}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get health check statistics for a process
+   */
+  getHealthStats(processId: string): {
+    total: number;
+    failed: number;
+    successRate: number;
+    consecutiveFailed: number;
+    lastCheck?: Date;
+  } | null {
+    this.ensureInitialized();
+
+    try {
+      const processes = this.getProcesses();
+      const process = processes.find(p => p.id === processId);
+      
+      if (!process || !process.healthChecks) {
+        return null;
+      }
+      
+      const { total, failed, consecutiveFailed, lastCheck } = process.healthChecks;
+      const successRate = total > 0 ? ((total - failed) / total) * 100 : 0;
+      
+      return {
+        total,
+        failed,
+        successRate,
+        consecutiveFailed,
+        lastCheck
+      };
+    } catch (error) {
+      console.error(
+        `Error getting health stats for process ${processId}: ${error}`
+      );
+      return null;
     }
   }
 
@@ -195,6 +296,78 @@ class ProcessManagerImpl implements ProcessManager {
       return {
         success: false,
         results: {}
+      };
+    }
+  }
+
+  /**
+   * Get processes by site
+   */
+  getProcessesBySite(site: string): ProcessInfo[] {
+    this.ensureInitialized();
+
+    try {
+      const allProcesses = this.getProcesses();
+      return allProcesses.filter(p => p.site === site);
+    } catch (error) {
+      console.error(`Error getting processes for site ${site}: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get processes by status
+   */
+  getProcessesByStatus(status: string): ProcessInfo[] {
+    this.ensureInitialized();
+
+    try {
+      const allProcesses = this.getProcesses();
+      return allProcesses.filter(p => p.status === status);
+    } catch (error) {
+      console.error(`Error getting processes by status ${status}: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get system resource summary
+   */
+  getSystemResourceSummary(): {
+    totalProcesses: number;
+    runningProcesses: number;
+    totalCpu: number;
+    totalMemoryMB: number;
+    averageCpu: number;
+    averageMemoryMB: number;
+  } {
+    this.ensureInitialized();
+
+    try {
+      const processes = this.getProcesses();
+      const runningProcesses = processes.filter(p => p.status === 'running');
+      const processesWithResources = runningProcesses.filter(p => p.resources);
+      
+      const totalCpu = processesWithResources.reduce((sum, p) => sum + (p.resources?.cpu || 0), 0);
+      const totalMemoryMB = processesWithResources.reduce((sum, p) => sum + (p.resources?.memoryMB || 0), 0);
+      
+      return {
+        totalProcesses: processes.length,
+        runningProcesses: runningProcesses.length,
+        totalCpu,
+        totalMemoryMB,
+        averageCpu: processesWithResources.length > 0 ? totalCpu / processesWithResources.length : 0,
+        averageMemoryMB: processesWithResources.length > 0 ? totalMemoryMB / processesWithResources.length : 0
+      };
+    } catch (error) {
+      console.error(`Error getting system resource summary: ${error}`);
+      return {
+        totalProcesses: 0,
+        runningProcesses: 0,
+        totalCpu: 0,
+        totalMemoryMB: 0,
+        averageCpu: 0,
+        averageMemoryMB: 0
       };
     }
   }
