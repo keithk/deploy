@@ -146,9 +146,41 @@ export class ProcessManager {
       }
     }
 
+    // Recover processes from database on startup
+    this.recoverProcessesFromDatabase();
+
     // Start health check and resource monitoring intervals
     this.startHealthChecks();
     this.startResourceMonitoring();
+  }
+
+  /**
+   * Recover processes from database on startup
+   */
+  private async recoverProcessesFromDatabase(): Promise<void> {
+    try {
+      const dbProcesses = processModel.getAll();
+      info(`Recovering ${dbProcesses.length} processes from database`);
+
+      for (const dbProcess of dbProcesses) {
+        const processId = dbProcess.id;
+        
+        // Check if process is still running
+        if (dbProcess.pid && await this.isSystemProcessRunning(dbProcess.pid)) {
+          info(`Recovered running process ${processId} (PID: ${dbProcess.pid})`);
+          // Update status to running if it was marked differently
+          if (dbProcess.status !== 'running') {
+            processModel.updateStatus(processId, 'running');
+          }
+        } else {
+          // Process no longer exists, clean up database record
+          debug(`Cleaning up stale process record: ${processId}`);
+          processModel.delete(processId);
+        }
+      }
+    } catch (err) {
+      error(`Error recovering processes from database: ${err}`);
+    }
   }
 
   /**
@@ -171,10 +203,43 @@ export class ProcessManager {
   ): Promise<boolean> {
     const processId = this.generateProcessId(site, port);
 
-    // Check if process is already running
+    // Check if process is already running in memory
     if (this.processes.has(processId)) {
-      warn(`Process for ${site} on port ${port} is already running`);
-      return true;
+      const existingProcess = this.processes.get(processId)!;
+      if (this.isProcessHealthy(processId)) {
+        warn(`Process for ${site} on port ${port} is already running in memory`);
+        return true;
+      } else {
+        // Clean up unhealthy process
+        debug(`Cleaning up unhealthy process for ${site} on port ${port}`);
+        this.cleanupProcess(processId);
+      }
+    }
+
+    // Check database for existing process records
+    try {
+      const dbProcess = processModel.getById(processId);
+      if (dbProcess) {
+        // Verify if the process is actually running
+        if (dbProcess.pid && await this.isSystemProcessRunning(dbProcess.pid)) {
+          // Check if it's using the expected port
+          if (await this.isPortInUse(port)) {
+            warn(`Process for ${site} on port ${port} is already running (PID: ${dbProcess.pid})`);
+            return true;
+          }
+        }
+        // Clean up stale database record
+        debug(`Cleaning up stale database record for ${processId}`);
+        processModel.delete(processId);
+      }
+    } catch (err) {
+      debug(`Error checking database for existing process: ${err}`);
+    }
+
+    // Check if port is already in use by another process
+    if (await this.isPortInUse(port)) {
+      error(`Port ${port} is already in use, cannot start process for ${site}`);
+      return false;
     }
 
     // Set up log files
@@ -523,6 +588,33 @@ export class ProcessManager {
   }
 
   /**
+   * Check if a system process is running by PID
+   */
+  private async isSystemProcessRunning(pid: number): Promise<boolean> {
+    try {
+      // Use ps command to check if process exists
+      const { stdout } = await execAsync(`ps -p ${pid} -o pid=`);
+      return stdout.trim() !== '';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * Check if a port is in use
+   */
+  private async isPortInUse(port: number): Promise<boolean> {
+    try {
+      // Use lsof to check if port is in use
+      const { stdout } = await execAsync(`lsof -i :${port}`);
+      return stdout.trim() !== '';
+    } catch (err) {
+      // lsof returns non-zero exit code when no process is found
+      return false;
+    }
+  }
+
+  /**
    * Get resource usage for a process using native system calls
    */
   private async getProcessResources(pid: number): Promise<ProcessResources | null> {
@@ -857,11 +949,35 @@ export class ProcessManager {
   }
 
   /**
-   * Check if a process exists
+   * Check if a process exists and is healthy
    */
   hasProcess(site: string, port: number): boolean {
     const processId = this.generateProcessId(site, port);
-    return this.processes.has(processId);
+    
+    // Check in-memory processes first
+    if (this.processes.has(processId)) {
+      return this.isProcessHealthy(processId);
+    }
+    
+    // Check database for stale records
+    try {
+      const dbProcess = processModel.getById(processId);
+      if (dbProcess && dbProcess.pid) {
+        // Quick sync check if the PID is still valid
+        try {
+          process.kill(dbProcess.pid, 0);
+          return true;
+        } catch (err) {
+          // Process doesn't exist, clean up stale record
+          processModel.delete(processId);
+          return false;
+        }
+      }
+    } catch (err) {
+      debug(`Error checking database for process ${processId}: ${err}`);
+    }
+    
+    return false;
   }
 
   /**
