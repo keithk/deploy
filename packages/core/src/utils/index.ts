@@ -5,3 +5,4 @@ export * from "./configLoader";
 export * from "./actionHelpers";
 export * from "./caddyfile";
 export * from "./siteDiscovery";
+export * from "./portUtils";

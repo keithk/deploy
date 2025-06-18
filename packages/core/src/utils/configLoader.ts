@@ -1,7 +1,8 @@
 import { join, resolve, basename } from "path";
 import { existsSync } from "fs";
 import type { SiteConfig } from "../types/site";
-import { debug } from "./logging";
+import { debug, warn } from "./logging";
+import { findAvailablePort, getPortConfig, isValidPort } from "./portUtils";
 
 /**
  * Loads configuration for a site from .dialup/config.json or config.json
@@ -96,6 +97,69 @@ export function determineSiteType(
 }
 
 /**
+ * Assigns ports for a site, checking availability and falling back if needed
+ *
+ * @param type The site type
+ * @param config The partial site configuration
+ * @param siteIndex Index of the site in the sites array
+ * @param siteName The site name for logging
+ * @returns Object with assigned ports
+ */
+async function assignSitePorts(
+  type: SiteConfig["type"],
+  config: Partial<SiteConfig>,
+  siteIndex: number,
+  siteName: string
+): Promise<{ proxyPort?: number; devPort?: number }> {
+  const portConfig = getPortConfig();
+  const defaultPort = portConfig.basePort + siteIndex;
+  
+  const result: { proxyPort?: number; devPort?: number } = {};
+  
+  // Handle passthrough sites
+  if (type === "passthrough") {
+    if (config.proxyPort && isValidPort(config.proxyPort)) {
+      // Use configured port if valid
+      result.proxyPort = config.proxyPort;
+    } else {
+      // Find available port starting from default
+      const availablePort = await findAvailablePort(defaultPort);
+      if (availablePort !== -1) {
+        result.proxyPort = availablePort;
+        if (availablePort !== defaultPort) {
+          debug(`Site ${siteName}: Using available port ${availablePort} instead of default ${defaultPort}`);
+        }
+      } else {
+        warn(`Site ${siteName}: Could not find available port, using default ${defaultPort} (may conflict)`);
+        result.proxyPort = defaultPort;
+      }
+    }
+  }
+  
+  // Handle static-build sites in dev mode
+  if (type === "static-build") {
+    if (config.devPort && isValidPort(config.devPort)) {
+      // Use configured port if valid
+      result.devPort = config.devPort;
+    } else {
+      // Find available port starting from default
+      const availablePort = await findAvailablePort(defaultPort);
+      if (availablePort !== -1) {
+        result.devPort = availablePort;
+        if (availablePort !== defaultPort) {
+          debug(`Site ${siteName}: Using available dev port ${availablePort} instead of default ${defaultPort}`);
+        }
+      } else {
+        warn(`Site ${siteName}: Could not find available dev port, using default ${defaultPort} (may conflict)`);
+        result.devPort = defaultPort;
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
  * Creates a complete site configuration by merging config.json, package.json, and auto-detected values
  *
  * @param sitePath Path to the site directory
@@ -129,8 +193,8 @@ export async function createSiteConfig(
   // Get commands from package.json if available
   const commands = config.commands || packageJson?.scripts || {};
 
-  // Calculate default ports (3000 + site index)
-  const basePort = 3000 + siteIndex + 1;
+  // Assign ports with availability checking
+  const ports = await assignSitePorts(type, config, siteIndex, siteName);
 
   // Create the complete site configuration
   return {
@@ -139,10 +203,9 @@ export async function createSiteConfig(
     route: `/${siteName}`,
     entryPoint,
     commands,
-    proxyPort:
-      type === "passthrough" ? config.proxyPort || basePort : undefined,
+    proxyPort: ports.proxyPort,
     buildDir: type === "static-build" ? config.buildDir || "dist" : undefined,
-    devPort: type === "static-build" ? config.devPort || basePort : undefined,
+    devPort: ports.devPort,
     subdomain: config.subdomain || siteName,
     customDomain: config.customDomain,
     bskyDid: config.bskyDid,

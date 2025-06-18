@@ -1,4 +1,5 @@
-import { debug, info } from "./logging";
+import { debug, info, warn } from "./logging";
+import { processManager } from "./process-manager";
 
 /**
  * Proxies a request to a local development server.
@@ -53,5 +54,56 @@ export async function proxyRequest(
         (err instanceof Error ? err.message : String(err)),
       { status: 502 }
     );
+  }
+}
+
+/**
+ * Starts a development server for a static-build site.
+ *
+ * @param sitePath The path to the site directory
+ * @param port The port to start the dev server on
+ * @param packageManager The package manager to use (npm, yarn, pnpm, bun)
+ * @param devScript The dev script name to run
+ * @param siteSubdomain The site subdomain for process identification
+ * @returns Promise<boolean> indicating success
+ */
+export async function startDevServer(
+  sitePath: string,
+  port: number,
+  packageManager: string,
+  devScript: string,
+  siteSubdomain?: string
+): Promise<boolean> {
+  const siteName = siteSubdomain || require("path").basename(sitePath);
+  
+  // Check if a process is already running for this site
+  if (processManager.hasProcess(siteName, port)) {
+    debug(`Dev server for ${siteName} is already running on port ${port}`);
+    return true;
+  }
+
+  info(`Starting dev server for ${siteName} on port ${port} with script: ${devScript}`);
+
+  try {
+    // Start the process using the process manager
+    const success = await processManager.startProcess(
+      siteName,
+      port,
+      devScript,
+      sitePath,
+      "static-build",
+      { PACKAGE_MANAGER: packageManager }
+    );
+
+    if (success) {
+      info(`Successfully started dev server for ${siteName} on port ${port}`);
+    } else {
+      warn(`Failed to start dev server for ${siteName} on port ${port}`);
+    }
+
+    return success;
+  } catch (err) {
+    warn(`Error starting dev server for ${siteName}: ${err}`);
+    return false;
   }
 }

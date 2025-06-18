@@ -5,7 +5,8 @@ import { appendFile, writeFile } from "fs/promises";
 import {
   processModel,
   ProcessInfo as DbProcessInfo,
-  ProcessRegistryEntry as DbProcessRegistryEntry
+  ProcessRegistryEntry as DbProcessRegistryEntry,
+  isPortInUse as coreIsPortInUse
 } from "@keithk/deploy-core";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -223,7 +224,7 @@ export class ProcessManager {
         // Verify if the process is actually running
         if (dbProcess.pid && await this.isSystemProcessRunning(dbProcess.pid)) {
           // Check if it's using the expected port
-          if (await this.isPortInUse(port)) {
+          if (await coreIsPortInUse(port)) {
             warn(`Process for ${site} on port ${port} is already running (PID: ${dbProcess.pid})`);
             return true;
           }
@@ -237,7 +238,7 @@ export class ProcessManager {
     }
 
     // Check if port is already in use by another process
-    if (await this.isPortInUse(port)) {
+    if (await coreIsPortInUse(port)) {
       error(`Port ${port} is already in use, cannot start process for ${site}`);
       return false;
     }
@@ -492,11 +493,11 @@ export class ProcessManager {
 
       try {
         // Ensure port is free before attempting restart
-        if (await this.isPortInUse(port)) {
+        if (await coreIsPortInUse(port)) {
           warn(`Port ${port} is still in use, waiting before restart attempt...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           
-          if (await this.isPortInUse(port)) {
+          if (await coreIsPortInUse(port)) {
             error(`Port ${port} is still in use, aborting restart attempt for ${processId}`);
             this.updateProcessStatus(processId, "failed");
             return;
@@ -641,11 +642,11 @@ export class ProcessManager {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Verify port is actually free before attempting restart
-    if (await this.isPortInUse(port)) {
+    if (await coreIsPortInUse(port)) {
       error(`Port ${port} is still in use after stopping process ${siteId}, waiting...`);
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      if (await this.isPortInUse(port)) {
+      if (await coreIsPortInUse(port)) {
         error(`Port ${port} is still in use, restart failed for ${siteId}`);
         try {
           processModel.updateStatus(processId, "failed");
@@ -726,20 +727,6 @@ export class ProcessManager {
       const { stdout } = await execAsync(`ps -p ${pid} -o pid=`);
       return stdout.trim() !== '';
     } catch (err) {
-      return false;
-    }
-  }
-
-  /**
-   * Check if a port is in use
-   */
-  private async isPortInUse(port: number): Promise<boolean> {
-    try {
-      // Use lsof to check if port is in use
-      const { stdout } = await execAsync(`lsof -i :${port}`);
-      return stdout.trim() !== '';
-    } catch (err) {
-      // lsof returns non-zero exit code when no process is found
       return false;
     }
   }
