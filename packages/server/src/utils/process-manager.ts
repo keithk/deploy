@@ -414,7 +414,7 @@ export class ProcessManager {
   }
 
   /**
-   * Attempt to restart a process with backoff
+   * Attempt to restart a process with backoff and enhanced coordination
    */
   private async attemptRestart(
     site: string,
@@ -480,14 +480,51 @@ export class ProcessManager {
       `Restarting process for ${site} on port ${port} in ${delay}ms (attempt ${recentRestarts.length}/${restartPolicy.maxRestarts})`
     );
 
-    // Wait and restart
+    // Update status to indicate we're about to restart
+    this.updateProcessStatus(processId, "restarting");
+
+    // Wait and restart with enhanced validation
     setTimeout(async () => {
-      if (!this.isShuttingDown) {
-        try {
-          await this.startProcess(site, port, script, cwd, type, env);
-        } catch (err) {
-          error(`Failed to restart process ${processId}: ${err}`);
+      if (this.isShuttingDown) {
+        debug(`Cancelling restart for ${processId} - shutting down`);
+        return;
+      }
+
+      try {
+        // Ensure port is free before attempting restart
+        if (await this.isPortInUse(port)) {
+          warn(`Port ${port} is still in use, waiting before restart attempt...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          if (await this.isPortInUse(port)) {
+            error(`Port ${port} is still in use, aborting restart attempt for ${processId}`);
+            this.updateProcessStatus(processId, "failed");
+            return;
+          }
         }
+
+        info(`Attempting restart for ${processId} (attempt ${recentRestarts.length}/${restartPolicy.maxRestarts})`);
+        const success = await this.startProcess(site, port, script, cwd, type, env);
+        
+        if (success) {
+          info(`Successfully restarted process ${processId} after ${recentRestarts.length} attempts`);
+          
+          // Verify process health after a brief delay
+          setTimeout(() => {
+            if (this.isProcessHealthy(processId)) {
+              info(`Process ${processId} health verified after auto-restart`);
+            } else {
+              warn(`Process ${processId} appears unhealthy after auto-restart`);
+            }
+          }, 3000);
+          
+        } else {
+          error(`Failed to restart process ${processId} (attempt ${recentRestarts.length}/${restartPolicy.maxRestarts})`);
+          this.updateProcessStatus(processId, "failed");
+        }
+      } catch (err) {
+        error(`Exception during restart attempt for ${processId}: ${err}`);
+        this.updateProcessStatus(processId, "failed");
       }
     }, delay);
   }
@@ -539,25 +576,118 @@ export class ProcessManager {
   }
 
   /**
-   * Restart a process
+   * Restart a process with enhanced validation and coordination
    */
   async restartProcess(siteId: string): Promise<boolean> {
     const processInfo = this.processes.get(siteId);
     if (!processInfo) {
-      warn(`No process found for ${siteId}`);
+      // Check database for process info if not in memory
+      try {
+        const dbProcess = processModel.getById(siteId);
+        if (dbProcess) {
+          info(`Process ${siteId} not in memory, attempting restart from database record`);
+          const success = await this.startProcess(
+            dbProcess.site,
+            dbProcess.port,
+            dbProcess.script,
+            dbProcess.cwd,
+            dbProcess.type,
+            {} // Environment variables not stored in database
+          );
+          
+          if (success) {
+            info(`Successfully restarted process ${siteId} from database record`);
+          } else {
+            error(`Failed to restart process ${siteId} from database record`);
+          }
+          
+          return success;
+        }
+      } catch (err) {
+        debug(`Error checking database for process ${siteId}: ${err}`);
+      }
+      
+      warn(`No process found for ${siteId} in memory or database`);
       return false;
     }
 
     const { site, port, script, cwd, type, env } = processInfo;
+    const processId = this.generateProcessId(site, port);
 
-    // Stop the process
-    const stopped = await this.stopProcess(siteId);
+    info(`Restarting process ${siteId} (${site}:${port})`);
+
+    // Mark as restarting to prevent duplicate restart attempts
+    try {
+      processModel.updateStatus(processId, "restarting");
+    } catch (err) {
+      debug(`Could not update status to restarting: ${err}`);
+    }
+
+    // Stop the process gracefully
+    info(`Stopping process ${siteId}...`);
+    const stopped = await this.stopProcess(siteId, 10000); // 10 second timeout
     if (!stopped) {
+      error(`Failed to stop process ${siteId}, restart aborted`);
+      // Reset status back to what it was
+      try {
+        processModel.updateStatus(processId, "failed");
+      } catch (err) {
+        debug(`Could not update status back to failed: ${err}`);
+      }
       return false;
     }
 
+    // Wait a moment to ensure port is freed
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Verify port is actually free before attempting restart
+    if (await this.isPortInUse(port)) {
+      error(`Port ${port} is still in use after stopping process ${siteId}, waiting...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      if (await this.isPortInUse(port)) {
+        error(`Port ${port} is still in use, restart failed for ${siteId}`);
+        try {
+          processModel.updateStatus(processId, "failed");
+        } catch (err) {
+          debug(`Could not update status to failed: ${err}`);
+        }
+        return false;
+      }
+    }
+
     // Start the process again
-    return this.startProcess(site, port, script, cwd, type, env);
+    info(`Starting process ${siteId}...`);
+    const success = await this.startProcess(site, port, script, cwd, type, env);
+    
+    if (success) {
+      info(`Successfully restarted process ${siteId}`);
+      
+      // Update last restart time
+      if (this.processes.has(processId)) {
+        const updatedProcessInfo = this.processes.get(processId)!;
+        updatedProcessInfo.lastRestart = new Date();
+      }
+      
+      // Verify the process is actually healthy after a brief moment
+      setTimeout(async () => {
+        if (this.isProcessHealthy(processId)) {
+          info(`Process ${siteId} health verified after restart`);
+        } else {
+          warn(`Process ${siteId} appears unhealthy after restart`);
+        }
+      }, 2000);
+      
+    } else {
+      error(`Failed to restart process ${siteId}`);
+      try {
+        processModel.updateStatus(processId, "failed");
+      } catch (err) {
+        debug(`Could not update status to failed: ${err}`);
+      }
+    }
+    
+    return success;
   }
 
   /**
@@ -908,43 +1038,123 @@ export class ProcessManager {
   }
 
   /**
-   * Restart a site's processes
+   * Restart a site's processes with enhanced coordination and validation
    * @param site The site name to restart processes for
    * @returns Object with success status and results for each process
    */
   async restartSiteProcesses(site: string): Promise<{
     success: boolean;
     results: { [processId: string]: boolean };
+    details: { [processId: string]: string };
   }> {
     const processIds = this.findProcessesBySite(site);
     const results: { [processId: string]: boolean } = {};
+    const details: { [processId: string]: string } = {};
     let overallSuccess = true;
 
     info(
       `Restarting all processes for site: ${site} (found ${processIds.length} processes)`
     );
 
+    if (processIds.length === 0) {
+      // Check database for processes that might not be in memory
+      try {
+        const dbProcesses = processModel.getAll().filter(p => p.site === site);
+        if (dbProcesses.length > 0) {
+          info(`Found ${dbProcesses.length} processes for site ${site} in database, attempting restart`);
+          
+          for (const dbProcess of dbProcesses) {
+            try {
+              const success = await this.startProcess(
+                dbProcess.site,
+                dbProcess.port,
+                dbProcess.script,
+                dbProcess.cwd,
+                dbProcess.type,
+                {} // Environment variables not stored in database
+              );
+              
+              results[dbProcess.id] = success;
+              details[dbProcess.id] = success ? "Restarted from database record" : "Failed to restart from database record";
+              
+              if (!success) {
+                overallSuccess = false;
+              }
+            } catch (err) {
+              results[dbProcess.id] = false;
+              details[dbProcess.id] = `Error restarting from database: ${err}`;
+              overallSuccess = false;
+            }
+          }
+        } else {
+          details["no-processes"] = `No processes found for site ${site}`;
+        }
+      } catch (err) {
+        error(`Error checking database for site ${site} processes: ${err}`);
+        details["database-error"] = `Database error: ${err}`;
+      }
+      
+      return {
+        success: overallSuccess,
+        results,
+        details
+      };
+    }
+
+    // Restart processes sequentially to avoid port conflicts
     for (const processId of processIds) {
       try {
+        info(`Restarting process ${processId} for site ${site}...`);
+        
+        // Get process info before restart
+        const processInfo = this.processes.get(processId);
+        const port = processInfo ? processInfo.port : 'unknown';
+        
         const success = await this.restartProcess(processId);
         results[processId] = success;
 
         if (!success) {
           overallSuccess = false;
-          warn(`Failed to restart process ${processId} for site ${site}`);
+          const errorMsg = `Failed to restart process ${processId} (port: ${port})`;
+          warn(errorMsg);
+          details[processId] = errorMsg;
         } else {
-          info(`Successfully restarted process ${processId} for site ${site}`);
+          const successMsg = `Successfully restarted process ${processId} (port: ${port})`;
+          info(successMsg);
+          details[processId] = successMsg;
+          
+          // Brief pause between restarts to avoid race conditions
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       } catch (err) {
         results[processId] = false;
         overallSuccess = false;
-        error(`Error restarting process ${processId} for site ${site}: ${err}`);
+        const errorMsg = `Exception restarting process ${processId}: ${err}`;
+        error(errorMsg);
+        details[processId] = errorMsg;
       }
     }
 
+    // Final validation - check that all processes are healthy
+    if (overallSuccess) {
+      info(`Validating health of restarted processes for site ${site}...`);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for processes to stabilize
+      
+      for (const processId of processIds) {
+        if (results[processId] && !this.isProcessHealthy(processId)) {
+          warn(`Process ${processId} appears unhealthy after restart`);
+          details[processId] += " (health check failed after restart)";
+        }
+      }
+    }
+
+    const successCount = Object.values(results).filter(Boolean).length;
+    info(`Site restart completed for ${site}: ${successCount}/${processIds.length} processes restarted successfully`);
+
     return {
       success: overallSuccess && processIds.length > 0,
-      results
+      results,
+      details
     };
   }
 

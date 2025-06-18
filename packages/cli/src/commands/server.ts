@@ -256,24 +256,100 @@ export function registerServerCommands(program: Command): void {
       "Set logging level (0=none, 1=error, 2=warn, 3=info, 4=debug)",
       "3"
     )
+    .option(
+      "--graceful",
+      "Gracefully shutdown site processes before restarting server",
+      false
+    )
+    .option(
+      "--timeout <seconds>",
+      "Timeout for graceful shutdown in seconds",
+      "30"
+    )
     .action(async (options) => {
       try {
         info("Restarting server...");
         
-        // Kill any existing deploy processes using Bun
+        // If graceful restart is requested, shutdown site processes first
+        if (options.graceful) {
+          try {
+            info("Gracefully shutting down site processes...");
+            const { processManager } = await import(
+              "@keithk/deploy-server/src/utils/process-manager"
+            );
+            
+            const timeout = parseInt(options.timeout) * 1000;
+            await processManager.shutdownAll(timeout);
+            info("Site processes shutdown completed");
+          } catch (err) {
+            warn("Error during graceful shutdown, proceeding with force restart:", err);
+          }
+        }
+        
+        // Kill any existing deploy server processes
+        let killedProcesses = false;
         try {
-          const proc = spawn({
-            cmd: ["pkill", "-f", "deploy.*start"],
+          // First try to find deploy processes more precisely
+          const findProc = spawn({
+            cmd: ["pgrep", "-f", "bun.*deploy.*start"],
             stdio: ["pipe", "pipe", "pipe"]
           });
           
-          await proc.exited;
-          info("Killed existing server processes");
+          await findProc.exited;
           
-          // Wait a moment for processes to clean up
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (findProc.exitCode === 0) {
+            // Found processes, kill them
+            const killProc = spawn({
+              cmd: ["pkill", "-f", "bun.*deploy.*start"],
+              stdio: ["pipe", "pipe", "pipe"]
+            });
+            
+            await killProc.exited;
+            killedProcesses = true;
+            info("Killed existing server processes");
+            
+            // Wait longer for processes to clean up
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Verify processes are actually gone
+            const verifyProc = spawn({
+              cmd: ["pgrep", "-f", "bun.*deploy.*start"],
+              stdio: ["pipe", "pipe", "pipe"]
+            });
+            
+            await verifyProc.exited;
+            if (verifyProc.exitCode === 0) {
+              warn("Some processes may still be running, forcing kill...");
+              const forceKillProc = spawn({
+                cmd: ["pkill", "-9", "-f", "bun.*deploy.*start"],
+                stdio: ["pipe", "pipe", "pipe"]
+              });
+              await forceKillProc.exited;
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
         } catch (err) {
-          info("No existing server processes to kill");
+          debug("Process cleanup error (this may be normal):", err);
+        }
+        
+        if (!killedProcesses) {
+          info("No existing server processes found to kill");
+        }
+        
+        // Verify no processes are using our expected ports
+        try {
+          const portCheckProc = spawn({
+            cmd: ["lsof", "-ti", ":3000"],
+            stdio: ["pipe", "pipe", "pipe"]
+          });
+          
+          await portCheckProc.exited;
+          if (portCheckProc.exitCode === 0) {
+            warn("Port 3000 is still in use, waiting for it to be freed...");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (err) {
+          debug("Port check completed");
         }
         
         // Start the server again
@@ -286,6 +362,20 @@ export function registerServerCommands(program: Command): void {
         
         proc.unref();
         info(`Server restarted successfully with PID ${proc.pid}`);
+        
+        // Brief wait to check if server started successfully
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Verify the server is still running
+        try {
+          if (proc.pid) {
+            process.kill(proc.pid, 0); // Signal 0 just checks if process exists
+            info("Server startup verified - process is running");
+          }
+        } catch (err) {
+          error("Server may have failed to start - please check logs");
+        }
+        
         process.exit(0);
       } catch (err) {
         error("Failed to restart server:", err);

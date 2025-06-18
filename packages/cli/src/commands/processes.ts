@@ -224,25 +224,79 @@ export function registerProcessesCommand(program: Command): void {
   processesCommand
     .command("restart <id>")
     .description("Restart a specific process")
-    .action(async (id: string) => {
+    .option("--timeout <seconds>", "Timeout for restart operation", "30")
+    .option("--verbose", "Show detailed output", false)
+    .action(async (id: string, options) => {
       try {
-        // For restart, we still need the process manager since it handles the actual process
         const { processManager } = await import(
           "@keithk/deploy-server/src/utils/process-manager"
         );
 
-        console.log(`Attempting to restart process: ${id}`);
+        // Get process info first for better error reporting
+        const processes = processManager.getProcesses();
+        const processInfo = processes.find(p => p.id === id);
+        
+        if (!processInfo) {
+          console.error(chalk.red(`Process ${id} not found`));
+          console.log(chalk.dim("Available processes:"));
+          processes.forEach(p => {
+            console.log(`  ${p.id} (${p.site}:${p.port}) - ${getStatusColor(p.status)(p.status)}`);
+          });
+          process.exit(1);
+        }
+
+        console.log(`Attempting to restart process: ${chalk.bold(id)}`);
+        if (options.verbose) {
+          console.log(`  Site: ${processInfo.site}`);
+          console.log(`  Port: ${processInfo.port}`);
+          console.log(`  Current Status: ${getStatusColor(processInfo.status)(processInfo.status)}`);
+          console.log(`  Uptime: ${formatUptime(processInfo.uptime)}`);
+        }
+
+        const startTime = Date.now();
         const result = await processManager.restartProcess(id);
+        const duration = Date.now() - startTime;
 
         if (result) {
-          console.log(chalk.green(`Process ${id} restarted successfully`));
+          console.log(chalk.green(`✅ Process ${id} restarted successfully (${duration}ms)`));
+          
+          if (options.verbose) {
+            // Wait a moment and check the health
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const isHealthy = processManager.isProcessHealthy(id);
+            console.log(`Health check: ${isHealthy ? chalk.green("✅ Healthy") : chalk.red("❌ Unhealthy")}`);
+            
+            if (!isHealthy) {
+              console.log(chalk.yellow("Process may need additional time to start. Check status with:"));
+              console.log(chalk.dim(`  deploy processes list`));
+              console.log(chalk.dim(`  deploy processes logs ${processInfo.site} ${processInfo.port}`));
+            }
+          }
+          
           process.exit(0);
         } else {
-          console.error(chalk.red(`Failed to restart process ${id}`));
+          console.error(chalk.red(`❌ Failed to restart process ${id} (${duration}ms)`));
+          console.log(chalk.yellow("\nTroubleshooting tips:"));
+          console.log(`  • Check if port ${processInfo.port} is available: ${chalk.dim(`lsof -i :${processInfo.port}`)}`);
+          console.log(`  • View process logs: ${chalk.dim(`deploy processes logs ${processInfo.site} ${processInfo.port}`)}`);
+          console.log(`  • Check process status: ${chalk.dim(`deploy processes list`)}`);
+          console.log(`  • Try stopping and starting: ${chalk.dim(`deploy processes stop ${id} && deploy processes restart ${id}`)}`);
           process.exit(1);
         }
       } catch (err) {
-        console.error("Failed to restart process:", err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(chalk.red("Failed to restart process:"), errorMsg);
+        
+        console.log(chalk.yellow("\nThis error might be caused by:"));
+        console.log("  • Port conflicts or network issues");
+        console.log("  • Missing dependencies or configuration");
+        console.log("  • Process manager not running");
+        console.log("  • Insufficient permissions");
+        
+        console.log(chalk.dim("\nFor more help:"));
+        console.log(chalk.dim("  deploy processes list --all"));
+        console.log(chalk.dim("  deploy processes health"));
+        
         process.exit(1);
       }
     });
@@ -478,6 +532,9 @@ export function registerProcessesCommand(program: Command): void {
     .command("restart-all")
     .description("Restart all running processes")
     .option("--site <site>", "Restart only processes for a specific site")
+    .option("--verbose", "Show detailed output including error messages", false)
+    .option("--sequential", "Restart processes one at a time (default)", true)
+    .option("--timeout <seconds>", "Timeout for each restart operation", "30")
     .action(async (options) => {
       try {
         const { processManager } = await import(
@@ -486,51 +543,116 @@ export function registerProcessesCommand(program: Command): void {
         
         if (options.site) {
           console.log(chalk.blue(`Restarting all processes for site: ${options.site}`));
+          console.log(chalk.dim("This operation will restart processes sequentially to avoid conflicts"));
+          
           const result = await processManager.restartSiteProcesses(options.site);
           
           if (result.success) {
             console.log(chalk.green(`✅ Successfully restarted all processes for ${options.site}`));
+            
+            if (options.verbose && result.details) {
+              console.log(chalk.bold("\nDetailed Results:"));
+              Object.entries(result.details).forEach(([id, detail]) => {
+                console.log(`  ${chalk.dim(id)}: ${detail}`);
+              });
+            }
           } else {
             console.log(chalk.red(`❌ Some processes failed to restart for ${options.site}`));
+            
+            // Show results with details
+            console.log(chalk.bold("\nRestart Results:"));
             Object.entries(result.results).forEach(([id, success]) => {
               const status = success ? chalk.green("✅") : chalk.red("❌");
+              const detail = result.details?.[id] || "No details available";
               console.log(`  ${status} ${id}`);
+              if (options.verbose || !success) {
+                console.log(`     ${chalk.dim(detail)}`);
+              }
             });
+            
+            const successCount = Object.values(result.results).filter(Boolean).length;
+            const totalCount = Object.keys(result.results).length;
+            console.log(`\n${chalk.bold(`Summary: ${successCount}/${totalCount} processes restarted successfully`)}`);
+            
             process.exit(1);
           }
         } else {
-          const processes = processManager.getProcesses().filter(p => p.status === "running");
+          const processes = processManager.getProcesses().filter(p => p.status === "running" || p.status === "unhealthy");
           
           if (processes.length === 0) {
             console.log(chalk.yellow("No running processes to restart"));
+            
+            // Check if there are any stopped processes that might need to be started
+            const stoppedProcesses = processManager.getProcesses().filter(p => p.status === "stopped" || p.status === "failed");
+            if (stoppedProcesses.length > 0) {
+              console.log(chalk.dim(`Found ${stoppedProcesses.length} stopped processes. Use 'deploy processes list --all' to see them.`));
+            }
             return;
           }
           
-          console.log(chalk.blue(`Restarting ${processes.length} processes...`));
+          console.log(chalk.blue(`Restarting ${processes.length} processes sequentially...`));
+          console.log(chalk.dim("This may take a moment to avoid port conflicts and ensure stability"));
           
           let successCount = 0;
+          const results: { [id: string]: { success: boolean; error?: string } } = {};
+          
           for (const proc of processes) {
             try {
-              console.log(chalk.dim(`Restarting ${proc.id}...`));
+              console.log(chalk.dim(`Restarting ${proc.id} (${proc.site}:${proc.port})...`));
+              
+              const startTime = Date.now();
               const success = await processManager.restartProcess(proc.id);
+              const duration = Date.now() - startTime;
+              
+              results[proc.id] = { success };
+              
               if (success) {
                 successCount++;
-                console.log(chalk.green(`  ✅ ${proc.id}`));
+                console.log(chalk.green(`  ✅ ${proc.id} (${duration}ms)`));
               } else {
-                console.log(chalk.red(`  ❌ ${proc.id}`));
+                console.log(chalk.red(`  ❌ ${proc.id} (${duration}ms)`));
+                results[proc.id].error = "Restart failed - check logs for details";
               }
+              
+              // Brief pause between restarts
+              if (processes.indexOf(proc) < processes.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
+              
             } catch (err) {
-              console.log(chalk.red(`  ❌ ${proc.id} - ${err}`));
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              results[proc.id] = { success: false, error: errorMsg };
+              console.log(chalk.red(`  ❌ ${proc.id} - ${errorMsg}`));
             }
           }
           
           console.log(`\n${chalk.bold(`Restart completed: ${successCount}/${processes.length} successful`)}`);
+          
+          if (options.verbose) {
+            console.log(chalk.bold("\nDetailed Results:"));
+            Object.entries(results).forEach(([id, result]) => {
+              const status = result.success ? chalk.green("✅") : chalk.red("❌");
+              console.log(`  ${status} ${id}`);
+              if (result.error) {
+                console.log(`     ${chalk.red(result.error)}`);
+              }
+            });
+          }
+          
           if (successCount < processes.length) {
+            const failedCount = processes.length - successCount;
+            console.log(chalk.red(`\n${failedCount} process(es) failed to restart. Use --verbose for more details.`));
+            console.log(chalk.dim("Check logs with: deploy processes logs <site> <port>"));
             process.exit(1);
+          } else {
+            console.log(chalk.green("\n🎉 All processes restarted successfully!"));
           }
         }
       } catch (err) {
         console.error(chalk.red("Failed to restart processes:"), err);
+        if (err instanceof Error) {
+          console.error(chalk.dim("Error details:"), err.message);
+        }
         process.exit(1);
       }
     });
@@ -587,6 +709,7 @@ function getStatusColor(status: string): (text: string) => string {
     case "unhealthy":
       return chalk.red;
     case "starting":
+    case "restarting":
       return chalk.yellow;
     default:
       return chalk.white;
