@@ -91,6 +91,34 @@ export async function executeHook(
 }
 
 /**
+ * Parse command string to separate environment variables from the actual command
+ */
+function parseCommand(command: string): { env: Record<string, string>; cmd: string[] } {
+  const parts = command.trim().split(/\s+/);
+  const env: Record<string, string> = {};
+  let cmdStart = 0;
+
+  // Look for environment variable assignments at the beginning
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.includes('=') && !part.startsWith('-')) {
+      const [key, ...valueParts] = part.split('=');
+      if (key && valueParts.length > 0) {
+        env[key] = valueParts.join('=');
+        cmdStart = i + 1;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  const cmd = parts.slice(cmdStart);
+  return { env, cmd };
+}
+
+/**
  * Execute a command in a site's directory
  * @param command The command to execute
  * @param options Options for command execution
@@ -103,19 +131,23 @@ export async function executeCommand(
   success: boolean;
   message: string;
   data?: any;
-}> {
+}> {        
   const cwd = options.cwd || process.cwd();
-  const env = options.env || {};
+  const optionsEnv = options.env || {};
 
   info(`Executing command: ${command} in ${cwd}`);
 
   try {
+    // Parse command to extract environment variables
+    const { env: commandEnv, cmd } = parseCommand(command);
+    
+    // Merge environment variables: process.env + options.env + command env vars
+    const mergedEnv = { ...process.env, ...optionsEnv, ...commandEnv };
+
     const proc = Bun.spawn({
-      cmd: command.split(" "),
+      cmd,
       cwd,
-      // Only use the provided environment if it's a site-specific action
-      // Otherwise, fall back to process.env with the provided env as overrides
-      env: Object.keys(env).length > 0 ? env : { ...process.env, ...env },
+      env: mergedEnv,
       stdout: "pipe",
       stderr: "pipe"
     });

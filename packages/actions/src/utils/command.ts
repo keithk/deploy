@@ -109,6 +109,34 @@ export async function executeCommand(
 }
 
 /**
+ * Parse command string to separate environment variables from the actual command
+ */
+function parseCommand(command: string): { env: Record<string, string>; cmd: string[] } {
+  const parts = command.trim().split(/\s+/);
+  const env: Record<string, string> = {};
+  let cmdStart = 0;
+
+  // Look for environment variable assignments at the beginning
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.includes('=') && !part.startsWith('-')) {
+      const [key, ...valueParts] = part.split('=');
+      if (key && valueParts.length > 0) {
+        env[key] = valueParts.join('=');
+        cmdStart = i + 1;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  const cmd = parts.slice(cmdStart);
+  return { env, cmd };
+}
+
+/**
  * Fallback implementation of executeCommand for CLI usage
  */
 async function executeCommandFallback(
@@ -116,13 +144,19 @@ async function executeCommandFallback(
   options: ExecuteCommandOptions = {}
 ): Promise<ExecuteCommandResult> {
   const cwd = options.cwd || process.cwd();
-  const env = options.env || {};
+  const optionsEnv = options.env || {};
 
   try {
+    // Parse command to extract environment variables
+    const { env: commandEnv, cmd } = parseCommand(command);
+    
+    // Merge environment variables: process.env + options.env + command env vars
+    const mergedEnv = { ...process.env, ...optionsEnv, ...commandEnv };
+
     const proc = Bun.spawn({
-      cmd: command.split(" "),
+      cmd,
       cwd,
-      env: Object.keys(env).length > 0 ? env : { ...process.env, ...env },
+      env: mergedEnv,
       stdout: "pipe",
       stderr: "pipe"
     });
