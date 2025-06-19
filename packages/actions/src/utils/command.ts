@@ -170,7 +170,7 @@ async function executeCommandFallback(
     return {
       success: false,
       message: `Error executing command: ${err}`,
-      data: { error: err }
+      data: { stdout: "", stderr: String(err), exitCode: -1 }
     };
   }
 }
