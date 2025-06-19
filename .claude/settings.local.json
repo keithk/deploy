@@ -7,7 +7,14 @@
       "Bash(rm:*)",
       "Bash(gh issue create:*)",
       "Bash(git checkout:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:bun.sh)",
+      "WebFetch(domain:bun.sh)",
+      "WebFetch(domain:bun.sh)",
+      "Bash(git restore:*)",
+      "Bash(git commit:*)",
+      "Bash(bun add:*)",
+      "Bash(bunx:*)"
     ]
   },
   "enableAllProjectMcpServers": false
