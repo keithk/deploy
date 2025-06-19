@@ -92,7 +92,7 @@ export async function startDevServer(
       devScript,
       sitePath,
       "static-build",
-      { PACKAGE_MANAGER: packageManager }
+      { PACKAGE_MANAGER: packageManager, MODE: "dev" }
     );
 
     if (success) {

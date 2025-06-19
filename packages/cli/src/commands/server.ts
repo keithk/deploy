@@ -231,10 +231,11 @@ export function registerServerCommands(program: Command): void {
         }
 
         info(`Development server is now active and ready to handle requests`);
-        info(`You can access your sites at:`);
-        info(`  - http://localhost:${server.port}`);
-        info(`  - https://${domain}`);
-        info(`  - https://[site].${domain}`);
+        info(`Main server running on: http://localhost:${server.port}`);
+        info(`Sites are accessible via subdomains:`);
+        info(`  - https://[site-name].${domain} (via Caddy)`);
+        info(`  - http://[site-name].localhost:${server.port} (direct)`);
+        info(`\nIndividual sites will auto-start on their assigned ports when accessed.`);
 
         // Handle graceful shutdown
         process.on("SIGINT", () => {

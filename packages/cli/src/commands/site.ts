@@ -410,8 +410,28 @@ app.listen(port, () => {
 /**
  * List all sites in the project
  */
-async function listSites(): Promise<void> {
+async function listSites(options: { detailed?: boolean; json?: boolean } = {}): Promise<void> {
   try {
+    if (options.detailed) {
+      // Use the detailed formatting from site-manager
+      const { listSitesFormatted } = await import("../utils/site-manager");
+      
+      if (options.json) {
+        const { getSites } = await import("../utils/site-manager");
+        const sites = await getSites();
+        console.log(JSON.stringify(sites, null, 2));
+      } else {
+        console.log(chalk.bold("\nAvailable sites:"));
+        console.log("─".repeat(50));
+        
+        const sitesOutput = await listSitesFormatted();
+        console.log(sitesOutput);
+      }
+      
+      process.exit(0);
+    }
+
+    // Simple list format (default)
     // Determine the project root directory
     const rootDir = process.env.ROOT_DIR
       ? resolve(process.env.ROOT_DIR, "..")
@@ -420,19 +440,22 @@ async function listSites(): Promise<void> {
     // Check if the sites directory exists
     const sitesDir = join(rootDir, "sites");
     if (!existsSync(sitesDir)) {
-      console.log(`No sites directory found at ${sitesDir}`);
-      return;
+      console.log(chalk.yellow("No sites directory found"));
+      console.log(chalk.dim(`Expected location: ${sitesDir}`));
+      console.log(chalk.dim("Run 'deploy site create <name>' to create your first site"));
+      process.exit(0);
     }
 
     // Get all directories in the sites directory
     const sites = readdirSync(sitesDir);
 
     if (sites.length === 0) {
-      console.log(`No sites found in ${sitesDir}`);
-      return;
+      console.log(chalk.yellow("No sites found"));
+      console.log(chalk.dim("Run 'deploy site create <name>' to create your first site"));
+      process.exit(0);
     }
 
-    console.log(chalk.bold(`Found ${sites.length} sites:`));
+    const siteList = [];
 
     for (const site of sites) {
       const siteDir = join(sitesDir, site);
@@ -474,14 +497,40 @@ async function listSites(): Promise<void> {
         }
       }
 
-      console.log(`- ${site} (${siteType})`);
+      siteList.push({ name: site, type: siteType });
     }
+
+    if (options.json) {
+      console.log(JSON.stringify(siteList, null, 2));
+    } else {
+      console.log(chalk.bold(`\n📁 Sites (${siteList.length}):`));
+      console.log("─".repeat(30));
+
+      const typeColors = {
+        static: chalk.blue,
+        dynamic: chalk.green,
+        passthrough: chalk.yellow,
+        "static-build": chalk.cyan,
+        unknown: chalk.gray
+      };
+
+      siteList.forEach(({ name, type }) => {
+        const colorFn = typeColors[type as keyof typeof typeColors] || chalk.white;
+        console.log(`${chalk.bold(name)} ${chalk.dim("→")} ${colorFn(type)}`);
+      });
+
+      console.log(chalk.dim(`\nCommands:`));
+      console.log(chalk.dim(`  deploy site list --detailed  # Show commands and build info`));
+      console.log(chalk.dim(`  deploy site create <name>    # Create a new site`));
+    }
+    
   } catch (err) {
     error(
       `Failed to list sites: ${
         err instanceof Error ? err.message : String(err)
       }`
     );
+    process.exit(1);
   }
 
   process.exit(0);
@@ -505,5 +554,10 @@ export function registerSiteCommands(program: Command): void {
     .option("-f, --force", "Force creation even if site already exists")
     .action(createSite);
 
-  siteCommand.command("list").description("List all sites").action(listSites);
+  siteCommand
+    .command("list")
+    .description("List all sites")
+    .option("--detailed", "Show detailed information including commands", false)
+    .option("--json", "Output as JSON", false)
+    .action(listSites);
 }
