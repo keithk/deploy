@@ -1,22 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)",
-      "Bash(rg:*)",
-      "Bash(bun run:*)",
-      "Bash(rm:*)",
-      "Bash(gh issue create:*)",
-      "Bash(git checkout:*)",
-      "Bash(git push:*)",
-      "WebFetch(domain:bun.sh)",
-      "WebFetch(domain:bun.sh)",
-      "WebFetch(domain:bun.sh)",
-      "Bash(git restore:*)",
-      "Bash(git commit:*)",
-      "Bash(bun add:*)",
-      "Bash(bunx:*)"
-      "Bash(gh pr create:*)"
-    ]
-  },
-  "enableAllProjectMcpServers": false
+      "Bash(mkdir:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": []
+  }
 }
