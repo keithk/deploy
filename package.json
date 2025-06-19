@@ -25,9 +25,12 @@
     "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
     "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup production",
     "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
-    "version": "lerna version",
-    "publish": "lerna publish",
-    "publish:from-git": "lerna publish from-git"
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish",
+    "changeset:status": "changeset status",
+    "version": "changeset version && bun run build:all",
+    "publish": "bun run build:all && changeset publish"
   },
   "keywords": [
     "bun",
@@ -37,10 +40,10 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@changesets/cli": "^2.29.4",
     "@types/node": "^20.17.32",
     "bun-plugin-dtsx": "^0.21.9",
     "bun-types": "latest",
-    "lerna": "^8.2.2",
     "typescript": "^5.8.3"
   }
 }
