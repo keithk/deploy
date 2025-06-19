@@ -94,7 +94,7 @@ export class Database {
   public query<T = any>(sql: string, params: any[] = []): T[] {
     try {
       const stmt = this.db.prepare(sql);
-      return stmt.all(params) as T[];
+      return stmt.all(...(params || [])) as T[];
     } catch (err) {
       error(`Database error querying: ${sql}`);
       error(err);

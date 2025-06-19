@@ -33,8 +33,8 @@ export function createStaticBuildHandler(
     const devScript = site.commands.dev || site.commands["dev:11ty"] || "";
     const packageManager = detectPackageManager(site.path);
 
-    // Start the dev server
-    await startDevServer(site.path, devPort, packageManager, devScript, site.subdomain);
+    // Start the dev server asynchronously (don't wait)
+    startDevServer(site.path, devPort, packageManager, devScript, site.subdomain);
 
     // Return a proxy handler
     return async (request: Request): Promise<Response> => {
