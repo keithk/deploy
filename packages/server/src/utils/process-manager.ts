@@ -202,7 +202,8 @@ export class ProcessManager {
     type: string = "site",
     env: Record<string, string> = {}
   ): Promise<boolean> {
-    const processId = this.generateProcessId(site, port);
+    // Generate initial processId for checking existing processes
+    let processId = this.generateProcessId(site, port);
 
     // Check if process is already running in memory
     if (this.processes.has(processId)) {
@@ -237,15 +238,32 @@ export class ProcessManager {
       debug(`Error checking database for existing process: ${err}`);
     }
 
-    // Check if port is already in use by another process
+    // Check if port is already in use and find alternative if in dev mode
+    let actualPort = port;
     if (await coreIsPortInUse(port)) {
-      error(`Port ${port} is already in use, cannot start process for ${site}`);
-      return false;
+      // In dev mode with static-build sites, try to find an alternative port
+      if (type === "static-build" && env.MODE === "dev") {
+        info(`Port ${port} is in use, searching for available port...`);
+        const availablePort = await this.findAvailablePort(port, 20);
+        if (availablePort) {
+          actualPort = availablePort;
+          warn(`Using alternative port ${actualPort} for ${site} (original port ${port} was in use)`);
+        } else {
+          error(`Could not find an available port for ${site}, all ports ${port}-${port + 19} are in use`);
+          return false;
+        }
+      } else {
+        error(`Port ${port} is already in use, cannot start process for ${site}`);
+        return false;
+      }
     }
 
+    // Update processId with actual port
+    processId = this.generateProcessId(site, actualPort);
+
     // Set up log files
-    const stdoutPath = join(this.logsDir, `${site}-${port}.out.log`);
-    const stderrPath = join(this.logsDir, `${site}-${port}.err.log`);
+    const stdoutPath = join(this.logsDir, `${site}-${actualPort}.out.log`);
+    const stderrPath = join(this.logsDir, `${site}-${actualPort}.err.log`);
 
     // Add timestamp to log files
     const timestamp = new Date().toISOString();
@@ -268,7 +286,7 @@ export class ProcessManager {
     const processEnv = {
       ...process.env,
       ...env,
-      PORT: port.toString()
+      PORT: actualPort.toString()
     };
 
     // Determine command to run based on script
@@ -277,8 +295,11 @@ export class ProcessManager {
     // Get the package manager - either from env or detect it
     const packageManager = env.PACKAGE_MANAGER || detectPackageManager(cwd);
 
-    // Always use the package manager to run the script
-    // Do not pass any arguments after the script name - they are already in the package.json
+    // Check if this is a dev script that needs port configuration
+    const isDevScript = script === "dev" || script.includes("dev:");
+    const needsPortArg = isDevScript && type === "static-build";
+
+    // Build the base command
     if (packageManager === "npm") {
       cmd = ["npm", "run", script];
     } else if (packageManager === "yarn") {
@@ -289,11 +310,53 @@ export class ProcessManager {
       cmd = ["bun", "run", script];
     }
 
+    // For dev scripts, append port arguments after -- separator
+    if (needsPortArg) {
+      // Detect the framework and add appropriate port flag
+      const packageJsonPath = join(cwd, "package.json");
+      let portFlag = "--port"; // Default flag
+      
+      try {
+        if (existsSync(packageJsonPath)) {
+          const packageJson = JSON.parse(await Bun.file(packageJsonPath).text());
+          const devCommand = packageJson.scripts?.[script] || "";
+          
+          // Detect framework based on dev command
+          if (devCommand.includes("waku")) {
+            portFlag = "--port";
+          } else if (devCommand.includes("vite") || devCommand.includes("nuxt")) {
+            portFlag = "--port";
+          } else if (devCommand.includes("next")) {
+            portFlag = "-p";
+          } else if (devCommand.includes("remix")) {
+            portFlag = "--port";
+          } else if (devCommand.includes("astro")) {
+            portFlag = "--port";
+          } else if (devCommand.includes("eleventy") || devCommand.includes("11ty")) {
+            portFlag = "--port";
+          } else if (devCommand.includes("webpack-dev-server")) {
+            portFlag = "--port";
+          }
+          
+          debug(`Detected framework from command '${devCommand}', using port flag: ${portFlag}`);
+        }
+      } catch (err) {
+        debug(`Could not detect framework: ${err}`);
+      }
+      
+      // Add separator and port argument
+      cmd.push("--", portFlag, actualPort.toString());
+      
+      info(`Dev mode: passing port ${actualPort} to ${script} script with flag ${portFlag}`);
+    }
+
     info(
-      `Starting process for ${site} on port ${port} with command: ${cmd.join(
+      `Starting process for ${site} on port ${actualPort} with command: ${cmd.join(
         " "
       )}`
     );
+    debug(`Working directory: ${cwd}`);
+    debug(`Environment variables: ${JSON.stringify(processEnv, null, 2)}`);
 
     try {
       // Start the process with simplified logging
@@ -309,7 +372,7 @@ export class ProcessManager {
       const processInfo: ProcessInfo = {
         process,
         site,
-        port,
+        port: actualPort,
         type,
         script,
         cwd,
@@ -344,7 +407,7 @@ export class ProcessManager {
       try {
         processModel.save(processId, {
           site,
-          port,
+          port: actualPort,
           pid: process.pid,
           type,
           script,
@@ -359,7 +422,7 @@ export class ProcessManager {
 
       // Handle process exit
       process.exited.then((code) => {
-        info(`Process for ${site} on port ${port} exited with code ${code}`);
+        info(`Process for ${site} on port ${actualPort} exited with code ${code}`);
 
         // Remove from processes map if it's the current process
         const currentProcess = this.processes.get(processId);
@@ -371,7 +434,7 @@ export class ProcessManager {
 
           // Attempt to restart if exit was unexpected and we're not shutting down
           if (code !== 0 && !this.isShuttingDown) {
-            this.attemptRestart(site, port, script, cwd, type, env);
+            this.attemptRestart(site, actualPort, script, cwd, type, env);
           }
         }
       }).catch((err) => {
@@ -380,7 +443,7 @@ export class ProcessManager {
 
       return true;
     } catch (err) {
-      error(`Failed to start process for ${site} on port ${port}: ${err}`);
+      error(`Failed to start process for ${site} on port ${actualPort}: ${err}`);
       return false;
     }
   }
@@ -729,6 +792,22 @@ export class ProcessManager {
     } catch (err) {
       return false;
     }
+  }
+
+  /**
+   * Find an available port starting from the given port
+   */
+  async findAvailablePort(startPort: number, maxAttempts: number = 10): Promise<number | null> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const port = startPort + i;
+      if (!(await coreIsPortInUse(port))) {
+        debug(`Found available port: ${port}`);
+        return port;
+      }
+      debug(`Port ${port} is in use, trying next...`);
+    }
+    error(`Could not find an available port after ${maxAttempts} attempts starting from ${startPort}`);
+    return null;
   }
 
   /**

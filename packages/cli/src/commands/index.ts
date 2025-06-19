@@ -1,6 +1,5 @@
 
 import { Command } from "commander";
-import { registerListCommand } from "./list";
 import { registerRunCommand } from "./run";
 import { registerBuildCommand } from "./build";
 import { registerActionCommands } from "./actions";
@@ -18,7 +17,6 @@ export function registerCommands(program: Command): void {
   registerInitCommand(program);
   registerSetupCommand(program);
   registerSiteCommands(program);
-  registerListCommand(program);
   registerRunCommand(program);
   registerBuildCommand(program);
   registerActionCommands(program);

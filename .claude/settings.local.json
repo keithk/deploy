@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(rg:*)",
+      "Bash(bun run:*)",
+      "Bash(rm:*)",
+      "Bash(gh issue create:*)",
+      "Bash(git checkout:*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": false
+}
