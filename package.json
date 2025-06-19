@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "start": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli start",
-    "dev": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli dev",
+    "start": "ROOT_DIR=$(pwd)/sites bun --cwd packages/cli start",
+    "dev": "ROOT_DIR=$(pwd)/sites bun --cwd packages/cli dev",
     "build": "bun run build:all",
     "build:all": "bun run clear:dist && bun run build:tsc && bun run build:bun",
     "build:tsc": "tsc --build",
