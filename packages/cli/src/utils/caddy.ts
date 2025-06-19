@@ -110,12 +110,13 @@ export async function startCaddy(): Promise<boolean> {
     return false;
   }
 
-  // Get the Caddyfile path
-  const caddyfilePath = getCaddyfilePath();
-  if (!(await Bun.file(caddyfilePath).exists())) {
-    warn("Caddyfile not found. Please run setup script first.");
+  // Ensure Caddyfile exists
+  if (!(await ensureCaddyfileExists('dev'))) {
+    warn("Caddyfile not found and could not be generated. Please run setup script first.");
     return false;
   }
+  
+  const caddyfilePath = getCaddyfilePath();
 
   // Start Caddy with the project's Caddyfile
   try {
@@ -218,18 +219,61 @@ export async function stopCaddy(): Promise<boolean> {
 }
 
 /**
+ * Ensure Caddyfile exists and generate if needed for dev mode
+ */
+async function ensureCaddyfileExists(mode: 'dev' | 'production'): Promise<boolean> {
+  const caddyfilePath = mode === 'production' 
+    ? join(process.cwd(), "Caddyfile.production")
+    : getCaddyfilePath();
+
+  if (!(await Bun.file(caddyfilePath).exists())) {
+    if (mode === 'dev') {
+      info("Caddyfile not found. Attempting to generate one...");
+      try {
+        // Import generateCaddyfileContent function
+        const { generateCaddyfileContent } = await import("@keithk/deploy-core");
+        const domain = await getDomain();
+        const rootDir = process.env.ROOT_DIR || "./sites";
+        
+        const caddyfileContent = await generateCaddyfileContent(domain, rootDir, {
+          info: (msg: string) => debug(`Caddyfile gen: ${msg}`),
+          warning: (msg: string) => debug(`Caddyfile gen warning: ${msg}`)
+        });
+        
+        await Bun.write(caddyfilePath, caddyfileContent);
+        info(`Generated Caddyfile at ${caddyfilePath}`);
+        return true;
+      } catch (err) {
+        warn(`Failed to generate Caddyfile: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+      }
+    } else {
+      warn(`Production Caddyfile not found at ${caddyfilePath}`);
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Reload Caddy configuration
  */
 export async function reloadCaddy(): Promise<boolean> {
-  info("Reloading Caddy configuration...");
+  debug("Reloading Caddy configuration...");
 
   if (!(await isCaddyRunning())) {
-    info("Caddy is not running. Starting instead...");
-    return startCaddy();
+    debug("Caddy is not running. Cannot reload configuration.");
+    return false;
   }
 
   try {
     const caddyfilePath = getCaddyfilePath();
+    
+    // Ensure Caddyfile exists
+    if (!(await ensureCaddyfileExists('dev'))) {
+      warn("Caddyfile does not exist and could not be generated");
+      return false;
+    }
 
     // Reload configuration
     const proc = Bun.spawn(
@@ -247,11 +291,59 @@ export async function reloadCaddy(): Promise<boolean> {
       return false;
     }
 
-    info("Caddy configuration reloaded successfully.");
+    debug("Caddy configuration reloaded successfully.");
     return true;
   } catch (err) {
     error(
       `Failed to reload Caddy: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+    return false;
+  }
+}
+
+/**
+ * Reload Caddy configuration for production
+ */
+export async function reloadCaddyProduction(): Promise<boolean> {
+  debug("Reloading Caddy production configuration...");
+
+  if (!(await isCaddyRunning())) {
+    debug("Caddy is not running. Cannot reload configuration.");
+    return false;
+  }
+
+  try {
+    const caddyfilePath = resolve("Caddyfile.production");
+    
+    // Ensure production Caddyfile exists
+    if (!(await ensureCaddyfileExists('production'))) {
+      warn("Production Caddyfile does not exist");
+      return false;
+    }
+
+    // Reload configuration
+    const proc = Bun.spawn(
+      ["caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"],
+      {
+        stdio: ["ignore", "pipe", "pipe"]
+      }
+    );
+
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      error(`Failed to reload production Caddy (exit code ${exitCode}):`, stderr);
+      return false;
+    }
+
+    debug("Caddy production configuration reloaded successfully.");
+    return true;
+  } catch (err) {
+    error(
+      `Failed to reload production Caddy: ${
         err instanceof Error ? err.message : String(err)
       }`
     );
@@ -278,12 +370,14 @@ export async function startCaddyProduction(): Promise<boolean> {
     return false;
   }
 
-  const caddyfilePath = resolve("Caddyfile.production");
-  if (!(await Bun.file(caddyfilePath).exists())) {
+  // Ensure production Caddyfile exists
+  if (!(await ensureCaddyfileExists('production'))) {
     warn("Caddyfile.production not found. Skipping Caddy startup.");
     warn("If you need HTTPS support, run setup script first.");
     return false;
   }
+  
+  const caddyfilePath = resolve("Caddyfile.production");
 
   try {
     info(`Starting Caddy with production config: ${caddyfilePath}`);

@@ -6,6 +6,8 @@ import {
   isCaddyRunning,
   startCaddy,
   startCaddyProduction,
+  reloadCaddy,
+  reloadCaddyProduction,
   getDomain
 } from "../utils/caddy";
 import {
@@ -18,6 +20,36 @@ import {
 } from "@keithk/deploy-core";
 import { startServer } from "@keithk/deploy-server";
 import { processManager } from "@keithk/deploy-server/src/utils/process-manager";
+
+async function ensureCaddyRunning(mode: 'dev' | 'production'): Promise<boolean> {
+  if (await isCaddyRunning()) {
+    info("Caddy is already running. Reloading configuration...");
+    const reloaded = mode === 'production' 
+      ? await reloadCaddyProduction()
+      : await reloadCaddy();
+    
+    if (reloaded) {
+      info("Caddy configuration reloaded successfully.");
+      return true;
+    } else {
+      warn("Failed to reload Caddy configuration. Continuing without Caddy reload.");
+      return false;
+    }
+  } else {
+    info("Starting Caddy server...");
+    const started = mode === 'production' 
+      ? await startCaddyProduction()
+      : await startCaddy();
+    
+    if (started) {
+      info("Caddy started successfully.");
+      return true;
+    } else {
+      warn("Failed to start Caddy. HTTPS may not work properly.");
+      return false;
+    }
+  }
+}
 
 async function restartProcesses() {
   info("Checking for processes to restart...");
@@ -98,10 +130,10 @@ export function registerServerCommands(program: Command): void {
           info("Starting server in daemon mode...");
           
           // Spawn the process in daemon mode using Bun
-          const proc = spawn({
-            cmd: ["bun", "run", "deploy", "start", "--foreground", "--log-level", options.logLevel],
-            stdio: ["ignore", "ignore", "ignore"],
-            detached: true
+          const proc = spawn([
+            "bun", "run", "deploy", "start", "--foreground", "--log-level", options.logLevel
+          ], {
+            stdio: ["ignore", "ignore", "ignore"]
           });
           
           proc.unref();
@@ -109,12 +141,8 @@ export function registerServerCommands(program: Command): void {
           process.exit(0);
         }
 
-        // Start Caddy if needed
-        if (!(await isCaddyRunning())) {
-          await startCaddyProduction();
-        } else {
-          info("Caddy is already running.");
-        }
+        // Ensure Caddy is running with latest configuration
+        await ensureCaddyRunning('production');
 
         // Start the server
         info("Starting server in production mode...");
@@ -157,16 +185,10 @@ export function registerServerCommands(program: Command): void {
     )
     .action(async (options) => {
       try {
-        // Start Caddy if needed
-        if (!(await isCaddyRunning())) {
-          info("Starting Caddy server for HTTPS support...");
-          const caddyStarted = await startCaddy();
-          if (!caddyStarted) {
-            warn("Failed to start Caddy. HTTPS may not work properly.");
-            warn("You can run 'bun run setup:macos' to set up Caddy.");
-          }
-        } else {
-          info("Caddy is already running.");
+        // Ensure Caddy is running with latest configuration
+        const caddySuccess = await ensureCaddyRunning('dev');
+        if (!caddySuccess) {
+          warn("You can run 'bun run setup:macos' to set up Caddy.");
         }
 
         // Start the server
@@ -291,8 +313,9 @@ export function registerServerCommands(program: Command): void {
         let killedProcesses = false;
         try {
           // First try to find deploy processes more precisely
-          const findProc = spawn({
-            cmd: ["pgrep", "-f", "bun.*deploy.*start"],
+          const findProc = spawn([
+            "pgrep", "-f", "bun.*deploy.*start"
+          ], {
             stdio: ["pipe", "pipe", "pipe"]
           });
           
@@ -300,8 +323,9 @@ export function registerServerCommands(program: Command): void {
           
           if (findProc.exitCode === 0) {
             // Found processes, kill them
-            const killProc = spawn({
-              cmd: ["pkill", "-f", "bun.*deploy.*start"],
+            const killProc = spawn([
+              "pkill", "-f", "bun.*deploy.*start"
+            ], {
               stdio: ["pipe", "pipe", "pipe"]
             });
             
@@ -313,16 +337,18 @@ export function registerServerCommands(program: Command): void {
             await new Promise(resolve => setTimeout(resolve, 3000));
             
             // Verify processes are actually gone
-            const verifyProc = spawn({
-              cmd: ["pgrep", "-f", "bun.*deploy.*start"],
+            const verifyProc = spawn([
+              "pgrep", "-f", "bun.*deploy.*start"
+            ], {
               stdio: ["pipe", "pipe", "pipe"]
             });
             
             await verifyProc.exited;
             if (verifyProc.exitCode === 0) {
               warn("Some processes may still be running, forcing kill...");
-              const forceKillProc = spawn({
-                cmd: ["pkill", "-9", "-f", "bun.*deploy.*start"],
+              const forceKillProc = spawn([
+                "pkill", "-9", "-f", "bun.*deploy.*start"
+              ], {
                 stdio: ["pipe", "pipe", "pipe"]
               });
               await forceKillProc.exited;
@@ -339,8 +365,9 @@ export function registerServerCommands(program: Command): void {
         
         // Verify no processes are using our expected ports
         try {
-          const portCheckProc = spawn({
-            cmd: ["lsof", "-ti", ":3000"],
+          const portCheckProc = spawn([
+            "lsof", "-ti", ":3000"
+          ], {
             stdio: ["pipe", "pipe", "pipe"]
           });
           
@@ -353,12 +380,16 @@ export function registerServerCommands(program: Command): void {
           debug("Port check completed");
         }
         
+        // Ensure Caddy is running with latest configuration
+        info("Reloading Caddy configuration...");
+        await ensureCaddyRunning('production');
+        
         // Start the server again
         info("Starting server...");
-        const proc = spawn({
-          cmd: ["bun", "run", "deploy", "start", "--log-level", options.logLevel],
-          stdio: ["ignore", "ignore", "ignore"],
-          detached: true
+        const proc = spawn([
+          "bun", "run", "deploy", "start", "--log-level", options.logLevel
+        ], {
+          stdio: ["ignore", "ignore", "ignore"]
         });
         
         proc.unref();
