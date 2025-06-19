@@ -15,6 +15,7 @@
       "Bash(git commit:*)",
       "Bash(bun add:*)",
       "Bash(bunx:*)"
+      "Bash(gh pr create:*)"
     ]
   },
   "enableAllProjectMcpServers": false

@@ -34,6 +34,18 @@ export async function generateCaddyfileContent(
   http_port 80
   https_port 443
   
+  # Enable HTTP/3 support with fallback protocols
+  servers {
+    protocols h1 h2 h3
+  }
+  
+  # On-demand TLS for SaaS applications (if enabled)
+  ${process.env.ENABLE_ON_DEMAND_TLS === 'true' ? `on_demand_tls {
+    ask http://localhost:3000/api/validate-domain
+    interval 2m
+    burst 5
+  }` : ''}
+  
   # Log settings
   log {
     output file /var/log/caddy/access.log
@@ -43,8 +55,35 @@ export async function generateCaddyfileContent(
 
 # Root domain configuration
 ${domain} {
+  # Enable advanced compression
+  encode {
+    gzip 6
+    br 6
+    zstd
+  }
+  
+  # Security headers
+  header {
+    # Remove server info
+    -Server
+    # XSS Protection
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    # HSTS
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+  
   # Reverse proxy to your Bun server
-  reverse_proxy localhost:3000
+  reverse_proxy localhost:3000 {
+    # Health check
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    
+    # Connection settings
+    flush_interval -1
+  }
 }
 
 `;
@@ -66,8 +105,28 @@ ${domain} {
         log.info(`Adding configuration for subdomain: ${subdomain}.${domain}`);
 
         caddyfileContent += `\n${subdomain}.${domain} {
+  # Enable advanced compression
+  encode {
+    gzip 6
+    br 6
+    zstd
+  }
+  
+  # Security headers
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    X-XSS-Protection "1; mode=block"
+  }
+  
   # Reverse proxy to your Bun server
-  reverse_proxy localhost:3000
+  reverse_proxy localhost:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+  }
 }
 `;
       }
@@ -90,8 +149,31 @@ ${domain} {
               `Adding configuration for custom domain: ${site.customDomain}`
             );
             caddyfileContent += `\n${site.customDomain} {
+  # Enable on-demand TLS if configured
+  ${process.env.ENABLE_ON_DEMAND_TLS === 'true' ? 'tls {\n    on_demand\n  }' : ''}
+  
+  # Enable advanced compression
+  encode {
+    gzip 6
+    br 6
+    zstd
+  }
+  
+  # Security headers for custom domains
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    X-XSS-Protection "1; mode=block"
+  }
+  
   # Reverse proxy to your Bun server
-  reverse_proxy localhost:3000
+  reverse_proxy localhost:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+  }
 }
 `;
           }
