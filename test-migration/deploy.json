@@ -1,0 +1,10 @@
+{
+  "actions": {
+    "enabled": true,
+    "webhookPath": "/webhook"
+  },
+  "github": {
+    "repository": "test/repo",
+    "branch": "main"
+  }
+}

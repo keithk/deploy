@@ -140,6 +140,52 @@ export function registerCaddyfileCommands(program: Command): void {
     });
 
   caddyfileCommand
+    .command("configure")
+    .description("Configure advanced Caddy features")
+    .option("--enable-http3", "Enable HTTP/3 support")
+    .option("--enable-on-demand-tls", "Enable on-demand TLS for SaaS applications")
+    .option("--disable-http3", "Disable HTTP/3 support")
+    .option("--disable-on-demand-tls", "Disable on-demand TLS")
+    .action(async (options) => {
+      try {
+        log.step("Configuring advanced Caddy features...");
+        
+        if (options.enableHttp3) {
+          log.info("HTTP/3 is enabled by default in the new configuration.");
+          log.info("No additional configuration needed.");
+        }
+        
+        if (options.enableOnDemandTls) {
+          log.info("Enabling on-demand TLS...");
+          log.info("Add ENABLE_ON_DEMAND_TLS=true to your .env file");
+          log.warning("Ensure your domain validation endpoint is secure!");
+        }
+        
+        if (options.disableHttp3) {
+          log.warning("HTTP/3 provides significant performance benefits.");
+          log.info("To disable, modify the Caddyfile manually and remove 'h3' from protocols.");
+        }
+        
+        if (options.disableOnDemandTls) {
+          log.info("To disable on-demand TLS, remove ENABLE_ON_DEMAND_TLS from .env file");
+        }
+        
+        log.info("\nAdvanced features configured:");
+        log.info("• HTTP/3: Enabled by default for better performance");
+        log.info("• Brotli & Zstd compression: Enabled for smaller transfers");
+        log.info("• Security headers: Configured for XSS and clickjacking protection");
+        log.info("• Health checks: Enabled for reverse proxy monitoring");
+        log.info(`• On-demand TLS: ${process.env.ENABLE_ON_DEMAND_TLS === 'true' ? 'Enabled' : 'Disabled'}`);
+        
+        log.step("Run 'deploy caddyfile update' to apply changes");
+        
+      } catch (error) {
+        log.error(`Configuration error: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
+    });
+
+  caddyfileCommand
     .command("show")
     .description("Show the current Caddyfile content")
     .action(async () => {

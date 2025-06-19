@@ -35,40 +35,20 @@ export async function loadRootConfig(): Promise<RootActionConfig> {
   info(`Current working directory: ${process.cwd()}`);
   info(`Project root directory: ${rootDir}`);
 
-  // First try the new location (.dialup/config.json)
-  const newConfigPath = resolve(rootDir, ".dialup", "config.json");
-  info(`Looking for root config at: ${newConfigPath}`);
+  // Look for deploy.json in the root directory
+  const configPath = resolve(rootDir, "deploy.json");
+  info(`Looking for root config at: ${configPath}`);
 
-  if (existsSync(newConfigPath)) {
+  if (existsSync(configPath)) {
     try {
-      debug(`Root config file found at ${newConfigPath}, loading...`);
-      const configContent = await Bun.file(newConfigPath).text();
+      debug(`Root config file found at ${configPath}, loading...`);
+      const configContent = await Bun.file(configPath).text();
       const config = JSON.parse(configContent);
       debug(`Root config loaded:`, config);
       return config;
     } catch (err) {
       error(
-        `Error loading root config from ${newConfigPath}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
-  }
-
-  // Fall back to the old location (config.json)
-  const oldConfigPath = resolve(rootDir, "config.json");
-  info(`Looking for legacy root config at: ${oldConfigPath}`);
-
-  if (existsSync(oldConfigPath)) {
-    try {
-      debug(`Legacy root config file found at ${oldConfigPath}, loading...`);
-      const configContent = await Bun.file(oldConfigPath).text();
-      const config = JSON.parse(configContent);
-      debug(`Legacy root config loaded:`, config);
-      return config;
-    } catch (err) {
-      error(
-        `Error loading legacy root config from ${oldConfigPath}: ${
+        `Error loading root config from ${configPath}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
@@ -87,13 +67,13 @@ export async function loadRootConfig(): Promise<RootActionConfig> {
 export async function loadSiteActionConfig(
   sitePath: string
 ): Promise<SiteActionConfig | null> {
-  // First try the new location (.dialup/config.json)
-  const newConfigPath = join(sitePath, ".dialup", "config.json");
+  // First try the preferred location (.deploy/config.json)
+  const preferredConfigPath = join(sitePath, ".deploy", "config.json");
 
-  if (existsSync(newConfigPath)) {
+  if (existsSync(preferredConfigPath)) {
     try {
-      debug(`Loading site action config from new location: ${newConfigPath}`);
-      const configContent = await Bun.file(newConfigPath).text();
+      debug(`Loading site action config from preferred location: ${preferredConfigPath}`);
+      const configContent = await Bun.file(preferredConfigPath).text();
       const config = JSON.parse(configContent);
 
       // If the config has an actions property, return it as the site action config
@@ -102,22 +82,22 @@ export async function loadSiteActionConfig(
       }
     } catch (err) {
       error(
-        `Error loading site action config from ${newConfigPath}: ${
+        `Error loading site action config from ${preferredConfigPath}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
     }
   }
 
-  // Fall back to the old location (config.json)
-  const oldConfigPath = join(sitePath, "config.json");
+  // Fall back to deploy.json
+  const fallbackConfigPath = join(sitePath, "deploy.json");
 
-  if (existsSync(oldConfigPath)) {
+  if (existsSync(fallbackConfigPath)) {
     try {
       debug(
-        `Loading site action config from legacy location: ${oldConfigPath}`
+        `Loading site action config from fallback location: ${fallbackConfigPath}`
       );
-      const configContent = await Bun.file(oldConfigPath).text();
+      const configContent = await Bun.file(fallbackConfigPath).text();
       const config = JSON.parse(configContent);
 
       // If the config has an actions property, return it as the site action config
@@ -126,7 +106,7 @@ export async function loadSiteActionConfig(
       }
     } catch (err) {
       error(
-        `Error loading site action config from ${oldConfigPath}: ${
+        `Error loading site action config from ${fallbackConfigPath}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
@@ -372,17 +352,17 @@ export async function discoverTypeScriptActions(
 ): Promise<Action[]> {
   const actions: Action[] = [];
 
-  // First check the new location (.dialup/actions)
-  const newActionsDir = join(directory, ".dialup", "actions");
+  // First check the preferred location (.deploy/actions)
+  const preferredActionsDir = join(directory, ".deploy", "actions");
 
-  if (existsSync(newActionsDir)) {
+  if (existsSync(preferredActionsDir)) {
     try {
-      // Get all .ts files in the new actions directory
-      const files = readdirSync(newActionsDir)
+      // Get all .ts files in the preferred actions directory
+      const files = readdirSync(preferredActionsDir)
         .filter((file) => file.endsWith(".ts") || file.endsWith(".js"))
-        .map((file) => join(newActionsDir, file));
+        .map((file) => join(preferredActionsDir, file));
 
-      debug(`Found ${files.length} potential action files in ${newActionsDir}`);
+      debug(`Found ${files.length} potential action files in ${preferredActionsDir}`);
 
       // Import each file and check if it exports an action
       for (const file of files) {
@@ -421,7 +401,7 @@ export async function discoverTypeScriptActions(
       }
     } catch (err) {
       error(
-        `Error reading actions directory ${newActionsDir}: ${
+        `Error reading actions directory ${preferredActionsDir}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
@@ -434,7 +414,7 @@ export async function discoverTypeScriptActions(
   if (!existsSync(legacyActionsDir)) {
     if (actions.length === 0) {
       debug(
-        `No actions directory found at ${legacyActionsDir} or ${newActionsDir}`
+        `No actions directory found at ${legacyActionsDir} or ${preferredActionsDir}`
       );
     }
     return actions;
