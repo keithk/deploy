@@ -214,5 +214,4 @@ export class RouteManager {
   }
 }
 
-// Create a singleton instance
 export const routeManager = new RouteManager();

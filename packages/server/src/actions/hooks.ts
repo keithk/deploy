@@ -138,5 +138,4 @@ export class HookManager {
   }
 }
 
-// Create a singleton instance
 export const hookManager = new HookManager();

@@ -82,7 +82,6 @@ export async function createServer({
   port?: number;
   logLevel?: LogLevel;
 } = {}): Promise<Server> {
-  // Set the log level
   setLogLevel(logLevel);
   // Ensure rootDir is always set and absolute
   const resolvedRootDir = rootDir
@@ -95,7 +94,6 @@ export async function createServer({
 
   debug(`Using root directory: ${resolvedRootDir}`);
 
-  // Create action context
   const actionContext: import("@keithk/deploy-core").ActionContext = {
     rootDir: resolvedRootDir,
     mode,
@@ -168,7 +166,6 @@ export async function createServer({
       close() {}
     },
     fetch: async (request) => {
-      // Create a context object to store request-specific data
       const context = new Map();
 
       // Apply logger middleware
@@ -208,7 +205,6 @@ export async function createServer({
           url.pathname.startsWith(webhookPath) &&
           rootConfig.actions?.enabled
         ) {
-          // Use the webhook middleware
           const webhookHandler = webhookMiddleware(
             actionRegistry,
             actionContext
@@ -226,7 +222,6 @@ export async function createServer({
           request
         });
 
-        // Use the site context middleware to determine the site
         const siteContextHandler = siteContext(sites, PROJECT_DOMAIN);
         const siteOrResponse = await siteContextHandler(request, context);
 

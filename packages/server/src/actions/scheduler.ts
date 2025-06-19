@@ -142,5 +142,4 @@ export class ActionScheduler {
   }
 }
 
-// Create a singleton instance
 export const actionScheduler = new ActionScheduler();
