@@ -21,6 +21,51 @@ import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 
 /**
+ * Handles domain validation for on-demand TLS
+ * This endpoint is called by Caddy to validate whether a domain should receive a certificate
+ */
+async function handleDomainValidation(request: Request, sites: SiteConfig[]): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const domain = url.searchParams.get('domain');
+    
+    if (!domain) {
+      return new Response('Domain parameter required', { status: 400 });
+    }
+    
+    debug(`Validating domain for on-demand TLS: ${domain}`);
+    
+    // Check if domain is configured in any site
+    const isValidDomain = sites.some(site => {
+      // Check if it matches a custom domain
+      if (site.customDomain === domain) {
+        return true;
+      }
+      
+      // Check if it matches a subdomain pattern
+      const projectDomain = process.env.PROJECT_DOMAIN || 'dev.flexi';
+      const subdomain = site.subdomain || site.route.replace(/^\//, '');
+      if (domain === `${subdomain}.${projectDomain}`) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (isValidDomain) {
+      info(`Domain validation approved: ${domain}`);
+      return new Response('Domain validated', { status: 200 });
+    } else {
+      info(`Domain validation rejected: ${domain}`);
+      return new Response('Domain not configured', { status: 403 });
+    }
+  } catch (error) {
+    debug(`Domain validation error: ${error}`);
+    return new Response('Validation error', { status: 500 });
+  }
+}
+
+/**
  * Creates and starts the main server, mounting all detected sites.
  * Returns the running Bun server instance.
  */
@@ -141,8 +186,24 @@ export async function createServer({
           return actionResponse;
         }
 
-        // Check if this is a webhook request (legacy support)
+        // Check for API endpoints
         const url = new URL(request.url);
+        
+        // Handle domain validation for on-demand TLS
+        if (url.pathname === '/api/validate-domain') {
+          const response = await handleDomainValidation(request, sites);
+          logger.logResponse(request, response, loggerStart);
+          return response;
+        }
+        
+        // Handle health check endpoint
+        if (url.pathname === '/health') {
+          const response = new Response('OK', { status: 200 });
+          logger.logResponse(request, response, loggerStart);
+          return response;
+        }
+        
+        // Check if this is a webhook request (legacy support)
         if (
           url.pathname.startsWith(webhookPath) &&
           rootConfig.actions?.enabled
