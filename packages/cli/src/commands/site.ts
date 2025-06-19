@@ -43,15 +43,15 @@ async function createSite(
     console.log(`Creating site: ${name} (${siteType})`);
     mkdirSync(siteDir, { recursive: true });
 
-    const dialupDir = join(siteDir, ".dialup");
-    mkdirSync(dialupDir, { recursive: true });
+    const deployDir = join(siteDir, ".deploy");
+    mkdirSync(deployDir, { recursive: true });
 
     // Setup actions directory for site-specific automation
-    const actionsDir = join(dialupDir, "actions");
+    const actionsDir = join(deployDir, "actions");
     mkdirSync(actionsDir, { recursive: true });
 
     // Configure site with type-specific defaults
-    const configPath = join(dialupDir, "config.json");
+    const configPath = join(deployDir, "config.json");
     const config = {
       type: siteType,
       subdomain: name
@@ -458,22 +458,22 @@ async function listSites(options: { detailed?: boolean; json?: boolean } = {}): 
       // Try to get the site type from the config
       let siteType = "unknown";
 
-      // First check .dialup/config.json
-      const newConfigPath = join(siteDir, ".dialup", "config.json");
-      if (existsSync(newConfigPath)) {
+      // First check .deploy/config.json
+      const preferredConfigPath = join(siteDir, ".deploy", "config.json");
+      if (existsSync(preferredConfigPath)) {
         try {
-          const configContent = await Bun.file(newConfigPath).text();
+          const configContent = await Bun.file(preferredConfigPath).text();
           const config = JSON.parse(configContent);
           siteType = config.type || "unknown";
         } catch (err) {
           // Ignore errors
         }
       } else {
-        // Fall back to config.json
-        const oldConfigPath = join(siteDir, "config.json");
-        if (existsSync(oldConfigPath)) {
+        // Fall back to deploy.json
+        const fallbackConfigPath = join(siteDir, "deploy.json");
+        if (existsSync(fallbackConfigPath)) {
           try {
-            const configContent = await Bun.file(oldConfigPath).text();
+            const configContent = await Bun.file(fallbackConfigPath).text();
             const config = JSON.parse(configContent);
             siteType = config.type || "unknown";
           } catch (err) {

@@ -5,7 +5,7 @@ import { debug, warn } from "./logging";
 import { findAvailablePort, getPortConfig, isValidPort } from "./portUtils";
 
 /**
- * Loads configuration for a site from .dialup/config.json or config.json
+ * Loads configuration for a site from .deploy/config.json or deploy.json
  *
  * @param sitePath Path to the site directory
  * @returns The site configuration
@@ -13,29 +13,29 @@ import { findAvailablePort, getPortConfig, isValidPort } from "./portUtils";
 export async function loadSiteConfig(
   sitePath: string
 ): Promise<Partial<SiteConfig>> {
-  // First try the new location (.dialup/config.json)
-  const newConfigPath = join(sitePath, ".dialup", "config.json");
+  // First try the preferred location (.deploy/config.json)
+  const preferredConfigPath = join(sitePath, ".deploy", "config.json");
 
-  if (existsSync(newConfigPath)) {
+  if (existsSync(preferredConfigPath)) {
     try {
-      debug(`Loading config from new location: ${newConfigPath}`);
-      const configContent = await Bun.file(newConfigPath).text();
+      debug(`Loading config from preferred location: ${preferredConfigPath}`);
+      const configContent = await Bun.file(preferredConfigPath).text();
       return JSON.parse(configContent);
     } catch (e) {
-      console.error(`Error reading config from ${newConfigPath}:`, e);
+      console.error(`Error reading config from ${preferredConfigPath}:`, e);
     }
   }
 
-  // Fall back to the old location (config.json)
-  const oldConfigPath = join(sitePath, "config.json");
+  // Fall back to the root deploy.json
+  const fallbackConfigPath = join(sitePath, "deploy.json");
 
-  if (existsSync(oldConfigPath)) {
+  if (existsSync(fallbackConfigPath)) {
     try {
-      debug(`Loading config from legacy location: ${oldConfigPath}`);
-      const configContent = await Bun.file(oldConfigPath).text();
+      debug(`Loading config from fallback location: ${fallbackConfigPath}`);
+      const configContent = await Bun.file(fallbackConfigPath).text();
       return JSON.parse(configContent);
     } catch (e) {
-      console.error(`Error reading config from ${oldConfigPath}:`, e);
+      console.error(`Error reading config from ${fallbackConfigPath}:`, e);
     }
   }
 

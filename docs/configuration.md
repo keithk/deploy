@@ -1,30 +1,31 @@
 # Configuration
 
-DialUpDeploy uses configuration files to manage both global and site-specific settings. The new `.dialup` directory structure provides a cleaner organization for configuration files and actions.
+DialUpDeploy uses configuration files to manage both global and site-specific settings. The standardized configuration structure provides a cleaner organization for configuration files and actions.
 
 ---
 
 ## 🌐 Configuration Structure
 
-DialUpDeploy uses a `.dialup` directory structure for configuration:
+DialUpDeploy uses a standardized configuration structure:
 
 ```mermaid
 graph TD
-    A[Project Root] --> B[.dialup/]
+    A[Project Root] --> B[deploy.json]
     A --> C[sites/]
-    B --> D[config.json]
-    B --> E[actions/]
-    B --> F[caddy/]
-    C --> G[site1/]
-    C --> H[site2/]
-    G --> I[.dialup/]
-    I --> J[config.json]
-    I --> K[actions/]
+    C --> D[site1/]
+    C --> E[site2/]
+    D --> F[.deploy/]
+    D --> G[deploy.json]
+    F --> H[config.json]
+    F --> I[actions/]
+    E --> J[.deploy/]
+    J --> K[config.json]
+    J --> L[actions/]
 ```
 
 ### Project Configuration
 
-The project-level configuration is stored in `.dialup/config.json`:
+The project-level configuration is stored in `deploy.json` at the project root:
 
 ```json
 {
@@ -42,7 +43,7 @@ The project-level configuration is stored in `.dialup/config.json`:
 
 ### Site Configuration
 
-Each site has its own configuration in `sites/[site-name]/.dialup/config.json`:
+Each site has its own configuration in `sites/[site-name]/.deploy/config.json` (preferred) or `sites/[site-name]/deploy.json` (fallback):
 
 ```json
 {
@@ -59,20 +60,24 @@ When the system loads configuration files, it follows this order:
 
 ```mermaid
 graph TD
-    A[Configuration Loading] --> B{Check .dialup/config.json}
-    B -->|Exists| C[Load from .dialup/config.json]
-    B -->|Not Found| D{Check config.json}
-    D -->|Exists| E[Load from config.json]
-    D -->|Not Found| F[Use default configuration]
+    A[Root Config Loading] --> B{Check deploy.json}
+    B -->|Exists| C[Load from deploy.json]
+    B -->|Not Found| D[Use default configuration]
 
-    G[Action Discovery] --> H{Check .dialup/actions}
-    H -->|Exists| I[Load actions from .dialup/actions]
-    H -->|Not Found| J{Check actions directory}
-    J -->|Exists| K[Load actions from actions directory]
-    J -->|Not Found| L[No actions found]
+    E[Site Config Loading] --> F{Check .deploy/config.json}
+    F -->|Exists| G[Load from .deploy/config.json]
+    F -->|Not Found| H{Check deploy.json}
+    H -->|Exists| I[Load from deploy.json]
+    H -->|Not Found| J[Use default configuration]
+
+    K[Action Discovery] --> L{Check .deploy/actions}
+    L -->|Exists| M[Load actions from .deploy/actions]
+    L -->|Not Found| N{Check actions directory}
+    N -->|Exists| O[Load actions from actions directory]
+    N -->|Not Found| P[No actions found]
 ```
 
-This approach ensures backward compatibility with existing projects while encouraging the use of the new structure for new projects.
+This loading order provides a clear configuration hierarchy with fallback options for flexibility.
 
 ---
 
