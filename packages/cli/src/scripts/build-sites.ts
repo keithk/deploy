@@ -3,7 +3,7 @@
 
 import { join, basename } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
-import { spawnSync } from "child_process";
+// Use Bun's native spawn for better performance
 import {
   SiteConfig,
   loadBuildCache,
@@ -86,18 +86,18 @@ async function ensureNodeModules(
   const installCommand = "install";
 
   try {
-    const result = spawnSync(packageManager, [installCommand], {
+    // Use Bun.spawnSync for better performance
+    const result = Bun.spawnSync([packageManager, installCommand], {
       cwd: sitePath,
-      stdio: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+      stdin: "inherit",
       env: process.env
     });
 
-    if (result.error) {
-      console.error(`Error installing dependencies: ${result.error.message}`);
-      return false;
-    } else if (result.status !== 0) {
+    if (result.exitCode !== 0) {
       console.error(
-        `Dependency installation failed with exit code ${result.status}`
+        `Dependency installation failed with exit code ${result.exitCode}`
       );
       return false;
     }
@@ -203,19 +203,18 @@ async function buildAll() {
       console.log(`Using package manager: ${packageManager} to run "build"`);
 
       try {
-        const result = spawnSync(command, args, {
+        // Use Bun.spawnSync for better performance
+        const result = Bun.spawnSync([command, ...args], {
           cwd: site.path,
-          stdio: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+          stdin: "inherit",
           env: process.env
         });
 
-        if (result.error) {
+        if (result.exitCode !== 0) {
           console.error(
-            `Error building site "${siteName}": ${result.error.message}`
-          );
-        } else if (result.status !== 0) {
-          console.error(
-            `Build for site "${siteName}" failed with exit code ${result.status}`
+            `Build for site "${siteName}" failed with exit code ${result.exitCode}`
           );
         } else {
           console.log(`Successfully built ${siteName}`);
