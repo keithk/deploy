@@ -1383,7 +1383,6 @@ function detectPackageManager(dir: string): string {
   }
 }
 
-// Create a singleton instance
 export const processManager = new ProcessManager();
 
 // Handle graceful shutdown on process signals

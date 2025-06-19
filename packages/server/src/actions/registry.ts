@@ -212,5 +212,4 @@ export class ActionRegistry {
   }
 }
 
-// Create a singleton instance
 export const actionRegistry = new ActionRegistry();

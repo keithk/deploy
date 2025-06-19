@@ -373,5 +373,4 @@ class ProcessManagerImpl implements ProcessManager {
   }
 }
 
-// Create a singleton instance
 export const processManager = new ProcessManagerImpl();

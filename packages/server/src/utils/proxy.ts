@@ -19,13 +19,9 @@ export async function proxyRequest(
   debug(`Proxying request to: ${targetUrl}`);
 
   try {
-    // Create a new headers object to ensure we're not modifying the original
+    // Clone headers to avoid mutation side effects
     const headers = new Headers(request.headers);
-
-    // Set headers that dev servers might need
     headers.set("Host", `localhost:${targetPort}`);
-
-    // Create the proxy request with the modified headers
     const proxyReq = new Request(targetUrl, {
       method: request.method,
       headers: headers,
@@ -37,10 +33,9 @@ export async function proxyRequest(
 
     const response = await fetch(proxyReq);
 
-    // Create a new headers object for the response
     const responseHeaders = new Headers(response.headers);
 
-    // Ensure CORS headers are set correctly
+    // Enable CORS for development
     responseHeaders.set("Access-Control-Allow-Origin", "*");
 
     return new Response(response.body, {

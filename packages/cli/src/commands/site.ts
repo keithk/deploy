@@ -6,16 +6,15 @@ import chalk from "chalk";
 import { debug, info, error } from "@keithk/deploy-core";
 
 /**
- * Create a new site in the project
- * @param name The name of the site
- * @param options Command options
+ * Initializes a new site with the specified type and configuration
+ * @param name Site identifier used for directory and subdomain
+ * @param options Site type and creation options
  */
 async function createSite(
   name: string,
   options: { type?: string; force?: boolean } = {}
 ): Promise<void> {
   try {
-    // Determine the site type
     const siteType = options.type || "static";
     const validTypes = ["static", "static-build", "dynamic", "passthrough"];
 
@@ -25,19 +24,16 @@ async function createSite(
       return;
     }
 
-    // Determine the project root directory
     const rootDir = process.env.ROOT_DIR
       ? resolve(process.env.ROOT_DIR, "..")
       : resolve(process.cwd());
 
-    // Check if the sites directory exists
     const sitesDir = join(rootDir, "sites");
     if (!existsSync(sitesDir)) {
       console.log(`Creating sites directory: ${sitesDir}`);
       mkdirSync(sitesDir, { recursive: true });
     }
 
-    // Create the site directory
     const siteDir = join(sitesDir, name);
     if (existsSync(siteDir) && !options.force) {
       error(`Site ${name} already exists. Use --force to overwrite.`);
@@ -47,15 +43,14 @@ async function createSite(
     console.log(`Creating site: ${name} (${siteType})`);
     mkdirSync(siteDir, { recursive: true });
 
-    // Create the .dialup directory
     const dialupDir = join(siteDir, ".dialup");
     mkdirSync(dialupDir, { recursive: true });
 
-    // Create the actions directory
+    // Setup actions directory for site-specific automation
     const actionsDir = join(dialupDir, "actions");
     mkdirSync(actionsDir, { recursive: true });
 
-    // Create the site config.json
+    // Configure site with type-specific defaults
     const configPath = join(dialupDir, "config.json");
     const config = {
       type: siteType,
@@ -100,11 +95,10 @@ async function createSite(
 }
 
 /**
- * Create a static site
- * @param siteDir The site directory
+ * Generates starter files for a basic static HTML site
+ * @param siteDir Target directory for site files
  */
 async function createStaticSite(siteDir: string): Promise<void> {
-  // Create a simple index.html
   const indexPath = join(siteDir, "index.html");
   const indexContent = `<!DOCTYPE html>
 <html lang="en">
@@ -145,7 +139,6 @@ async function createStaticSite(siteDir: string): Promise<void> {
 
   await Bun.write(indexPath, indexContent);
 
-  // Create a simple CSS file
   const cssPath = join(siteDir, "styles.css");
   const cssContent = `/* Add your styles here */
 `;
@@ -162,7 +155,6 @@ async function createStaticBuildSite(
   siteDir: string,
   name: string
 ): Promise<void> {
-  // Create package.json
   const packagePath = join(siteDir, "package.json");
   const packageContent = {
     name: `${name}-site`,
@@ -180,7 +172,6 @@ async function createStaticBuildSite(
 
   await Bun.write(packagePath, JSON.stringify(packageContent, null, 2));
 
-  // Create index.html
   const indexPath = join(siteDir, "index.html");
   const indexContent = `<!DOCTYPE html>
 <html lang="en">
@@ -204,7 +195,6 @@ async function createStaticBuildSite(
 
   await Bun.write(indexPath, indexContent);
 
-  // Create styles.css
   const cssPath = join(siteDir, "styles.css");
   const cssContent = `body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -230,7 +220,6 @@ h1 {
 
   await Bun.write(cssPath, cssContent);
 
-  // Create main.js
   const jsPath = join(siteDir, "main.js");
   const jsContent = `// Add your JavaScript here
 console.log('Static build site loaded!');
@@ -238,7 +227,6 @@ console.log('Static build site loaded!');
 
   await Bun.write(jsPath, jsContent);
 
-  // Create .gitignore
   const gitignorePath = join(siteDir, ".gitignore");
   const gitignoreContent = `node_modules
 dist
@@ -254,7 +242,6 @@ dist
  * @param name The site name
  */
 async function createDynamicSite(siteDir: string, name: string): Promise<void> {
-  // Create index.ts
   const indexPath = join(siteDir, "index.ts");
   const indexContent = `// Dynamic site entry point
 
@@ -321,7 +308,6 @@ async function createPassthroughSite(
   siteDir: string,
   name: string
 ): Promise<void> {
-  // Create package.json
   const packagePath = join(siteDir, "package.json");
   const packageContent = {
     name: `${name}-site`,
@@ -398,7 +384,6 @@ app.listen(port, () => {
 
   await Bun.write(serverPath, serverContent);
 
-  // Create .gitignore
   const gitignorePath = join(siteDir, ".gitignore");
   const gitignoreContent = `node_modules
 .DS_Store

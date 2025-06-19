@@ -27,10 +27,9 @@ export async function generateCaddyfileContent(
 
   // Start with the base configuration
   let caddyfileContent = `{
-  # Global Caddy settings
+  # ACME settings and port configuration
   email ${process.env.EMAIL || "admin@" + domain}
   
-  # Use production optimizations
   http_port 80
   https_port 443
   
@@ -46,7 +45,6 @@ export async function generateCaddyfileContent(
     burst 5
   }` : ''}
   
-  # Log settings
   log {
     output file /var/log/caddy/access.log
     format json
@@ -74,14 +72,11 @@ ${domain} {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
   }
   
-  # Reverse proxy to your Bun server
+  # Proxy requests to DialUpDeploy server with health monitoring
   reverse_proxy localhost:3000 {
-    # Health check
     health_uri /health
     health_interval 30s
     health_timeout 5s
-    
-    # Connection settings
     flush_interval -1
   }
 }
@@ -120,7 +115,7 @@ ${domain} {
     X-XSS-Protection "1; mode=block"
   }
   
-  # Reverse proxy to your Bun server
+  # Proxy requests with forwarded headers for site routing
   reverse_proxy localhost:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote}
@@ -167,7 +162,7 @@ ${domain} {
     X-XSS-Protection "1; mode=block"
   }
   
-  # Reverse proxy to your Bun server
+  # Proxy requests with forwarded headers for site routing
   reverse_proxy localhost:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote}
