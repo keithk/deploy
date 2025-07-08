@@ -1,18 +1,10 @@
 name: Publish Packages
 
 on:
-  release:
-    types: [created]
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version bump type (patch, minor, major)"
-        required: true
-        default: "patch"
-      tag:
-        description: "Tag prefix for version"
-        required: false
-        default: ""
 
 jobs:
   build-and-publish:
@@ -31,31 +23,16 @@ jobs:
       - name: Build packages
         run: bun run build:all
 
-      - name: Configure npm
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-          echo "Debug: Repository is ${{ github.repository }}"
-          echo "Debug: Actor is ${{ github.actor }}"
+      - name: Configure npm registry
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
-      - name: Commit any changes
-        run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git add -A
-          git diff --staged --quiet || git commit -m "chore: update workspace dependencies"
-
-      - name: Version and publish
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          npx lerna version ${{ github.event.inputs.version }} --yes --no-push --ignore-scripts
-          git add -A
-          git diff --staged --quiet || git commit -m "chore: version bump after lerna"
-          npx lerna publish from-git --yes
+      - name: Create release PR or publish
+        uses: changesets/action@v1
+        with:
+          publish: bun run changeset:publish
+          version: bun run changeset:version
+          commit: "chore: release packages"
+          title: "Release packages"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish from tag
-        if: github.event_name == 'release'
-        run: npx lerna publish from-git --yes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
