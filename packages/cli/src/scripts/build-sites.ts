@@ -91,7 +91,7 @@ async function ensureNodeModules(
       cwd: sitePath,
       stdout: "inherit",
       stderr: "inherit",
-      stdin: "inherit",
+      stdin: "ignore",
       env: process.env
     });
 
@@ -208,7 +208,7 @@ async function buildAll() {
           cwd: site.path,
           stdout: "inherit",
           stderr: "inherit",
-          stdin: "inherit",
+          stdin: "ignore",
           env: process.env
         });
 
