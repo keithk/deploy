@@ -9,7 +9,7 @@ import { buildAllSites, buildSite } from "../utils/build-utils";
 export function registerBuildCommand(program: Command): void {
   program
     .command("build")
-    .description("Build all static-build sites")
+    .description("Build all static-build and docker sites")
     .option("-s, --site <name>", "Build a specific site")
     .action(async (options) => {
       try {

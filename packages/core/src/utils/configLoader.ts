@@ -72,16 +72,23 @@ export async function loadPackageJson(
  * @param config Partial site configuration
  * @param packageJson Package.json content if available
  * @param hasIndexJs Whether the site has an index.js/ts file
+ * @param hasDockerfile Whether the site has a Dockerfile
  * @returns The determined site type
  */
 export function determineSiteType(
   config: Partial<SiteConfig>,
   packageJson: Record<string, any> | null,
-  hasIndexJs: boolean
+  hasIndexJs: boolean,
+  hasDockerfile: boolean
 ): SiteConfig["type"] {
   // Use explicit type from config if available
   if (config.type) {
     return config.type;
+  }
+
+  // Check for Docker first (highest priority after explicit config)
+  if (hasDockerfile) {
+    return "docker";
   }
 
   // Determine type based on package.json and file structure
@@ -156,6 +163,26 @@ async function assignSitePorts(
     }
   }
   
+  // Handle docker sites
+  if (type === "docker") {
+    if (config.proxyPort && isValidPort(config.proxyPort)) {
+      // Use configured port if valid
+      result.proxyPort = config.proxyPort;
+    } else {
+      // Find available port starting from default
+      const availablePort = await findAvailablePort(defaultPort);
+      if (availablePort !== -1) {
+        result.proxyPort = availablePort;
+        if (availablePort !== defaultPort) {
+          debug(`Site ${siteName}: Using available port ${availablePort} instead of default ${defaultPort}`);
+        }
+      } else {
+        warn(`Site ${siteName}: Could not find available port, using default ${defaultPort} (may conflict)`);
+        result.proxyPort = defaultPort;
+      }
+    }
+  }
+  
   return result;
 }
 
@@ -184,8 +211,16 @@ export async function createSiteConfig(
     existsSync(join(sitePath, "index.ts")) ||
     existsSync(join(sitePath, "index.mjs"));
 
+  // Check if this is a Docker site (has Dockerfile)
+  let hasDockerfile = false;
+  if (existsSync(join(sitePath, "Dockerfile")) || existsSync(join(sitePath, "dockerfile"))) {
+    hasDockerfile = true;
+  } else if (config.docker?.dockerfile && existsSync(join(sitePath, config.docker.dockerfile))) {
+    hasDockerfile = true;
+  }
+
   // Determine site type
-  const type = determineSiteType(config, packageJson, hasIndexJs);
+  const type = determineSiteType(config, packageJson, hasIndexJs, hasDockerfile);
 
   // Get the entry point
   const entryPoint = config.entryPoint || (hasIndexJs ? "index" : undefined);
@@ -209,6 +244,16 @@ export async function createSiteConfig(
     subdomain: config.subdomain || siteName,
     customDomain: config.customDomain,
     bskyDid: config.bskyDid,
-    default: config.default === true
+    default: config.default === true,
+    docker: type === "docker" ? {
+      dockerfile: config.docker?.dockerfile || "Dockerfile",
+      containerPort: config.docker?.containerPort || 3000,
+      environment: config.docker?.environment || {},
+      volumes: config.docker?.volumes || [],
+      buildArgs: config.docker?.buildArgs || {},
+      imageTag: config.docker?.imageTag || siteName,
+      alwaysRebuild: Boolean(config.docker?.alwaysRebuild),
+      ...config.docker
+    } : undefined
   };
 }

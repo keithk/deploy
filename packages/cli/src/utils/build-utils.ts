@@ -11,6 +11,17 @@ import { getSites } from "./site-manager";
 import { runPackageManagerCommand } from "./package-manager";
 
 /**
+ * Build a Docker site by creating a Docker image
+ */
+async function buildDockerSite(site: SiteConfig): Promise<boolean> {
+  // Import Docker handler dynamically to avoid circular dependencies
+  const { DockerSiteHandler } = await import("../../../server/src/handlers/dockerSiteHandler");
+  
+  const handler = new DockerSiteHandler(site, "serve");
+  return handler.buildImage();
+}
+
+/**
  * Build all static-build sites
  */
 export async function buildAllSites(rootDir?: string): Promise<{
@@ -20,12 +31,14 @@ export async function buildAllSites(rootDir?: string): Promise<{
   failedSites: string[];
 }> {
   const sites = await getSites(rootDir);
-  const staticBuildSites = sites.filter((site) => site.type === "static-build");
+  const buildableSites = sites.filter((site) => 
+    site.type === "static-build" || site.type === "docker"
+  );
 
-  if (staticBuildSites.length === 0) {
+  if (buildableSites.length === 0) {
     return {
       success: true,
-      message: "No static-build sites found.",
+      message: "No static-build or docker sites found.",
       builtSites: [],
       failedSites: []
     };
@@ -35,9 +48,18 @@ export async function buildAllSites(rootDir?: string): Promise<{
   const buildCache = loadBuildCache();
 
   // Count how many sites need to be built
-  const sitesToBuild = staticBuildSites.filter(
-    (site) =>
-      site.commands && site.commands.build && needsRebuild(site, buildCache)
+  const sitesToBuild = buildableSites.filter(
+    (site) => {
+      // For static-build sites, check if they have build command and need rebuild
+      if (site.type === "static-build") {
+        return site.commands && site.commands.build && needsRebuild(site, buildCache);
+      }
+      // For docker sites, always consider them buildable
+      if (site.type === "docker") {
+        return true;
+      }
+      return false;
+    }
   );
 
   if (sitesToBuild.length === 0) {
@@ -49,16 +71,18 @@ export async function buildAllSites(rootDir?: string): Promise<{
     };
   }
 
-  console.log(`Building ${sitesToBuild.length} static-build sites...`);
+  console.log(`Building ${sitesToBuild.length} sites...`);
 
   const builtSites: string[] = [];
   const failedSites: string[] = [];
 
   for (const site of sitesToBuild) {
-    if (site.commands && site.commands.build) {
-      const siteName = basename(site.path);
-      console.log(`\nBuilding ${siteName}...`);
+    const siteName = basename(site.path);
+    console.log(`\nBuilding ${siteName} (${site.type})...`);
 
+    let buildSuccess = false;
+
+    if (site.type === "static-build" && site.commands && site.commands.build) {
       // Ensure node_modules are installed
       const dependenciesInstalled = await ensureNodeModules(site.path);
       if (!dependenciesInstalled) {
@@ -71,18 +95,30 @@ export async function buildAllSites(rootDir?: string): Promise<{
 
       // Run the build command
       const result = runPackageManagerCommand(site.path, "build");
+      buildSuccess = result.success;
 
-      if (!result.success) {
+      if (!buildSuccess) {
         console.error(
           `Build for site "${siteName}" failed with exit code ${result.status}`
         );
-        failedSites.push(siteName);
-      } else {
-        console.log(`Successfully built ${siteName}`);
-        // Update the build cache
-        updateBuildCache(site, buildCache);
-        builtSites.push(siteName);
       }
+    } else if (site.type === "docker") {
+      // Build Docker image
+      try {
+        buildSuccess = await buildDockerSite(site);
+      } catch (error) {
+        console.error(`Docker build for site "${siteName}" failed:`, error);
+        buildSuccess = false;
+      }
+    }
+
+    if (buildSuccess) {
+      console.log(`Successfully built ${siteName}`);
+      // Update the build cache
+      updateBuildCache(site, buildCache);
+      builtSites.push(siteName);
+    } else {
+      failedSites.push(siteName);
     }
   }
 
@@ -114,39 +150,60 @@ export async function buildSite(
     };
   }
 
-  if (site.type !== "static-build") {
+  if (site.type !== "static-build" && site.type !== "docker") {
     return {
       success: false,
-      message: `Site "${siteName}" is not a static-build site.`
+      message: `Site "${siteName}" is not a buildable site type (${site.type}).`
     };
   }
 
-  if (!site.commands || !site.commands.build) {
-    return {
-      success: false,
-      message: `Site "${siteName}" does not have a build command.`
-    };
-  }
+  console.log(`Building ${siteName} (${site.type})...`);
 
-  console.log(`Building ${siteName}...`);
+  let buildSuccess = false;
 
-  // Ensure node_modules are installed
-  const dependenciesInstalled = await ensureNodeModules(site.path);
-  if (!dependenciesInstalled) {
-    return {
-      success: false,
-      message: `Failed to install dependencies for ${siteName}.`
-    };
-  }
+  if (site.type === "static-build") {
+    if (!site.commands || !site.commands.build) {
+      return {
+        success: false,
+        message: `Site "${siteName}" does not have a build command.`
+      };
+    }
 
-  // Run the build command
-  const result = runPackageManagerCommand(site.path, "build");
+    // Ensure node_modules are installed
+    const dependenciesInstalled = await ensureNodeModules(site.path);
+    if (!dependenciesInstalled) {
+      return {
+        success: false,
+        message: `Failed to install dependencies for ${siteName}.`
+      };
+    }
 
-  if (!result.success) {
-    return {
-      success: false,
-      message: `Build for site "${siteName}" failed with exit code ${result.status}`
-    };
+    // Run the build command
+    const result = runPackageManagerCommand(site.path, "build");
+    buildSuccess = result.success;
+
+    if (!buildSuccess) {
+      return {
+        success: false,
+        message: `Build for site "${siteName}" failed with exit code ${result.status}`
+      };
+    }
+  } else if (site.type === "docker") {
+    // Build Docker image
+    try {
+      buildSuccess = await buildDockerSite(site);
+      if (!buildSuccess) {
+        return {
+          success: false,
+          message: `Docker build for site "${siteName}" failed.`
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Docker build for site "${siteName}" failed: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
   }
 
   // Update the build cache

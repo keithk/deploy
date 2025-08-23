@@ -157,6 +157,13 @@ async function handleSiteRequest(
         { status: 500 }
       );
     }
+  } else if (site.type === "docker") {
+    // Use the Docker handler
+    const { createDockerHandler } = await import(
+      "../handlers/dockerSiteHandler"
+    );
+    const handler = createDockerHandler(site, mode, siteIndex);
+    return handler(request);
   } else {
     return new Response(`Unknown site type: ${site.type}`, { status: 500 });
   }

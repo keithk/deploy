@@ -5,7 +5,13 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Read(//Users/keith/.claude/agents/core/**)",
+      "Read(//Users/keith/.claude/agents/core/**)",
+      "Read(//Users/keith/.claude/agents/universal/**)",
+      "Read(//Users/keith/.claude/agents/universal/**)",
+      "Bash(bun run:*)",
+      "Bash(bun test:*)"
     ],
     "deny": []
   }

@@ -5,7 +5,7 @@ import { appendFile, writeFile } from "fs/promises";
 import {
   processModel,
   ProcessInfo as DbProcessInfo,
-  ProcessRegistryEntry as DbProcessRegistryEntry,
+  ProcessRegistryEntry,
   isPortInUse as coreIsPortInUse
 } from "@keithk/deploy-core";
 import { exec } from "child_process";
@@ -107,18 +107,8 @@ interface ProcessInfo {
   };
 }
 
-// Interface for process registry entry
-interface ProcessRegistryEntry {
-  id: string;
-  site: string;
-  port: number;
-  pid?: number;
-  startTime: number;
-  type: string;
-  script: string;
-  cwd: string;
-  status: string;
-}
+// Define local alias for process registry entry to avoid naming conflict
+type LocalProcessRegistryEntry = ProcessRegistryEntry;
 
 /**
  * Process Manager for managing site processes
@@ -1036,7 +1026,7 @@ export class ProcessManager {
     try {
       const dbProcesses = processModel.getAll();
 
-      return dbProcesses.map((entry: DbProcessRegistryEntry) => {
+      return dbProcesses.map((entry: LocalProcessRegistryEntry) => {
         // Check if the process is still running
         let status = entry.status;
 

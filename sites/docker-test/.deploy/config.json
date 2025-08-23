@@ -1,0 +1,12 @@
+{
+  "type": "docker",
+  "subdomain": "docker-test",
+  "docker": {
+    "containerPort": 3000,
+    "environment": {
+      "NODE_ENV": "production",
+      "PORT": "3000"
+    },
+    "alwaysRebuild": true
+  }
+}

@@ -1,7 +1,7 @@
 /**
  * Represents the configuration for a site served by the host.
  *
- * @property type        The type of site: static, dynamic, passthrough, or static-build.
+ * @property type        The type of site: static, dynamic, passthrough, static-build, or docker.
  * @property path        The absolute path to the site directory.
  * @property route       The route at which the site is mounted.
  * @property entryPoint  Optional entry point file (for dynamic sites).
@@ -17,9 +17,10 @@
  *                       Only one site should be marked as default.
  * @property bskyDid     Optional Bluesky atproto DID for this site. If specified, the site will serve
  *                       this DID at the /.well-known/atproto-did path.
+ * @property docker      Optional Docker-specific configuration for docker sites.
  */
 export interface SiteConfig {
-  type: "static" | "dynamic" | "passthrough" | "static-build";
+  type: "static" | "dynamic" | "passthrough" | "static-build" | "docker";
   path: string;
   route: string;
   entryPoint?: string;
@@ -31,4 +32,29 @@ export interface SiteConfig {
   customDomain?: string;
   default?: boolean;
   bskyDid?: string;
+  docker?: DockerConfig;
+}
+
+/**
+ * Docker-specific configuration for containerized sites
+ */
+export interface DockerConfig {
+  /** Custom Dockerfile path (relative to site directory) */
+  dockerfile?: string;
+  /** Port that the container exposes internally */
+  containerPort?: number;
+  /** Environment variables to pass to the container */
+  environment?: Record<string, string>;
+  /** Volume mounts for the container */
+  volumes?: Array<{
+    host: string;
+    container: string;
+    readOnly?: boolean;
+  }>;
+  /** Build arguments for Docker build */
+  buildArgs?: Record<string, string>;
+  /** Docker image tag (defaults to site name) */
+  imageTag?: string;
+  /** Whether to always rebuild the image (useful in dev mode) */
+  alwaysRebuild?: boolean;
 }
