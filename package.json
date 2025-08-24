@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "start": "ROOT_DIR=$(pwd)/sites bun --cwd packages/cli start",
-    "dev": "ROOT_DIR=$(pwd)/sites bun --cwd packages/cli dev",
+    "start": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js start",
+    "dev": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js dev",
     "build": "bun run build:all",
     "build:all": "bun run clear:dist && bun run build:tsc && bun run build:bun",
     "build:tsc": "tsc --build",
@@ -22,9 +22,9 @@
     "clear:dist": "rm -rf packages/*/dist && rm -f tsconfig.tsbuildinfo && rm -f packages/*/tsconfig.tsbuildinfo",
     "typecheck": "tsc --build --dry",
     "typecheck:watch": "tsc --build --watch",
-    "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
-    "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup production",
-    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli setup local",
+    "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup local",
+    "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup production",
+    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup local",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:publish": "changeset publish",

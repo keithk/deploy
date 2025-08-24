@@ -5,7 +5,17 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(brew list:*)",
+      "Bash(nslookup:*)",
+      "Bash(brew install:*)",
+      "Bash(mkcert:*)",
+      "Bash(pkill:*)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites bun run --cwd packages/cli setup local --skip-caddy)",
+      "Bash(chmod:*)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

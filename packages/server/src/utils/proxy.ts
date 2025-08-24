@@ -37,6 +37,13 @@ export async function proxyRequest(
 
     // Enable CORS for development
     responseHeaders.set("Access-Control-Allow-Origin", "*");
+    
+    // Remove content-encoding header to prevent encoding issues with Caddy
+    // Caddy will handle compression on its own
+    responseHeaders.delete("Content-Encoding");
+    
+    // Also remove content-length as it might be incorrect after decompression
+    responseHeaders.delete("Content-Length");
 
     return new Response(response.body, {
       status: response.status,

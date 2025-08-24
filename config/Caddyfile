@@ -1,7 +1,7 @@
 {
   # Use project directory for storage
   storage file_system {
-    root /Users/keith/projects/dialup-deploy/config/caddy-data
+    root /Users/keith/projects/deploy/config/caddy-data
   }
 
   # Use local certificates
@@ -11,6 +11,6 @@
   debug
 }
 
-https://*.dev.flexi, https://dev.flexi {
+https://*.dev.deploy, https://dev.deploy {
   reverse_proxy localhost:3000
 }
