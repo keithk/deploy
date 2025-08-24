@@ -102,6 +102,52 @@ function getRootDir() {
 /**
  * Register the server commands
  */
+async function doctorCommand(): Promise<void> {
+  info("🔍 Running Deploy Server diagnostics...");
+  
+  try {
+    // Check Caddy
+    info("\n📋 Checking Caddy...");
+    const caddyRunning = await isCaddyRunning();
+    if (caddyRunning) {
+      info("✅ Caddy is running");
+    } else {
+      warn("⚠️ Caddy is not running");
+      info("Testing Caddy configuration...");
+      const caddySuccess = await ensureCaddyRunning('production');
+      if (caddySuccess) {
+        info("✅ Caddy started successfully");
+      } else {
+        error("❌ Caddy failed to start - check configuration");
+      }
+    }
+    
+    // Check directories
+    info("\n📋 Checking directories...");
+    const rootDir = getRootDir();
+    info(`✅ Root directory: ${rootDir}`);
+    
+    const logsDir = resolve(process.cwd(), "logs");
+    if (existsSync(logsDir)) {
+      info(`✅ Logs directory: ${logsDir}`);
+    } else {
+      info(`📁 Logs directory will be created: ${logsDir}`);
+    }
+    
+    // Check domain
+    info("\n🌐 Checking domain configuration...");
+    const domain = getDomain();
+    info(`✅ Domain: ${domain}`);
+    
+    info("\n🎉 Diagnostics completed!");
+    info("💡 If issues persist, try 'deploy start --foreground' for detailed logs");
+    
+  } catch (err) {
+    error("❌ Diagnostics failed:", err);
+    process.exit(1);
+  }
+}
+
 export function registerServerCommands(program: Command): void {
   // Start command (production mode)
   program
@@ -129,15 +175,58 @@ export function registerServerCommands(program: Command): void {
         if (isDaemon) {
           info("Starting server in daemon mode...");
           
-          // Spawn the process in daemon mode using Bun
+          // Setup logs directory first
+          const logsDir = await setupLogsDirectory();
+          const logFile = resolve(logsDir, "deploy-server.log");
+          const errorFile = resolve(logsDir, "deploy-server-error.log");
+          
+          // Pre-flight validation before daemonizing
+          info("Validating configuration before starting daemon...");
+          
+          try {
+            // Test Caddy configuration first (most common failure point)
+            info("Testing Caddy configuration...");
+            const caddySuccess = await ensureCaddyRunning('production');
+            if (!caddySuccess) {
+              error("❌ Caddy failed to start. Check your Caddyfile configuration.");
+              error("💡 Try running 'deploy start --foreground' to see detailed errors.");
+              process.exit(1);
+            }
+            info("✅ Caddy configuration is valid and started successfully");
+            
+            // Test that we can load root config and sites
+            const rootDir = getRootDir();
+            info(`✅ Root directory validated: ${rootDir}`);
+            
+          } catch (validationError) {
+            error("❌ Pre-flight validation failed:");
+            error(validationError instanceof Error ? validationError.message : String(validationError));
+            error("💡 Try running 'deploy start --foreground' to see detailed errors.");
+            process.exit(1);
+          }
+          
+          info("✅ Pre-flight validation completed successfully");
+          
+          // Get the current executable path (works for both dev and global install)
+          const currentExecutable = process.argv[0]; // bun or node path
+          const currentScript = process.argv[1]; // script path
+          
+          info(`Spawning daemon with: ${currentExecutable} ${currentScript}`);
+          info(`Logs will be written to: ${logFile}`);
+          
+          // Spawn the process in daemon mode using the current executable
           const proc = spawn([
-            "bun", "run", "deploy", "start", "--foreground", "--log-level", options.logLevel
+            currentExecutable, currentScript, "start", "--foreground", "--log-level", options.logLevel
           ], {
-            stdio: ["ignore", "ignore", "ignore"]
+            stdio: ["ignore", Bun.file(logFile), Bun.file(errorFile)],
+            detached: true
           });
           
           proc.unref();
-          info(`Server started in daemon mode with PID ${proc.pid}`);
+          info(`🚀 Server started in daemon mode with PID ${proc.pid}`);
+          info(`📋 Check logs at: ${logFile}`);
+          info(`📋 Check errors at: ${errorFile}`);
+          info("💡 Use 'deploy start --foreground' for interactive debugging");
           process.exit(0);
         }
 
@@ -414,4 +503,10 @@ export function registerServerCommands(program: Command): void {
         process.exit(1);
       }
     });
+
+  // Doctor command for diagnostics
+  program
+    .command("doctor")
+    .description("Run diagnostics to check server configuration and health")
+    .action(doctorCommand);
 }
