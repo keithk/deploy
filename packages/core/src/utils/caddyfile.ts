@@ -41,8 +41,6 @@ export async function generateCaddyfileContent(
   # On-demand TLS for SaaS applications (if enabled)
   ${process.env.ENABLE_ON_DEMAND_TLS === 'true' ? `on_demand_tls {
     ask http://localhost:3000/api/validate-domain
-    interval 2m
-    burst 5
   }` : ''}
   
   log {
@@ -56,7 +54,6 @@ ${domain} {
   # Enable advanced compression
   encode {
     gzip 6
-    br 6
     zstd
   }
   
@@ -103,7 +100,6 @@ ${domain} {
   # Enable advanced compression
   encode {
     gzip 6
-    br 6
     zstd
   }
   
@@ -150,7 +146,6 @@ ${domain} {
   # Enable advanced compression
   encode {
     gzip 6
-    br 6
     zstd
   }
   
