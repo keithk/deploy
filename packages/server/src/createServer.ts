@@ -19,6 +19,7 @@ import {
 } from "./actions";
 import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
+import { handleApiRequest } from "./api/handlers";
 
 /**
  * Handles domain validation for on-demand TLS
@@ -198,6 +199,20 @@ export async function createServer({
           const response = new Response('OK', { status: 200 });
           logger.logResponse(request, response, loggerStart);
           return response;
+        }
+        
+        // Handle API requests
+        if (url.pathname.startsWith('/api/')) {
+          const apiContext = {
+            sites,
+            rootDir: resolvedRootDir,
+            mode
+          };
+          const apiResponse = await handleApiRequest(request, apiContext);
+          if (apiResponse) {
+            logger.logResponse(request, apiResponse, loggerStart);
+            return apiResponse;
+          }
         }
         
         // Check if this is a webhook request (legacy support)

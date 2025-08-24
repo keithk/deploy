@@ -83,4 +83,32 @@ Perfect for: Eleventy, Astro or any static site generator.
 
 ---
 
+## 🐳 Docker Sites (Advanced)
+
+**Containerized applications with full Docker support.**
+
+Perfect for: Complex applications requiring containerization, microservices, or specific runtime environments.
+
+```json
+{
+  "type": "docker",
+  "dockerFile": "Dockerfile",
+  "dockerContext": ".",
+  "exposedPort": 8080,
+  "environment": {
+    "NODE_ENV": "production"
+  }
+}
+```
+
+Key Features:
+- Automatic Docker image building
+- Support for multi-stage builds
+- Environment variable injection
+- Port mapping and exposure
+
+**Note:** Docker site type requires Docker to be installed on the host system.
+
+---
+
 For all configuration options, see [Configuration](configuration.md).
