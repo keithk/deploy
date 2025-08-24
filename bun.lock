@@ -13,7 +13,7 @@
     },
     "packages/actions": {
       "name": "@keithk/deploy-actions",
-      "version": "0.0.9",
+      "version": "0.1.0",
       "dependencies": {
         "@keithk/deploy-core": "workspace:*",
       },
@@ -22,7 +22,7 @@
       },
     },
     "packages/admin": {
-      "name": "@deploy/admin",
+      "name": "@keithk/deploy-admin",
       "version": "0.1.0",
       "bin": {
         "deploy-admin": "./cli.js",
@@ -30,7 +30,7 @@
     },
     "packages/cli": {
       "name": "@keithk/deploy-cli",
-      "version": "0.0.9",
+      "version": "0.1.0",
       "bin": {
         "deploy": "./dist/index.js",
         "dd-cli": "./dist/index.js",
@@ -51,14 +51,14 @@
     },
     "packages/core": {
       "name": "@keithk/deploy-core",
-      "version": "0.0.8",
+      "version": "0.1.0",
       "devDependencies": {
         "bun-types": "latest",
       },
     },
     "packages/server": {
       "name": "@keithk/deploy-server",
-      "version": "0.0.9",
+      "version": "0.1.0",
       "dependencies": {
         "@keithk/deploy-actions": "workspace:*",
         "@keithk/deploy-core": "workspace:*",
@@ -106,11 +106,11 @@
 
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
-    "@deploy/admin": ["@deploy/admin@workspace:packages/admin"],
-
     "@inquirer/figures": ["@inquirer/figures@1.0.11", "", {}, "sha512-eOg92lvrn/aRUqbxRyvpEWnrvRuTYRifixHkYVpJiygTgVSBIHDqLh0SrMQXkafvULg3ck11V7xvR+zcgvpHFw=="],
 
     "@keithk/deploy-actions": ["@keithk/deploy-actions@workspace:packages/actions"],
+
+    "@keithk/deploy-admin": ["@keithk/deploy-admin@workspace:packages/admin"],
 
     "@keithk/deploy-cli": ["@keithk/deploy-cli@workspace:packages/cli"],
 
