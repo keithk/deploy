@@ -1,5 +1,16 @@
 # @keithk/deploy-actions
 
+## 0.1.0
+
+### Minor Changes
+
+- add html admin panel with very little functionality, clean up actions, move most /sites to /examples
+
+### Patch Changes
+
+- Updated dependencies
+  - @keithk/deploy-core@0.1.0
+
 ## 0.0.9
 
 ### Patch Changes

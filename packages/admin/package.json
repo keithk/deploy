@@ -1,5 +1,5 @@
 {
-  "name": "@deploy/admin",
+  "name": "@keithk/deploy-admin",
   "version": "0.1.0",
   "description": "Deploy Admin Panel",
   "main": "app.js",

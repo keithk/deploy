@@ -1,5 +1,11 @@
 # @keithk/deploy-core
 
+## 0.1.0
+
+### Minor Changes
+
+- add html admin panel with very little functionality, clean up actions, move most /sites to /examples
+
 ## 0.0.8
 
 ### Patch Changes
