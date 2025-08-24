@@ -95,7 +95,7 @@ This loading order provides a clear configuration hierarchy with fallback option
 
 ### Site Config Options
 
-- `type`: The type of site ("static", "dynamic", "passthrough", or "static-build")
+- `type`: The type of site (supports: "static", "dynamic", "passthrough", "static-build", "docker")
 - `buildDir`: For static-build sites, the directory where built files are output
 - `devPort`: For static-build sites, the port for the dev server
 - `proxyPort`: For passthrough sites, the port to proxy to
@@ -106,9 +106,64 @@ This loading order provides a clear configuration hierarchy with fallback option
 - `default`: Whether this site is the default site served at the root domain
 - `bskyDid`: Optional Bluesky atproto DID for this site
 
----
+### Docker Site Configuration
 
-## 🔗 Related
+- `dockerFile`: Path to the Dockerfile for the site
+- `dockerContext`: Context directory for Docker build (default: ".")
+- `exposedPort`: Port exposed by the Docker container
+- `environment`: Environment variables for the container
+- `buildArgs`: Build arguments for Docker build
+- `volumes`: Optional volume mappings
+- `networks`: Optional Docker network configurations
+
+Example Docker Site Configuration:
+
+```json
+{
+  "type": "docker",
+  "dockerFile": "Dockerfile",
+  "dockerContext": ".",
+  "exposedPort": 8080,
+  "environment": {
+    "NODE_ENV": "production",
+    "DATABASE_URL": "postgres://user:pass@db/myapp"
+  },
+  "buildArgs": {
+    "APP_VERSION": "1.0.0"
+  },
+  "volumes": [
+    "/host/path:/container/path"
+  ],
+  "networks": ["app_network"]
+}
+```
+
+### Resource Management Configuration
+
+You can specify resource limits and monitoring settings:
+
+```json
+{
+  "resources": {
+    "maxMemory": 536870912,    // 512MB memory limit
+    "maxCPU": 80,              // 80% CPU limit
+    "restartOnLimit": true,    // Auto-restart when limit exceeded
+    "maxRestarts": 5,          // Maximum restart attempts
+    "restartWindow": 300000    // 5-minute restart window
+  }
+}
+```
+
+## 🔍 Configuration Best Practices
+
+- Use `.deploy/config.json` for site-specific configurations
+- Keep sensitive information in environment variables
+- Specify explicit build and start commands
+- Set reasonable resource limits
+- Use Docker configurations for complex or containerized applications
+- Leverage the configuration hierarchy for flexible deployments
+
+## 🔗 Related Documentation
 
 - [Site Types](site-types.md)
 - [Actions](actions.md) - For details on configuring actions

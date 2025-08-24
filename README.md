@@ -84,12 +84,14 @@ deploy start
 - **Zero config**: HTML, React, Node.js, Astro—whatever you put in works
 - **Instant SSL**: Point any domain at your server, certificates happen automatically
 - **Subdomain magic**: Every site gets `sitename.yourdomain.com` automatically
-- **Actually simple**: No YAML, no Docker, no complex CI/CD pipelines
+- **Actually simple**: No YAML, no complex configurations
 - **Solid process management**: CPU/memory monitoring, auto-restarts, health checks
 - **Real-time monitoring**: Watch your processes live with `deploy processes watch`
 - **DigitalOcean ready**: One-command install on any $5 droplet
 
 ## 🛠️ CLI Commands
+
+### Project & Setup Commands
 
 ```bash
 # Initialize a new project
@@ -97,35 +99,65 @@ deploy init [directory]
 
 # Set up the project for local development or production
 deploy setup [local|production]
+```
 
-# Create a new site
-deploy site create my-site --type static|static-build|dynamic|passthrough
+### Site Management Commands
 
-# List all sites
+```bash
+# Create a new site with optional type
+deploy site create my-site 
+  # Optional type flags:
+  # --type static       # Basic HTML/CSS/JS site (default)
+  # --type static-build # Sites with build step (Astro, Eleventy)
+  # --type dynamic      # Custom server-side logic
+  # --type passthrough  # Existing services
+  # --type docker       # Containerized applications
+
+# List all sites in the project
 deploy site list
+  # Optional flags:
+  # --detailed          # Show more information
+  # --json              # Output as JSON
+```
 
+### Server & Runtime Commands
+
+```bash
 # Start the server
 deploy start
 
-# Run actions
+# Run specific actions
 deploy action run [action-id]
 
-# Update Caddyfile
+# Update Caddyfile configuration
 deploy caddyfile update
+```
 
-# Process management
-deploy processes list --resources --health    # List with CPU/memory usage
-deploy processes watch --resources            # Real-time monitoring dashboard
-deploy processes stats <site:port>            # Detailed process statistics
-deploy processes restart <site:port>          # Restart a specific process
-deploy processes stop <site:port>             # Stop a process
-deploy processes kill <site:port>             # Force kill a process
-deploy processes logs <site> <port>           # View process logs
+### Process Management Commands
+
+```bash
+# List processes with resources and health
+deploy processes list 
+  # Optional flags:
+  # --resources         # Show CPU/memory usage
+  # --health            # Display process health
+
+# Real-time process monitoring
+deploy processes watch 
+  # Optional flags:
+  # --resources         # Show live resource stats
+
+# Detailed process management
+deploy processes stats <site:port>     # Detailed stats
+deploy processes restart <site:port>   # Restart process
+deploy processes stop <site:port>      # Stop process
+deploy processes kill <site:port>      # Force kill
+deploy processes logs <site> <port>    # View logs
 ```
 
 ## 📊 Process Management & Monitoring
 
-Deploy includes built-in process management for keeping your sites running smoothly in production:
+Deploy includes built-in process management for keeping your sites running smoothly in production.
 
 ### Real-time Monitoring
 ```bash
@@ -163,9 +195,10 @@ RESTART_WINDOW=300000       # 5-minute restart window
 You can install Deploy packages from npm:
 
 ```bash
-# Install packages
+# Install CLI
 bun add @keithk/deploy-cli
-# or
+
+# Or install individual packages
 bun add @keithk/deploy-core @keithk/deploy-actions @keithk/deploy-server
 ```
 
@@ -189,6 +222,8 @@ bun add @keithk/deploy-core @keithk/deploy-actions @keithk/deploy-server
 **Next.js app**: `{"type": "passthrough", "proxyPort": 3000}` and it proxies to your running Next.js server.
 
 **API microservice**: `{"type": "dynamic"}` with a simple `handleRequest` function for custom server logic.
+
+**Dockerized app**: `{"type": "docker", "dockerFile": "Dockerfile"}` for containerized deployments.
 
 **Multiple sites**: Drop 5 different projects in `/sites`, each gets its own subdomain with SSL.
 

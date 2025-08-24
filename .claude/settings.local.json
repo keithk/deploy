@@ -15,7 +15,17 @@
       "Bash(chmod:*)",
       "Bash(curl:*)",
       "Bash(find:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npx astro add:*)",
+      "Read(//Users/keith/projects/keith-is-host/sites/blog/.deploy/actions/**)",
+      "Read(//Users/keith/projects/keith-is-host/sites/blog/**)",
+      "Read(//Users/keith/projects/keith-is-host/sites/blog/**)",
+      "Bash(bun run deploy:*)",
+      "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions list)",
+      "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions run sync-raindrop)",
+      "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions run sync-letterboxd)"
     ],
     "deny": []
   }

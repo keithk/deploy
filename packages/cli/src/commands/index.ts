@@ -10,6 +10,7 @@ import { registerInitCommand } from "./init";
 import { registerSiteCommands } from "./site";
 import { registerSetupCommand } from "./setup";
 import { registerMigrateCommands } from "./migrate";
+import { registerAdminCommands } from "./admin";
 
 /**
  * Register all CLI commands
@@ -25,4 +26,5 @@ export function registerCommands(program: Command): void {
   registerProcessesCommand(program);
   registerCaddyfileCommands(program);
   registerMigrateCommands(program);
+  registerAdminCommands(program);
 }

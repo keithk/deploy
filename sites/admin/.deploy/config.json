@@ -1,0 +1,6 @@
+{
+  "type": "static",
+  "name": "admin",
+  "subdomain": "admin",
+  "authentication": "disabled"
+}
