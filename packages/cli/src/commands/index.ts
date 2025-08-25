@@ -11,6 +11,7 @@ import { registerSiteCommands } from "./site";
 import { registerSetupCommand } from "./setup";
 import { registerMigrateCommands } from "./migrate";
 import { registerAdminCommands } from "./admin";
+import { registerEditorCommands } from "./editor";
 
 /**
  * Register all CLI commands
@@ -27,4 +28,5 @@ export function registerCommands(program: Command): void {
   registerCaddyfileCommands(program);
   registerMigrateCommands(program);
   registerAdminCommands(program);
+  registerEditorCommands(program);
 }

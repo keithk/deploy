@@ -157,6 +157,38 @@ async function handleSiteRequest(
         { status: 500 }
       );
     }
+  } else if (site.type === "built-in") {
+    try {
+      // Handle built-in sites (like admin panel)
+      if (site.module && typeof site.module === 'function') {
+        const module = await site.module();
+        
+        // Try module.fetch first, then module.default.fetch
+        const fetchFn = module?.fetch || module?.default?.fetch;
+        
+        if (fetchFn && typeof fetchFn === 'function') {
+          return fetchFn(request);
+        } else {
+          return new Response(
+            `Built-in site ${site.subdomain} does not export fetch function`,
+            { status: 500 }
+          );
+        }
+      } else {
+        return new Response(
+          `Built-in site ${site.subdomain} does not have module function`,
+          { status: 500 }
+        );
+      }
+    } catch (err) {
+      console.error(`Error handling built-in site ${site.subdomain}:`, err);
+      return new Response(
+        `Error loading built-in site: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        { status: 500 }
+      );
+    }
   } else {
     return new Response(`Unknown site type: ${site.type}`, { status: 500 });
   }

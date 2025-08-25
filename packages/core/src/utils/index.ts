@@ -6,3 +6,4 @@ export * from "./actionHelpers";
 export * from "./caddyfile";
 export * from "./siteDiscovery";
 export * from "./portUtils";
+export * from "./builtInSitesRegistry";

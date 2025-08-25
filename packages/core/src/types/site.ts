@@ -19,7 +19,7 @@
  *                       this DID at the /.well-known/atproto-did path.
  */
 export interface SiteConfig {
-  type: "static" | "dynamic" | "passthrough" | "static-build";
+  type: "static" | "dynamic" | "passthrough" | "static-build" | "built-in";
   path: string;
   route: string;
   entryPoint?: string;
@@ -31,4 +31,10 @@ export interface SiteConfig {
   customDomain?: string;
   default?: boolean;
   bskyDid?: string;
+  // Built-in site properties
+  name?: string;
+  config?: Record<string, any>;
+  domain?: string;
+  isBuiltIn?: boolean;
+  module?: () => Promise<any>;
 }

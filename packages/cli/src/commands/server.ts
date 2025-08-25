@@ -233,6 +233,18 @@ export function registerServerCommands(program: Command): void {
         // Ensure Caddy is running with latest configuration
         await ensureCaddyRunning('production');
 
+
+        // Register built-in sites BEFORE starting server
+        // because startServer() immediately calls discoverSites()
+        try {
+          const { registerAdminSite } = await import("../admin/register");
+          const { registerEditorSite } = await import("../editor/register");
+          await registerAdminSite();
+          await registerEditorSite();
+        } catch (err) {
+          warn("Failed to register built-in sites:", err);
+        }
+
         // Start the server
         info("Starting server in production mode...");
 
@@ -261,7 +273,7 @@ export function registerServerCommands(program: Command): void {
       }
     });
 
-  // Dev command (development mode)
+  // Dev command (development mode)  
   program
     .command("dev")
     .description(
@@ -296,6 +308,7 @@ export function registerServerCommands(program: Command): void {
           warn("You can run 'bun run setup:macos' to set up Caddy.");
         }
 
+
         // Start the server
         info("Starting server in development mode...");
 
@@ -303,6 +316,17 @@ export function registerServerCommands(program: Command): void {
         const logsDir = resolve(process.cwd(), "logs");
         if (!existsSync(logsDir)) {
           mkdirSync(logsDir, { recursive: true });
+        }
+
+        // Register built-in sites BEFORE starting server
+        // because startServer() immediately calls discoverSites()
+        try {
+          const { registerAdminSite } = await import("../admin/register");
+          const { registerEditorSite } = await import("../editor/register");
+          await registerAdminSite();
+          await registerEditorSite();
+        } catch (err) {
+          warn("Failed to register built-in sites:", err);
         }
 
         const { startServer } = await import("@keithk/deploy-server");

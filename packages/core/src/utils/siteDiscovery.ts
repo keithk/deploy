@@ -3,6 +3,7 @@ import { existsSync, readdirSync, statSync } from "fs";
 import type { SiteConfig } from "../types";
 import { createSiteConfig } from "./configLoader";
 import { debug, error, warn } from "./logging";
+import { getBuiltInSites } from "./builtInSitesRegistry";
 
 /**
  * Scans the root directory and identifies all site types.
@@ -53,9 +54,20 @@ export async function discoverSites(
         error(`Error creating site config for ${dir}:`, e);
       }
     }
+
+    // Add built-in sites (like admin panel)
+    try {
+      const builtInSites = getBuiltInSites();
+      sites.push(...builtInSites);
+      debug(`Discovered ${builtInSites.length} built-in sites`);
+    } catch (e) {
+      warn("Error discovering built-in sites:", e);
+    }
+
   } catch (err) {
     error("Error discovering sites:", err);
   }
 
   return sites;
 }
+

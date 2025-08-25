@@ -1,7 +1,0 @@
-{
-  "type": "static",
-  "name": "admin",
-  "build": "npm run build",
-  "output": "dist",
-  "authentication": "disabled"
-}

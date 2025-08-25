@@ -47,7 +47,9 @@
       "Bash(kill:*)",
       "Bash(caddy:*)",
       "Bash(ping:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(timeout:*)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites bun packages/cli/dist/index.js editor status)"
     ],
     "deny": [],
     "additionalDirectories": [
