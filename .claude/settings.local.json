@@ -49,13 +49,23 @@
       "Bash(ping:*)",
       "Bash(cat:*)",
       "Bash(timeout:*)",
-      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites bun packages/cli/dist/index.js editor status)"
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites bun packages/cli/dist/index.js editor status)",
+      "WebFetch(domain:railpack.com)",
+      "WebFetch(domain:docs.railpack.com)",
+      "Bash(./railpack info /Users/keith/projects/deploy/sites/home)",
+      "Bash(./railpack plan /Users/keith/projects/deploy/sites/home)",
+      "Bash(PORT=3005 timeout 3 bun run start)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites bun packages/cli/dist/index.js dev)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker logs:*)"
     ],
     "deny": [],
     "additionalDirectories": [
       "/Users/keith/Downloads/Variable Fonts/Monaspace Neon",
       "/opt/homebrew/etc",
-      "/private/etc/resolver"
+      "/private/etc/resolver",
+      "/private/tmp"
     ]
   }
 }

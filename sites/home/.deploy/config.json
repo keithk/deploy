@@ -1,5 +1,7 @@
 {
-  "type": "static",
+  "type": "passthrough",
   "subdomain": "default",
-  "default": true
+  "default": true,
+  "useContainers": true,
+  "proxyPort": 3001
 }

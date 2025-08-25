@@ -11,6 +11,14 @@ import { debug, info, error, warn } from "@keithk/deploy-core";
 export function siteContext(sites: SiteConfig[], projectDomain: string) {
   // Find the default site (if any)
   const defaultSite = sites.find((site) => site.default);
+  
+  // Debug logging for site context
+  console.log('🔍 siteContext debug:');
+  console.log(`  - Total sites loaded: ${sites.length}`);
+  console.log(`  - Default site: ${defaultSite ? `${defaultSite.subdomain} (${defaultSite.type})` : 'NONE'}`);
+  sites.forEach((site, i) => {
+    console.log(`  - Site ${i}: ${site.subdomain} (${site.type}) default=${site.default} path=${site.path}`);
+  });
 
   return async (
     request: Request,
@@ -66,17 +74,22 @@ export function siteContext(sites: SiteConfig[], projectDomain: string) {
     }
 
     debug(`Host: ${hostNoPort}, Extracted subdomain: '${subdomain}'`);
+    console.log(`🌐 Request routing debug:`);
+    console.log(`  - Host: ${hostNoPort}`);
+    console.log(`  - Subdomain: '${subdomain}'`);
 
     // Find site by subdomain (default site if none)
     let site: SiteConfig | undefined;
 
     if (!subdomain) {
       site = defaultSite;
+      console.log(`  - No subdomain, using default site: ${site ? `${site.subdomain} (${site.type})` : 'NONE'}`);
       debug(`Using default site for host: ${hostNoPort}`);
     } else {
       site = sites.find(
         (s) => (s.subdomain || s.route.replace(/^\//, "")) === subdomain
       );
+      console.log(`  - Found site for subdomain '${subdomain}': ${site ? `${site.subdomain} (${site.type})` : 'NOT FOUND'}`);
       debug(
         `Site match for subdomain '${subdomain}':`,
         site ? site.path : "NOT FOUND"
@@ -84,8 +97,11 @@ export function siteContext(sites: SiteConfig[], projectDomain: string) {
     }
 
     if (!site) {
+      console.log(`  - ❌ No site found, returning 404`);
       return new Response("Site not found", { status: 404 });
     }
+
+    console.log(`  - ✅ Selected site: ${site.subdomain} (${site.type}) at ${site.path}`);
 
     // Add the site to the context
     context.set("site", site);

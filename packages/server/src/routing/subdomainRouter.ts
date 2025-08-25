@@ -34,11 +34,16 @@ export async function setupSubdomainRouting(
   // Get the site from the context (set by siteContext middleware)
   const site = context.get("site") as SiteConfig;
 
+  console.log(`🚀 Router debug:`);
+  console.log(`  - Site from context: ${site ? `${site.subdomain} (${site.type})` : 'NONE'}`);
+
   if (!site) {
+    console.log(`  - ❌ No site in context, returning 404`);
     return new Response("Site not found", { status: 404 });
   }
 
   // Handle the site request
+  console.log(`  - 🎯 Handling request for site: ${site.subdomain} (${site.type})`);
   return handleSiteRequest(request, site, sites.indexOf(site), mode);
 }
 
@@ -57,6 +62,12 @@ async function handleSiteRequest(
   siteIndex: number,
   mode: "serve" | "dev"
 ): Promise<Response> {
+  console.log(`📝 handleSiteRequest debug:`);
+  console.log(`  - Site: ${site.subdomain} (${site.type})`);
+  console.log(`  - Site index: ${siteIndex}`);
+  console.log(`  - Mode: ${mode}`);
+  console.log(`  - useContainers: ${site.useContainers}`);
+
   // Check for Bluesky atproto DID request
   const url = new URL(request.url);
 
@@ -67,6 +78,7 @@ async function handleSiteRequest(
   }
 
   // Handle based on site type
+  console.log(`  - 🔀 Routing to ${site.type} handler...`);
   if (site.type === "static") {
     // Serve static files using Bun's built-in file serving
     const filePath = join(site.path, new URL(request.url).pathname);
@@ -105,58 +117,87 @@ async function handleSiteRequest(
       return new Response("File not found", { status: 404 });
     }
   } else if (site.type === "passthrough") {
-    // Use the passthrough handler
-    const { createPassthroughHandler } = await import(
-      "../handlers/passthroughHandler"
-    );
-    const handler = createPassthroughHandler(site, mode, siteIndex);
-    return handler(request);
-  } else if (site.type === "dynamic") {
-    try {
-      // Load and execute the dynamic site handler
-      let entryPath = site.entryPoint
-        ? join(site.path, site.entryPoint + ".ts")
-        : join(site.path, "index.ts");
-
-      // Check for JS files if TS file doesn't exist
-      if (
-        !entryPath.endsWith(".ts") &&
-        !entryPath.endsWith(".js") &&
-        !entryPath.endsWith(".mjs")
-      ) {
-        const jsPath = entryPath.replace(/\.ts$/, ".js");
-        if (existsSync(jsPath)) {
-          entryPath = jsPath;
-        }
-      }
-
-      const fileUrl = Bun.pathToFileURL(entryPath).href;
-      const siteModule = await import(fileUrl);
-
-      if (typeof siteModule.handleRequest === "function") {
-        // New Bun.serve style handler
-        return siteModule.handleRequest(request);
-      } else if (typeof siteModule.setup === "function") {
-        // Legacy Hono style handler - provide compatibility
-        return new Response(
-          `Dynamic site ${site.subdomain} needs to be updated to use Bun.serve`,
-          { status: 500 }
-        );
-      } else {
-        return new Response(
-          `Dynamic site ${site.subdomain} does not export handleRequest function`,
-          { status: 500 }
-        );
-      }
-    } catch (err) {
-      console.error(`Error handling dynamic site ${site.subdomain}:`, err);
-      return new Response(
-        `Error loading dynamic site: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        { status: 500 }
+    // Check if site should use containers
+    console.log(`🔍 Passthrough site debug:`);
+    console.log(`  - useContainers: ${site.useContainers} (type: ${typeof site.useContainers})`);
+    console.log(`  - site config:`, JSON.stringify(site, null, 2));
+    
+    if (site.useContainers !== false) { // Default to containers unless explicitly disabled
+      const { createContainerHandler } = await import(
+        "../handlers/containerHandler"
       );
+      const handler = createContainerHandler(site, mode, siteIndex);
+      return handler(request);
+    } else {
+      // Legacy passthrough handler
+      const { createPassthroughHandler } = await import(
+        "../handlers/passthroughHandler"
+      );
+      const handler = createPassthroughHandler(site, mode, siteIndex);
+      return handler(request);
     }
+  } else if (site.type === "dynamic") {
+    // Check if site should use containers
+    if (site.useContainers === true) {
+      const { createContainerHandler } = await import(
+        "../handlers/containerHandler"
+      );
+      const handler = createContainerHandler(site, mode, siteIndex);
+      return handler(request);
+    } else {
+      try {
+        // Load and execute the dynamic site handler directly
+        let entryPath = site.entryPoint
+          ? join(site.path, site.entryPoint + ".ts")
+          : join(site.path, "index.ts");
+
+        // Check for JS files if TS file doesn't exist
+        if (
+          !entryPath.endsWith(".ts") &&
+          !entryPath.endsWith(".js") &&
+          !entryPath.endsWith(".mjs")
+        ) {
+          const jsPath = entryPath.replace(/\.ts$/, ".js");
+          if (existsSync(jsPath)) {
+            entryPath = jsPath;
+          }
+        }
+
+        const fileUrl = Bun.pathToFileURL(entryPath).href;
+        const siteModule = await import(fileUrl);
+
+        if (typeof siteModule.handleRequest === "function") {
+          // New Bun.serve style handler
+          return siteModule.handleRequest(request);
+        } else if (typeof siteModule.setup === "function") {
+          // Legacy Hono style handler - provide compatibility
+          return new Response(
+            `Dynamic site ${site.subdomain} needs to be updated to use Bun.serve`,
+            { status: 500 }
+          );
+        } else {
+          return new Response(
+            `Dynamic site ${site.subdomain} does not export handleRequest function`,
+            { status: 500 }
+          );
+        }
+      } catch (err) {
+        console.error(`Error handling dynamic site ${site.subdomain}:`, err);
+        return new Response(
+          `Error loading dynamic site: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          { status: 500 }
+        );
+      }
+    }
+  } else if (site.type === "docker") {
+    // Docker sites always use containers
+    const { createContainerHandler } = await import(
+      "../handlers/containerHandler"
+    );
+    const handler = createContainerHandler(site, mode, siteIndex);
+    return handler(request);
   } else if (site.type === "built-in") {
     try {
       // Handle built-in sites (like admin panel)

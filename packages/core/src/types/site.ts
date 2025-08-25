@@ -17,9 +17,14 @@
  *                       Only one site should be marked as default.
  * @property bskyDid     Optional Bluesky atproto DID for this site. If specified, the site will serve
  *                       this DID at the /.well-known/atproto-did path.
+ * @property useContainers  Whether to use container-based deployment for this site. Defaults to true
+ *                       for passthrough and dynamic sites, false for static and built-in sites.
+ * @property dockerFile   Path to Dockerfile (for docker type sites).
+ * @property dockerContext Directory to use as Docker build context (for docker type sites).
+ * @property exposedPort  Port that the containerized app exposes (for docker type sites).
  */
 export interface SiteConfig {
-  type: "static" | "dynamic" | "passthrough" | "static-build" | "built-in";
+  type: "static" | "dynamic" | "passthrough" | "static-build" | "built-in" | "docker";
   path: string;
   route: string;
   entryPoint?: string;
@@ -31,6 +36,12 @@ export interface SiteConfig {
   customDomain?: string;
   default?: boolean;
   bskyDid?: string;
+  useContainers?: boolean;
+  // Docker site properties
+  dockerFile?: string;
+  dockerContext?: string;
+  exposedPort?: number;
+  environment?: Record<string, string>;
   // Built-in site properties
   name?: string;
   config?: Record<string, any>;
