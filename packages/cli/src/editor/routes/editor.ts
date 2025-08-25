@@ -207,7 +207,12 @@ editorRoutes.get('/:sitename', async (c) => {
           
           <div class="editor-layout">
             <div class="file-tree-panel">
-              <h3 style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">FILES</h3>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">FILES</h3>
+                <button id="new-file-btn" class="btn small" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" title="New File">
+                  + New
+                </button>
+              </div>
               <div id="file-tree" class="file-tree">
                 <div class="file-tree-item" style="color: var(--text-secondary);">
                   Loading files...
@@ -249,6 +254,10 @@ editorRoutes.get('/:sitename', async (c) => {
           let editor = null;
           let openFiles = new Map(); // filename -> content
           let unsavedChanges = new Set();
+          
+          // Get initial file from URL parameter
+          const urlParams = new URLSearchParams(window.location.search);
+          let initialFile = urlParams.get('file');
           
           // Initialize CodeMirror
           function initEditor() {
@@ -335,6 +344,9 @@ editorRoutes.get('/:sitename', async (c) => {
                 document.getElementById('current-file').textContent = filepath;
                 updateTabState();
                 
+                // Update URL with current file
+                updateURL(filepath);
+                
                 // Clear unsaved indicator for this file
                 unsavedChanges.delete(filepath);
               } else {
@@ -344,6 +356,71 @@ editorRoutes.get('/:sitename', async (c) => {
               console.error('Error loading file:', error);
               alert('Error loading file');
             }
+          }
+          
+          // Update URL with current file
+          function updateURL(filepath) {
+            const url = new URL(window.location);
+            if (filepath) {
+              url.searchParams.set('file', filepath);
+            } else {
+              url.searchParams.delete('file');
+            }
+            window.history.pushState(null, '', url.toString());
+          }
+          
+          // Create new file
+          async function createNewFile() {
+            const filename = prompt('Enter filename (e.g., index.html, script.js):');
+            if (!filename) return;
+            
+            // Basic validation
+            if (filename.includes('/') || filename.includes('\\\\')) {
+              alert('Filename cannot contain path separators. Use the file tree for folders.');
+              return;
+            }
+            
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/file\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  path: filename, 
+                  type: 'file',
+                  content: getDefaultContent(filename)
+                })
+              });
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                // Reload file tree and open the new file
+                await loadFileTree();
+                await loadFile(filename);
+              } else {
+                alert('Failed to create file: ' + data.error);
+              }
+            } catch (error) {
+              console.error('Error creating file:', error);
+              alert('Error creating file');
+            }
+          }
+          
+          // Get default content for new files
+          function getDefaultContent(filename) {
+            const ext = filename.split('.').pop()?.toLowerCase();
+            
+            const templates = {
+              'html': '<!DOCTYPE html>\\n<html lang="en">\\n<head>\\n    <meta charset="UTF-8">\\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\\n    <title>Document</title>\\n</head>\\n<body>\\n    <h1>Hello World!</h1>\\n</body>\\n</html>',
+              'css': '/* Add your styles here */\\nbody {\\n    font-family: Arial, sans-serif;\\n    margin: 0;\\n    padding: 20px;\\n}',
+              'js': '// Add your JavaScript here\\nconsole.log("Hello World!");',
+              'ts': '// Add your TypeScript here\\nconsole.log("Hello World!");',
+              'md': '# Welcome\\n\\nStart writing your markdown here...',
+              'json': '{\\n    "name": "my-project",\\n    "version": "1.0.0"\\n}',
+              'txt': 'Hello World!'
+            };
+            
+            return templates[ext] || '';
           }
           
           // Save current file
@@ -433,12 +510,30 @@ editorRoutes.get('/:sitename', async (c) => {
           // Save button click
           document.getElementById('save-btn').onclick = saveFile;
           
+          // New file button click
+          document.getElementById('new-file-btn').onclick = createNewFile;
+          
           // Initialize
           initEditor();
           loadFileTree();
           
-          // Placeholder message for now
-          editor.setValue('// Welcome to the Code Editor!\\n// Select a file from the left to start editing.\\n\\n// Files API endpoints are not yet implemented.\\n// This is a basic editor interface that will be enhanced.');
+          // Load initial file from URL parameter or show welcome message
+          if (initialFile) {
+            // Wait a bit for file tree to load, then try to load the file
+            setTimeout(() => loadFile(initialFile), 500);
+          } else {
+            // Show welcome message
+            editor.setValue('// Welcome to the Code Editor!\\n// Select a file from the left to start editing.\\n// Click the "+ New" button to create a new file.');
+          }
+          
+          // Handle browser back/forward for file navigation
+          window.addEventListener('popstate', (event) => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const fileParam = urlParams.get('file');
+            if (fileParam && fileParam !== currentFile) {
+              loadFile(fileParam);
+            }
+          });
         </script>
       </body>
       </html>

@@ -1,3 +1,1 @@
-console.log("testing v1");
-
-console.log("Hello via Bun!");
+console.log("I don't have a job right now lol");
