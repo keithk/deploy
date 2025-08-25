@@ -32,6 +32,7 @@ import {
   createQuickSetupScript,
   configureFirewall
 } from "../utils/setup-utils";
+import { setupDatabase } from "../utils/database-setup";
 
 // Colors for terminal output
 const colors = {
@@ -82,6 +83,12 @@ async function setupLocal(
 
   // Update .env file with the domain
   await updateEnvFile(domain, projectRoot);
+
+  // Initialize database and create admin user
+  if (!(await setupDatabase(domain, log))) {
+    log.error("Failed to set up database and admin user.");
+    return false;
+  }
 
   // Install required dependencies
   if (!options.skipCaddy && !(await installCaddy(log))) {
@@ -154,6 +161,12 @@ async function setupProduction(
 
   // Update .env file with the domain
   await updateEnvFile(domain, projectRoot);
+
+  // Initialize database and create admin user
+  if (!(await setupDatabase(domain, log))) {
+    log.error("Failed to set up database and admin user.");
+    return false;
+  }
 
   // Create necessary directories
   await ensureDir(configDir);

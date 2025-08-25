@@ -9,6 +9,7 @@ import type {
   ScheduledActionConfig,
   WebhookActionConfig
 } from "@keithk/deploy-core";
+import { DEPLOY_PATHS, LEGACY_PATHS } from "@keithk/deploy-core/src/config/paths";
 // Using Bun.spawn instead of child_process.spawnSync
 import {
   loadBuildCache,
@@ -35,20 +36,50 @@ export async function loadRootConfig(): Promise<RootActionConfig> {
   info(`Current working directory: ${process.cwd()}`);
   info(`Project root directory: ${rootDir}`);
 
-  // Look for deploy.json in the root directory
-  const configPath = resolve(rootDir, "deploy.json");
-  info(`Looking for root config at: ${configPath}`);
+  // Look for deploy.json in the new .deploy directory first
+  const newConfigPath = DEPLOY_PATHS.rootConfig;
+  info(`Looking for root config at: ${newConfigPath}`);
 
-  if (existsSync(configPath)) {
+  if (existsSync(newConfigPath)) {
     try {
-      debug(`Root config file found at ${configPath}, loading...`);
-      const configContent = await Bun.file(configPath).text();
+      debug(`Root config file found at ${newConfigPath}, loading...`);
+      const configContent = await Bun.file(newConfigPath).text();
       const config = JSON.parse(configContent);
       debug(`Root config loaded:`, config);
       return config;
     } catch (err) {
       error(
-        `Error loading root config from ${configPath}: ${
+        `Error loading root config from ${newConfigPath}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
+
+  // Check for legacy location and migrate if found
+  const legacyConfigPath = LEGACY_PATHS.oldRootConfig;
+  if (existsSync(legacyConfigPath)) {
+    info(`Found root config at legacy location ${legacyConfigPath}, migrating...`);
+    try {
+      const configContent = await Bun.file(legacyConfigPath).text();
+      const config = JSON.parse(configContent);
+      
+      // Ensure the .deploy directory exists
+      await Bun.write(join(DEPLOY_PATHS.deployDir, '.gitkeep'), '');
+      
+      // Write to new location
+      await Bun.write(newConfigPath, configContent);
+      info(`Root config migrated to ${newConfigPath}`);
+      
+      // Remove legacy file
+      const proc = Bun.spawn(['rm', legacyConfigPath], { stdio: ['ignore', 'ignore', 'ignore'] });
+      await proc.exited;
+      
+      debug(`Root config loaded from migrated file:`, config);
+      return config;
+    } catch (err) {
+      error(
+        `Error migrating root config from ${legacyConfigPath}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );

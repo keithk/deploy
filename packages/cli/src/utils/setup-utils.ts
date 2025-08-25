@@ -2,6 +2,7 @@
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { generateCaddyfileContent } from "@keithk/deploy-core";
+import { DEPLOY_PATHS, getSSLPaths, ensureDeployDir } from "@keithk/deploy-core/src/config/paths";
 
 // Type for log functions
 type LogFunctions = {
@@ -216,6 +217,99 @@ export async function installCaddy(log: LogFunctions): Promise<boolean> {
 }
 
 /**
+ * Check if dnsmasq is running
+ */
+export async function isDnsmasqRunning(): Promise<boolean> {
+  if (!isMac) return true; // Skip on non-macOS platforms
+  
+  try {
+    // First check brew services
+    const brewProc = Bun.spawn(["brew", "services", "list"], {
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    const brewOutput = await new Response(brewProc.stdout).text();
+    const brewExitCode = await brewProc.exited;
+
+    if (brewExitCode === 0 && brewOutput.includes("dnsmasq") && brewOutput.includes("started")) {
+      return true;
+    }
+
+    // Also check for dnsmasq process directly (in case it's running manually)
+    const pgrep = Bun.spawn(["pgrep", "dnsmasq"], {
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    const pgrepExitCode = await pgrep.exited;
+    
+    return pgrepExitCode === 0; // pgrep returns 0 if process found
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Start dnsmasq service
+ */
+export async function startDnsmasq(log: LogFunctions): Promise<boolean> {
+  if (!isMac) return true; // Skip on non-macOS platforms
+
+  try {
+    if (await isDnsmasqRunning()) {
+      log.info("dnsmasq is already running");
+      return true;
+    }
+
+    log.info("Starting dnsmasq service...");
+    const result = await execCommand("brew", ["services", "start", "dnsmasq"], {}, log);
+    
+    if (result.success) {
+      log.success("dnsmasq started successfully");
+      return true;
+    } else {
+      log.error("Failed to start dnsmasq");
+      return false;
+    }
+  } catch (error) {
+    log.error(`Failed to start dnsmasq: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Ensure dnsmasq is running, show warning and instructions if not
+ */
+export async function ensureDnsmasqRunning(domain: string, log: LogFunctions): Promise<boolean> {
+  if (!isMac) return true; // Skip on non-macOS platforms
+
+  // Check if dnsmasq is already running
+  if (await isDnsmasqRunning()) {
+    log.success(`dnsmasq is running and configured for .${domain} domains`);
+    return true;
+  }
+
+  // Check if dnsmasq is installed
+  if (!(await commandExists("dnsmasq"))) {
+    log.warning("⚠️  dnsmasq is not installed");
+    log.info("To install dnsmasq and enable local domain resolution:");
+    log.info("  brew install dnsmasq");
+    log.info("  sudo brew services start dnsmasq");
+    return false;
+  }
+
+  // dnsmasq is installed but not running
+  log.warning("⚠️  dnsmasq is installed but not running");
+  log.info("To start dnsmasq and enable local domain resolution:");
+  log.info(`  sudo brew services start dnsmasq`);
+  log.info("");
+  log.info("This will allow you to access sites via https://yoursite.${domain}");
+  log.info("Without dnsmasq, you'll need to use localhost:port URLs instead");
+  
+  // Still try to configure it in case it's not configured
+  await configureDnsmasq(domain, log);
+  
+  return false; // Return false since it's not running
+}
+
+/**
  * Configure dnsmasq (macOS only)
  */
 export async function configureDnsmasq(
@@ -254,37 +348,15 @@ export async function configureDnsmasq(
       }
     }
 
-    // Add the entry to dnsmasq.conf
-    await execCommand(
-      "bash",
-      ["-c", `echo "${dnsmasqEntry}" | sudo tee -a ${systemConfPath}`],
-      {},
-      log
-    );
-
-    // Create resolver directory if it doesn't exist
-    await execCommand("sudo", ["mkdir", "-p", "/etc/resolver"], {}, log);
-
-    // Create resolver file for the domain
-    await execCommand(
-      "bash",
-      ["-c", `echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/${domain}`],
-      {},
-      log
-    );
-
-    // Restart dnsmasq
-    await execCommand(
-      "sudo",
-      ["brew", "services", "restart", "dnsmasq"],
-      {},
-      log
-    );
-
-    log.success(
-      `dnsmasq configured to resolve .${domain} domains to 127.0.0.1`
-    );
-    return true;
+    // If configuration is missing, show manual instructions
+    log.warning("dnsmasq configuration is incomplete");
+    log.info("To complete dnsmasq configuration for local domain resolution, run:");
+    log.info(`  echo "${dnsmasqEntry}" | sudo tee -a ${systemConfPath}`);
+    log.info(`  sudo mkdir -p /etc/resolver`);
+    log.info(`  echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/${domain}`);
+    log.info(`  sudo brew services restart dnsmasq`);
+    
+    return false; // Configuration is incomplete
   } catch (error) {
     log.error(
       `Failed to configure dnsmasq: ${
@@ -321,9 +393,9 @@ export async function trustLocalCerts(
     log.info("Installing local certificate authority...");
     await execCommand("mkcert", ["-install"], {}, log);
 
-    // Create SSL directory if it doesn't exist
-    const sslDir = join(configDir, "ssl");
-    await ensureDir(sslDir);
+    // Use the new SSL directory structure
+    const sslPaths = getSSLPaths(domain, false); // false = development
+    await ensureDeployDir(sslPaths.dir);
 
     // Generate certificates for the domain
     log.info(`Generating certificates for *.${domain} and ${domain}...`);
@@ -331,9 +403,9 @@ export async function trustLocalCerts(
       "mkcert",
       [
         "-cert-file",
-        join(sslDir, `${domain}.crt`),
+        sslPaths.certFile,
         "-key-file",
-        join(sslDir, `${domain}.key`),
+        sslPaths.keyFile,
         `*.${domain}`,
         domain
       ],
@@ -366,16 +438,10 @@ export async function configureCaddy(
   log.step("Configuring Caddy...");
 
   try {
-    // Ensure config directory exists
-    await ensureDir(configDir);
-
-    // Also ensure ssl directory exists for certificates
-    const sslDir = join(configDir, "ssl");
-    await ensureDir(sslDir);
-
-    // Ensure caddy-data directory exists
-    const caddyDataDir = join(configDir, "caddy-data");
-    await ensureDir(caddyDataDir);
+    // Ensure new directory structure exists
+    await ensureDeployDir(DEPLOY_PATHS.caddyDir);
+    await ensureDeployDir(DEPLOY_PATHS.caddyData);
+    await ensureDeployDir(getSSLPaths(domain, false).dir);
 
     // For local development, we'll create a custom Caddyfile with local_certs
     // and wildcard domain configuration
@@ -385,7 +451,7 @@ export async function configureCaddy(
     caddyfileContent += `{
   # Use project directory for storage
   storage file_system {
-    root ${caddyDataDir}
+    root ${DEPLOY_PATHS.caddyData}
   }
 
   # Use local certificates
@@ -396,8 +462,10 @@ export async function configureCaddy(
 }\n\n`;
 
     if (useHttps) {
-      // Add HTTPS configuration with wildcard domain
+      // Add HTTPS configuration with wildcard domain using new SSL paths
+      const sslPaths = getSSLPaths(domain, false);
       caddyfileContent += `https://*.${domain}, https://${domain} {
+  tls ${sslPaths.certFile} ${sslPaths.keyFile}
   reverse_proxy localhost:3000
 }\n`;
     } else {
@@ -408,8 +476,8 @@ export async function configureCaddy(
 }\n`;
     }
 
-    // Write the Caddyfile to the project config directory
-    const caddyfilePath = join(configDir, "Caddyfile");
+    // Write the Caddyfile to the new location
+    const caddyfilePath = DEPLOY_PATHS.caddyfile;
     await Bun.write(caddyfilePath, caddyfileContent);
     log.success(`Caddy configuration written to ${caddyfilePath}`);
 
@@ -446,16 +514,16 @@ export async function configureCaddyProduction(
       }
     );
 
-    // Ensure config directory exists
-    await ensureDir(configDir);
+    // Ensure new directory structure exists
+    await ensureDeployDir(DEPLOY_PATHS.caddyDir);
 
-    // Write the Caddyfile to project config directory
-    const caddyfilePath = join(configDir, "Caddyfile.production");
+    // Write the Caddyfile to the new location
+    const caddyfilePath = DEPLOY_PATHS.caddyfileProduction;
     await Bun.write(caddyfilePath, caddyfileContent);
 
     log.success(`Production Caddyfile created at ${caddyfilePath}`);
 
-    // Create a symbolic link to make it easier to find
+    // Create a symbolic link in the root for backwards compatibility
     const rootCaddyfilePath = join(projectRoot, "Caddyfile.production");
     try {
       await execCommand(

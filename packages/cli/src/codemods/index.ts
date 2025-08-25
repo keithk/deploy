@@ -1,8 +1,10 @@
 import type { Codemod } from "./types";
 import { configMigrationCodemod } from "./config-migration";
+import { fileStructureMigrationCodemod } from "./file-structure-migration";
 
 export const codemods: Record<string, Codemod> = {
-  "config-migration": configMigrationCodemod
+  "config-migration": configMigrationCodemod,
+  "file-structure": fileStructureMigrationCodemod
 };
 
 export function getCodemod(name: string): Codemod | undefined {

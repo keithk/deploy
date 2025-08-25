@@ -10,6 +10,7 @@ import {
   reloadCaddyProduction,
   getDomain
 } from "../utils/caddy";
+import { ensureDnsmasqRunning } from "../utils/setup-utils";
 import {
   debug,
   info,
@@ -218,8 +219,7 @@ export function registerServerCommands(program: Command): void {
           const proc = spawn([
             currentExecutable, currentScript, "start", "--foreground", "--log-level", options.logLevel
           ], {
-            stdio: ["ignore", Bun.file(logFile), Bun.file(errorFile)],
-            detached: true
+            stdio: ["ignore", Bun.file(logFile), Bun.file(errorFile)]
           });
           
           proc.unref();
@@ -274,6 +274,22 @@ export function registerServerCommands(program: Command): void {
     )
     .action(async (options) => {
       try {
+        // Get domain from .env for dnsmasq configuration
+        const domain = await getDomain();
+
+        // Ensure dnsmasq is running (will configure if needed)
+        info("Ensuring dnsmasq is running...");
+        const dnsmasqSuccess = await ensureDnsmasqRunning(domain, {
+          info,
+          success: info,
+          warning: warn,
+          error,
+          step: info
+        });
+        if (!dnsmasqSuccess) {
+          warn("dnsmasq may not be working properly. Local domain resolution might not work.");
+        }
+
         // Ensure Caddy is running with latest configuration
         const caddySuccess = await ensureCaddyRunning('dev');
         if (!caddySuccess) {
@@ -298,9 +314,6 @@ export function registerServerCommands(program: Command): void {
         debug(`Using root directory: ${rootDir}`);
         const logLevel = parseInt(options.logLevel);
         const server = await startServer("dev", { rootDir, logLevel });
-
-        // Get domain from .env
-        const domain = await getDomain();
 
         // Restart any processes that were running before
         info("Checking for processes to restart...");

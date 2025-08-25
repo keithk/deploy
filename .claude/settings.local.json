@@ -25,8 +25,35 @@
       "Bash(bun run deploy:*)",
       "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions list)",
       "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions run sync-raindrop)",
-      "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions run sync-letterboxd)"
+      "Bash(ROOT_DIR=/Users/keith/projects/keith-is-host/sites bun run deploy actions run sync-letterboxd)",
+      "Bash(bun run changeset:status:*)",
+      "Bash(npm view:*)",
+      "Bash(npx changeset:*)",
+      "Bash(bun run:*)",
+      "Bash(deploy:*)",
+      "Read(//private/tmp/**)",
+      "WebFetch(domain:caddyserver.com)",
+      "WebSearch",
+      "WebFetch(domain:atproto.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git checkout:*)",
+      "Bash(bun:*)",
+      "Bash(ADMIN_PORT=3001 bun src/index.ts)",
+      "Bash(DATA_DIR=/Users/keith/projects/deploy/data ADMIN_PORT=3001 bun src/index.ts)",
+      "Bash(sqlite3:*)",
+      "Bash(DATA_DIR=/Users/keith/projects/deploy/data ADMIN_PORT=3002 bun src/index.ts)",
+      "WebFetch(domain:bun.sh)",
+      "Bash(caddy run:*)",
+      "Bash(kill:*)",
+      "Bash(caddy:*)",
+      "Bash(ping:*)",
+      "Bash(cat:*)"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "/Users/keith/Downloads/Variable Fonts/Monaspace Neon",
+      "/opt/homebrew/etc",
+      "/private/etc/resolver"
+    ]
   }
 }

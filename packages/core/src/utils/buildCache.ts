@@ -8,6 +8,7 @@ import {
   readdirSync
 } from "fs";
 import type { SiteConfig } from "../types/site";
+import { DEPLOY_PATHS, LEGACY_PATHS } from "../config/paths";
 
 interface BuildCacheEntry {
   lastBuildTime: number;
@@ -18,15 +19,38 @@ interface BuildCache {
   sites: Record<string, BuildCacheEntry>;
 }
 
-const CACHE_DIR = ".build-cache";
-const CACHE_FILE = join(CACHE_DIR, "cache.json");
+// Use the new centralized paths
+const CACHE_FILE = DEPLOY_PATHS.buildCache;
 
 /**
- * Ensures the cache directory exists
+ * Ensures the cache directory exists and handles migration from old location
  */
 function ensureCacheDir(): void {
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true });
+  // Create the new cache directory
+  if (!existsSync(DEPLOY_PATHS.cacheDir)) {
+    mkdirSync(DEPLOY_PATHS.cacheDir, { recursive: true });
+  }
+
+  // Handle migration from old location
+  if (existsSync(LEGACY_PATHS.oldBuildCache) && !existsSync(CACHE_FILE)) {
+    try {
+      const oldContent = readFileSync(LEGACY_PATHS.oldBuildCache, "utf-8");
+      writeFileSync(CACHE_FILE, oldContent);
+      console.info("Build cache migrated to new location");
+      
+      // Clean up old file
+      const fs = require('fs');
+      fs.unlinkSync(LEGACY_PATHS.oldBuildCache);
+      
+      // Try to remove the old directory if it's empty
+      try {
+        fs.rmdirSync(join(process.cwd(), '.build-cache'));
+      } catch (err) {
+        // Ignore if directory not empty
+      }
+    } catch (error) {
+      console.warn(`Failed to migrate build cache: ${error}`);
+    }
   }
 }
 

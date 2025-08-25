@@ -10,11 +10,15 @@ dist
 coverage
 *.lcov
 
-# logs and data
+# Deploy runtime files (new structure)
+.deploy/
+
+# Legacy paths (remove these entries after migration)
 logs
 data
 _.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+.build-cache
+config/caddy-data/*
 
 # dotenv environment variable files
 .env
@@ -27,7 +31,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
-.build-cache
 
 # IntelliJ based IDEs
 .idea
@@ -35,6 +38,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 
-config/caddy-data/*
+# Build reports
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 CLAUDE.md
+
+# where i keep all my test files
+scratch/
+

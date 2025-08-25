@@ -212,3 +212,61 @@ export function formatPath(path: string, maxLength: number = 60): string {
   
   return `.../${parts.slice(-2).join('/')}`;
 }
+
+/**
+ * Simple readline implementation for user input
+ */
+export async function readlineSync(prompt: string, hidden: boolean = false): Promise<string> {
+  process.stdout.write(prompt);
+  
+  return new Promise((resolve) => {
+    let input = '';
+    
+    if (hidden) {
+      // Hide input for passwords
+      const stdin = process.stdin;
+      stdin.setRawMode(true);
+      stdin.resume();
+      
+      const onData = (char: Buffer) => {
+        const charStr = char.toString();
+        
+        if (charStr === '\n' || charStr === '\r') {
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off('data', onData);
+          process.stdout.write('\n');
+          resolve(input);
+        } else if (charStr === '\u0003') { // Ctrl+C
+          process.exit(0);
+        } else if (charStr === '\u007f') { // Backspace
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else if (charStr >= ' ') { // Printable characters
+          input += charStr;
+          process.stdout.write('*');
+        }
+      };
+      
+      stdin.on('data', onData);
+    } else {
+      // Normal input
+      const stdin = process.stdin;
+      stdin.resume();
+      stdin.setEncoding('utf8');
+      
+      const onData = (data: string) => {
+        input += data;
+        if (data.includes('\n')) {
+          stdin.pause();
+          stdin.off('data', onData);
+          resolve(input.replace(/\n$/, ''));
+        }
+      };
+      
+      stdin.on('data', onData);
+    }
+  });
+}

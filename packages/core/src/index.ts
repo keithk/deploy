@@ -7,3 +7,6 @@ export * from "./utils";
 
 // Export database
 export * from "./database";
+
+// Export authentication
+export * from "./auth";

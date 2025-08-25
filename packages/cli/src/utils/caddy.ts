@@ -1,6 +1,7 @@
 
 import { join, resolve } from "path";
 import { debug, info, error, warn } from "@keithk/deploy-core";
+import { DEPLOY_PATHS, LEGACY_PATHS } from "@keithk/deploy-core/src/config/paths";
 
 /**
  * Check if Caddy is installed
@@ -79,13 +80,8 @@ export async function getDomain(): Promise<string> {
  * Get path to the project's Caddyfile
  */
 export function getCaddyfilePath(): string {
-  const projectRoot = resolve(process.cwd());
-  // Ensure the path is absolute
-  if (!projectRoot.startsWith("/")) {
-    throw new Error("Project root is not an absolute path.");
-  }
-
-  return join(projectRoot, "config", "Caddyfile");
+  // Use the centralized path configuration
+  return DEPLOY_PATHS.caddyfile;
 }
 
 /**
@@ -223,32 +219,65 @@ export async function stopCaddy(): Promise<boolean> {
  */
 async function ensureCaddyfileExists(mode: 'dev' | 'production'): Promise<boolean> {
   const caddyfilePath = mode === 'production' 
-    ? join(process.cwd(), "Caddyfile.production")
+    ? DEPLOY_PATHS.caddyfileProduction
     : getCaddyfilePath();
+
+  // Handle migration from legacy locations
+  const legacyPath = mode === 'production' 
+    ? LEGACY_PATHS.oldCaddyfileProduction
+    : LEGACY_PATHS.oldCaddyfile;
+
+  if (!await Bun.file(caddyfilePath).exists() && await Bun.file(legacyPath).exists()) {
+    info(`Migrating ${mode} Caddyfile from legacy location...`);
+    try {
+      // Ensure the new directory exists
+      await Bun.write(join(DEPLOY_PATHS.caddyDir, '.gitkeep'), '');
+      
+      // Move the file
+      const legacyContent = await Bun.file(legacyPath).text();
+      await Bun.write(caddyfilePath, legacyContent);
+      
+      // Remove the legacy file
+      const proc = Bun.spawn(['rm', legacyPath], { stdio: ['ignore', 'ignore', 'ignore'] });
+      await proc.exited;
+      
+      info(`${mode} Caddyfile migrated successfully`);
+    } catch (err) {
+      warn(`Failed to migrate ${mode} Caddyfile: ${err}`);
+    }
+  }
 
   if (!(await Bun.file(caddyfilePath).exists())) {
     if (mode === 'dev') {
-      info("Caddyfile not found. Attempting to generate one...");
+      info("Caddyfile not found. Attempting to generate local development configuration...");
       try {
-        // Import generateCaddyfileContent function
-        const { generateCaddyfileContent } = await import("@keithk/deploy-core");
+        // Use the local development configuration from setup-utils
+        const { configureCaddy } = await import("../utils/setup-utils");
         const domain = await getDomain();
-        const rootDir = process.env.ROOT_DIR || "./sites";
+        const projectRoot = resolve(process.cwd());
         
-        const caddyfileContent = await generateCaddyfileContent(domain, rootDir, {
-          info: (msg: string) => debug(`Caddyfile gen: ${msg}`),
-          warning: (msg: string) => debug(`Caddyfile gen warning: ${msg}`)
+        const success = await configureCaddy(domain, projectRoot, DEPLOY_PATHS.caddyDir, true, {
+          info: (msg: string) => debug(`Caddy setup: ${msg}`),
+          success: (msg: string) => debug(`Caddy setup: ${msg}`),
+          warning: (msg: string) => debug(`Caddy setup warning: ${msg}`),
+          error: (msg: string) => warn(`Caddy setup error: ${msg}`),
+          step: (msg: string) => debug(`Caddy setup step: ${msg}`)
         });
         
-        await Bun.write(caddyfilePath, caddyfileContent);
-        info(`Generated Caddyfile at ${caddyfilePath}`);
-        return true;
+        if (success) {
+          info(`Generated local development Caddyfile at ${caddyfilePath}`);
+          return true;
+        } else {
+          warn("Failed to generate local development Caddyfile");
+          return false;
+        }
       } catch (err) {
         warn(`Failed to generate Caddyfile: ${err instanceof Error ? err.message : String(err)}`);
         return false;
       }
     } else {
       warn(`Production Caddyfile not found at ${caddyfilePath}`);
+      info("Run 'deploy setup production' to generate production configuration.");
       return false;
     }
   }
@@ -315,7 +344,7 @@ export async function reloadCaddyProduction(): Promise<boolean> {
   }
 
   try {
-    const caddyfilePath = resolve("Caddyfile.production");
+    const caddyfilePath = DEPLOY_PATHS.caddyfileProduction;
     
     // Ensure production Caddyfile exists
     if (!(await ensureCaddyfileExists('production'))) {
@@ -377,7 +406,7 @@ export async function startCaddyProduction(): Promise<boolean> {
     return false;
   }
   
-  const caddyfilePath = resolve("Caddyfile.production");
+  const caddyfilePath = DEPLOY_PATHS.caddyfileProduction;
 
   try {
     info(`Starting Caddy with production config: ${caddyfilePath}`);
