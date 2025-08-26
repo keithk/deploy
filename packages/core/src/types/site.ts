@@ -42,6 +42,9 @@ export interface SiteConfig {
   dockerContext?: string;
   exposedPort?: number;
   environment?: Record<string, string>;
+  // Git integration properties
+  gitBranch?: string;
+  gitCloneUrl?: string;
   // Built-in site properties
   name?: string;
   config?: Record<string, any>;

@@ -2,6 +2,8 @@ import type { SiteConfig } from "@keithk/deploy-core";
 import { processModel } from "@keithk/deploy-core";
 import { processManager } from "../utils/process-manager";
 import { discoverSites } from "../discoverSites";
+import { editingSessionManager } from "../services/editing-session-manager";
+import { gitManager } from "../services/git-manager";
 import { spawn } from "bun";
 import { join } from "path";
 
@@ -275,6 +277,170 @@ export async function handleGetServerStatus(request: Request): Promise<Response>
 }
 
 /**
+ * Handle POST /api/sites/:name/edit/start - Start an editing session
+ */
+export async function handleStartEditSession(request: Request, siteName: string, context: ApiContext): Promise<Response> {
+  try {
+    const { userId = 1 } = await request.json().catch(() => ({})); // Default to user ID 1 for now
+    const sitePath = join(context.rootDir, siteName);
+
+    const session = await editingSessionManager.createSession({
+      userId,
+      siteName,
+      sitePath
+    });
+
+    return new Response(JSON.stringify({
+      success: true,
+      session: {
+        id: session.id,
+        branchName: session.branchName,
+        previewUrl: session.previewUrl,
+        status: session.status
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error starting edit session:', error);
+    return new Response(JSON.stringify({ error: 'Failed to start edit session' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Handle POST /api/sites/:name/edit/:sessionId/commit - Commit changes in an editing session
+ */
+export async function handleCommitEditSession(
+  request: Request, 
+  siteName: string, 
+  sessionId: string, 
+  context: ApiContext
+): Promise<Response> {
+  try {
+    const { message } = await request.json().catch(() => ({}));
+    const sitePath = join(context.rootDir, siteName);
+    const sessionIdNum = parseInt(sessionId, 10);
+
+    const commitHash = await editingSessionManager.commitSession(sessionIdNum, sitePath, {
+      message: message || `Update ${siteName} via editor`
+    });
+
+    return new Response(JSON.stringify({
+      success: true,
+      commitHash
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error committing edit session:', error);
+    return new Response(JSON.stringify({ error: 'Failed to commit changes' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Handle POST /api/sites/:name/edit/:sessionId/deploy - Deploy changes (merge to main)
+ */
+export async function handleDeployEditSession(
+  request: Request, 
+  siteName: string, 
+  sessionId: string, 
+  context: ApiContext
+): Promise<Response> {
+  try {
+    const sitePath = join(context.rootDir, siteName);
+    const sessionIdNum = parseInt(sessionId, 10);
+
+    await editingSessionManager.deploySession(sessionIdNum, sitePath);
+
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error deploying edit session:', error);
+    return new Response(JSON.stringify({ error: 'Failed to deploy changes' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Handle DELETE /api/sites/:name/edit/:sessionId - Cancel/cleanup an editing session
+ */
+export async function handleCancelEditSession(
+  request: Request, 
+  siteName: string, 
+  sessionId: string, 
+  context: ApiContext
+): Promise<Response> {
+  try {
+    const sitePath = join(context.rootDir, siteName);
+    const sessionIdNum = parseInt(sessionId, 10);
+
+    await editingSessionManager.cancelSession(sessionIdNum, sitePath);
+
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error canceling edit session:', error);
+    return new Response(JSON.stringify({ error: 'Failed to cancel session' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Handle GET /api/sites/:name/edit/status - Get current editing session status
+ */
+export async function handleGetEditStatus(request: Request, siteName: string, context: ApiContext): Promise<Response> {
+  try {
+    const userId = 1; // Default to user ID 1 for now
+    const session = await editingSessionManager.getActiveSession(userId, siteName);
+
+    if (!session) {
+      return new Response(JSON.stringify({
+        editing: false,
+        session: null
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({
+      editing: true,
+      session: {
+        id: session.id,
+        branchName: session.branchName,
+        previewUrl: session.previewUrl,
+        status: session.status,
+        createdAt: session.createdAt,
+        lastCommitAt: session.lastCommit
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error getting edit status:', error);
+    return new Response(JSON.stringify({ error: 'Failed to get edit status' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
  * Main API router
  */
 export async function handleApiRequest(request: Request, context: ApiContext): Promise<Response | null> {
@@ -302,6 +468,42 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
     }
     if (method === 'POST' && apiParts.length === 4 && apiParts[2] === 'run') {
       return handleRunSiteCommand(request, apiParts[1], apiParts[3], context);
+    }
+    
+    // Git workflow endpoints
+    if (apiParts.length >= 3 && apiParts[2] === 'edit') {
+      const siteName = apiParts[1];
+      
+      // GET /api/sites/:name/edit/status
+      if (method === 'GET' && apiParts.length === 4 && apiParts[3] === 'status') {
+        return handleGetEditStatus(request, siteName, context);
+      }
+      
+      // POST /api/sites/:name/edit/start
+      if (method === 'POST' && apiParts.length === 4 && apiParts[3] === 'start') {
+        return handleStartEditSession(request, siteName, context);
+      }
+      
+      // Session-specific endpoints
+      if (apiParts.length >= 5) {
+        const sessionId = apiParts[3];
+        const action = apiParts[4];
+        
+        // POST /api/sites/:name/edit/:sessionId/commit
+        if (method === 'POST' && action === 'commit') {
+          return handleCommitEditSession(request, siteName, sessionId, context);
+        }
+        
+        // POST /api/sites/:name/edit/:sessionId/deploy
+        if (method === 'POST' && action === 'deploy') {
+          return handleDeployEditSession(request, siteName, sessionId, context);
+        }
+        
+        // DELETE /api/sites/:name/edit/:sessionId
+        if (method === 'DELETE' && apiParts.length === 4) {
+          return handleCancelEditSession(request, siteName, sessionId, context);
+        }
+      }
     }
   }
 

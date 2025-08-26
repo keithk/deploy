@@ -74,6 +74,20 @@ editorRoutes.get('/:sitename', async (c) => {
             display: flex;
             height: calc(100vh - 60px);
             background: var(--bg-dark);
+            transition: all 0.3s ease;
+          }
+          
+          .editor-layout.three-panel .file-tree-panel {
+            width: 20%;
+          }
+          
+          .editor-layout.three-panel .editor-panel {
+            width: 50%;
+          }
+          
+          .editor-layout.three-panel .preview-panel {
+            width: 30%;
+            display: flex !important;
           }
           
           .file-tree-panel {
@@ -180,6 +194,35 @@ editorRoutes.get('/:sitename', async (c) => {
           .save-indicator.visible {
             opacity: 1;
           }
+          
+          .preview-panel {
+            background: var(--bg-darker);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+          }
+          
+          .preview-toolbar {
+            background: var(--bg-darker);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 40px;
+          }
+          
+          .preview-content {
+            flex: 1;
+            background: white;
+            position: relative;
+          }
+          
+          .preview-content iframe {
+            border: none;
+            width: 100%;
+            height: 100%;
+          }
         </style>
       </head>
       <body>
@@ -191,17 +234,40 @@ editorRoutes.get('/:sitename', async (c) => {
               <span>${siteName}</span>
             </div>
             <div class="editor-actions">
-              <span id="save-indicator" class="save-indicator">Saved!</span>
-              <button id="save-btn" class="btn small primary" style="margin-left: 1rem;">
-                Save (⌘S)
-              </button>
-              <a href="${getSiteUrl(siteName)}" target="_blank" class="btn small secondary" style="margin-left: 0.5rem;">
-                View Site
-              </a>
-              <span style="margin-left: 1rem;">
-                ${user.username} | 
-                <a href="/auth/logout" style="color: var(--accent-red);">Logout</a>
-              </span>
+              <!-- Git workflow controls -->
+              <div id="git-controls" class="git-controls">
+                <div id="readonly-mode" style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="color: var(--text-secondary); font-size: 0.9rem;">Read-only mode</span>
+                  <button id="edit-btn" class="btn small primary">
+                    ✏️ Edit Site
+                  </button>
+                </div>
+                <div id="edit-mode" style="display: none; align-items: center; gap: 0.5rem;">
+                  <span id="branch-indicator" style="color: var(--accent-yellow); font-size: 0.8rem; background: rgba(255,193,7,0.1); padding: 0.25rem 0.5rem; border-radius: 4px;">
+                    📝 branch: edit-123456
+                  </span>
+                  <button id="save-btn" class="btn small primary">
+                    💾 Save
+                  </button>
+                  <button id="deploy-btn" class="btn small" style="background: var(--accent-green);">
+                    🚀 Deploy
+                  </button>
+                  <button id="cancel-edit-btn" class="btn small secondary">
+                    ❌ Cancel
+                  </button>
+                </div>
+              </div>
+              
+              <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+                <a href="${getSiteUrl(siteName)}" target="_blank" class="btn small secondary">
+                  🌐 View Site
+                </a>
+                <span id="save-indicator" class="save-indicator">Saved!</span>
+                <span style="color: var(--text-secondary);">
+                  ${user.username} | 
+                  <a href="/auth/logout" style="color: var(--accent-red);">Logout</a>
+                </span>
+              </div>
             </div>
           </header>
           
@@ -235,6 +301,19 @@ editorRoutes.get('/:sitename', async (c) => {
                 <textarea id="editor-textarea" style="display: none;"></textarea>
               </div>
             </div>
+            
+            <!-- Preview Panel - only shown in edit mode -->
+            <div class="preview-panel" id="preview-panel" style="display: none;">
+              <div class="preview-toolbar">
+                <div style="color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem;">
+                  <span>🔍 Preview</span>
+                  <div id="preview-status" style="font-size: 0.8rem; opacity: 0.7;">Loading...</div>
+                </div>
+              </div>
+              <div class="preview-content">
+                <iframe id="preview-iframe" src="" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -255,6 +334,11 @@ editorRoutes.get('/:sitename', async (c) => {
           let openFiles = new Map(); // filename -> content
           let unsavedChanges = new Set();
           
+          // Git workflow state
+          let currentMode = 'readonly'; // 'readonly' or 'edit'
+          let currentSession = null; // editing session data
+          let currentBranch = 'main';
+          
           // Get initial file from URL parameter
           const urlParams = new URLSearchParams(window.location.search);
           let initialFile = urlParams.get('file');
@@ -269,16 +353,250 @@ editorRoutes.get('/:sitename', async (c) => {
               tabSize: 2,
               lineWrapping: true,
               autoCloseBrackets: true,
-              matchBrackets: true
+              matchBrackets: true,
+              readOnly: currentMode === 'readonly' // Start in read-only mode
             });
             
-            // Track changes
+            // Track changes (only in edit mode)
             editor.on('change', () => {
-              if (currentFile) {
+              if (currentFile && currentMode === 'edit') {
                 unsavedChanges.add(currentFile);
                 updateTabState();
               }
             });
+          }
+          
+          // Git workflow functions
+          async function enterEditMode() {
+            const editBtn = document.getElementById('edit-btn');
+            const originalText = editBtn.textContent;
+            
+            try {
+              // Show loading state
+              editBtn.textContent = '🏗️ Creating preview environment...';
+              editBtn.disabled = true;
+              
+              // Create editing session
+              const response = await fetch(\`/api/sites/\${siteName}/edit/start\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                currentMode = 'edit';
+                currentSession = data.session;
+                currentBranch = data.session.branchName;
+                
+                // Update URL to persist edit state
+                updateURLWithEditState(true, currentSession.id);
+                
+                // Update UI
+                updateModeUI();
+                
+                // Enable editor
+                editor.setOption('readOnly', false);
+                
+                // Show preview panel
+                document.getElementById('preview-panel').style.display = 'block';
+                document.querySelector('.editor-layout').classList.add('three-panel');
+                
+                // Load preview
+                if (data.session.previewUrl) {
+                  document.getElementById('preview-iframe').src = data.session.previewUrl;
+                }
+                
+                // Reload file tree and current file from the branch
+                await loadFileTree();
+                if (currentFile) {
+                  await loadFile(currentFile);
+                }
+                
+              } else {
+                alert('Failed to enter edit mode: ' + data.error);
+              }
+            } catch (error) {
+              console.error('Error entering edit mode:', error);
+              alert('Error entering edit mode');
+            } finally {
+              // Reset button state
+              editBtn.textContent = originalText;
+              editBtn.disabled = false;
+            }
+          }
+          
+          async function saveChanges() {
+            if (currentMode !== 'edit' || !currentSession) {
+              alert('Not in edit mode');
+              return;
+            }
+            
+            // First save the current file
+            await saveFile();
+            
+            try {
+              // Get commit message from user
+              const message = prompt('Commit message (optional):') || undefined;
+              
+              // Commit changes to branch
+              const response = await fetch(\`/api/sites/\${siteName}/edit/\${currentSession.id}/commit\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+              });
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                showSaveIndicator('Changes committed!');
+                // Update session data
+                currentSession = data.session;
+                
+                // Auto-refresh preview iframe after commit
+                refreshPreview();
+              } else {
+                alert('Failed to commit changes: ' + data.error);
+              }
+            } catch (error) {
+              console.error('Error committing changes:', error);
+              alert('Error committing changes');
+            }
+          }
+          
+          async function deployChanges() {
+            if (currentMode !== 'edit' || !currentSession) {
+              alert('Not in edit mode');
+              return;
+            }
+            
+            if (!confirm('Deploy changes to production? This will merge your branch to main and make the changes live.')) {
+              return;
+            }
+            
+            try {
+              // Deploy (merge to main)
+              const response = await fetch(\`/api/sites/\${siteName}/edit/\${currentSession.id}/deploy\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                alert('Changes deployed successfully!');
+                // Return to read-only mode
+                await exitEditMode();
+              } else {
+                alert('Failed to deploy changes: ' + data.error);
+              }
+            } catch (error) {
+              console.error('Error deploying changes:', error);
+              alert('Error deploying changes');
+            }
+          }
+          
+          async function cancelEdit() {
+            if (currentMode !== 'edit' || !currentSession) {
+              return;
+            }
+            
+            if (unsavedChanges.size > 0) {
+              if (!confirm('You have unsaved changes. Are you sure you want to cancel editing?')) {
+                return;
+              }
+            }
+            
+            try {
+              // Cancel editing session
+              const response = await fetch(\`/api/sites/\${siteName}/edit/\${currentSession.id}\`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              
+              // Return to read-only mode regardless of API response
+              await exitEditMode();
+              
+            } catch (error) {
+              console.error('Error canceling edit:', error);
+              // Still exit edit mode on error
+              await exitEditMode();
+            }
+          }
+          
+          async function exitEditMode() {
+            currentMode = 'readonly';
+            currentSession = null;
+            currentBranch = 'main';
+            unsavedChanges.clear();
+            
+            // Clear URL parameters
+            updateURLWithEditState(false);
+            
+            // Update UI
+            updateModeUI();
+            
+            // Disable editor
+            editor.setOption('readOnly', true);
+            
+            // Reload from main branch
+            await loadFileTree();
+            if (currentFile) {
+              await loadFile(currentFile);
+            }
+          }
+          
+          function updateModeUI() {
+            const readonlyMode = document.getElementById('readonly-mode');
+            const editMode = document.getElementById('edit-mode');
+            const branchIndicator = document.getElementById('branch-indicator');
+            const previewPanel = document.getElementById('preview-panel');
+            const editorLayout = document.querySelector('.editor-layout');
+            const viewSiteButton = document.querySelector('a[href*="getSiteUrl"]');
+            
+            if (currentMode === 'readonly') {
+              readonlyMode.style.display = 'flex';
+              editMode.style.display = 'none';
+              previewPanel.style.display = 'none';
+              editorLayout.classList.remove('three-panel');
+              
+              // Update View Site button to show main site
+              const mainSiteUrl = document.querySelector('a[target="_blank"]');
+              if (mainSiteUrl && mainSiteUrl.textContent.includes('🌐 View Site')) {
+                mainSiteUrl.href = mainSiteUrl.href.replace(/preview-\\d+-\\w+\\./, '');
+              }
+            } else {
+              readonlyMode.style.display = 'none';
+              editMode.style.display = 'flex';
+              previewPanel.style.display = 'flex';
+              editorLayout.classList.add('three-panel');
+              branchIndicator.textContent = \`📝 branch: \${currentBranch}\`;
+              
+              // Update preview iframe and View Site button
+              if (currentSession && currentSession.previewUrl) {
+                const previewIframe = document.getElementById('preview-iframe');
+                const previewStatus = document.getElementById('preview-status');
+                const mainSiteUrl = document.querySelector('a[target="_blank"]');
+                
+                // Load preview in iframe
+                previewIframe.src = currentSession.previewUrl;
+                previewStatus.textContent = 'Loading preview...';
+                
+                // Update View Site button to show preview
+                if (mainSiteUrl && mainSiteUrl.textContent.includes('🌐 View Site')) {
+                  mainSiteUrl.href = currentSession.previewUrl;
+                }
+                
+                // Handle iframe load events
+                previewIframe.onload = () => {
+                  previewStatus.textContent = 'Preview loaded';
+                };
+                
+                previewIframe.onerror = () => {
+                  previewStatus.textContent = 'Preview failed to load';
+                };
+              }
+            }
           }
           
           // Load file tree
@@ -444,6 +762,9 @@ editorRoutes.get('/:sitename', async (c) => {
                 unsavedChanges.delete(currentFile);
                 updateTabState();
                 showSaveIndicator();
+                
+                // Auto-refresh preview iframe if in edit mode
+                refreshPreview();
               } else {
                 alert('Failed to save: ' + data.error);
               }
@@ -499,6 +820,29 @@ editorRoutes.get('/:sitename', async (c) => {
             }, 2000);
           }
           
+          // Refresh preview iframe
+          function refreshPreview() {
+            if (currentMode === 'edit' && currentSession) {
+              const previewIframe = document.getElementById('preview-iframe');
+              if (previewIframe && currentSession.previewUrl) {
+                // Add timestamp to force reload
+                const url = new URL(currentSession.previewUrl);
+                url.searchParams.set('_t', Date.now().toString());
+                previewIframe.src = url.toString();
+                
+                // Update preview status
+                const previewStatus = document.getElementById('preview-status');
+                if (previewStatus) {
+                  previewStatus.textContent = 'Refreshing...';
+                  // Reset status after a delay
+                  setTimeout(() => {
+                    previewStatus.textContent = 'Live Preview';
+                  }, 1500);
+                }
+              }
+            }
+          }
+          
           // Keyboard shortcuts
           document.addEventListener('keydown', (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -507,15 +851,78 @@ editorRoutes.get('/:sitename', async (c) => {
             }
           });
           
-          // Save button click
-          document.getElementById('save-btn').onclick = saveFile;
+          // Git workflow event listeners
+          document.getElementById('edit-btn').onclick = enterEditMode;
+          document.getElementById('save-btn').onclick = saveChanges;
+          document.getElementById('deploy-btn').onclick = deployChanges;
+          document.getElementById('cancel-edit-btn').onclick = cancelEdit;
           
           // New file button click
           document.getElementById('new-file-btn').onclick = createNewFile;
           
+          // Check for edit mode in URL and restore session
+          async function checkAndRestoreEditMode() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const editMode = urlParams.get('mode');
+            const sessionId = urlParams.get('session');
+            
+            if (editMode === 'edit' && sessionId) {
+              try {
+                // Check if this session still exists
+                const response = await fetch(\`/api/sites/\${siteName}/edit/status\`);
+                const data = await response.json();
+                
+                if (data.editing && data.session && data.session.id.toString() === sessionId) {
+                  // Restore the session
+                  currentMode = 'edit';
+                  currentSession = data.session;
+                  currentBranch = data.session.branchName;
+                  
+                  // Update UI
+                  updateModeUI();
+                  
+                  // Enable editor
+                  editor.setOption('readOnly', false);
+                  
+                  // Show preview panel
+                  document.getElementById('preview-panel').style.display = 'block';
+                  document.querySelector('.editor-layout').classList.add('three-panel');
+                  
+                  // Load preview
+                  if (currentSession.previewUrl) {
+                    document.getElementById('preview-iframe').src = currentSession.previewUrl;
+                  }
+                  
+                  console.log('Restored editing session:', currentSession.id);
+                } else {
+                  // Session no longer exists, clear URL params
+                  updateURLWithEditState(false);
+                }
+              } catch (error) {
+                console.error('Error checking session:', error);
+                updateURLWithEditState(false);
+              }
+            }
+          }
+          
+          // Update URL with edit state
+          function updateURLWithEditState(isEditing, sessionId = null) {
+            const url = new URL(window.location);
+            if (isEditing && sessionId) {
+              url.searchParams.set('mode', 'edit');
+              url.searchParams.set('session', sessionId.toString());
+            } else {
+              url.searchParams.delete('mode');
+              url.searchParams.delete('session');
+            }
+            window.history.replaceState({}, '', url.toString());
+          }
+          
           // Initialize
+          updateModeUI();
           initEditor();
           loadFileTree();
+          checkAndRestoreEditMode();
           
           // Load initial file from URL parameter or show welcome message
           if (initialFile) {

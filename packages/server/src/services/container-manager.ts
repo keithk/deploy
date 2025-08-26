@@ -264,6 +264,16 @@ export class ContainerManager {
       }
     }
 
+    // Add Git integration environment variables if configured
+    if (site.gitCloneUrl) {
+      runArgs.push('-e', `GIT_CLONE_URL=${site.gitCloneUrl}`);
+      debug(`Added GIT_CLONE_URL: ${site.gitCloneUrl}`);
+    }
+    if (site.gitBranch) {
+      runArgs.push('-e', `GIT_BRANCH=${site.gitBranch}`);
+      debug(`Added GIT_BRANCH: ${site.gitBranch}`);
+    }
+
     runArgs.push(imageName);
 
     debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
@@ -433,12 +443,43 @@ export class ContainerManager {
     const container = this.containers.get(containerName);
     const childProcess = this.processes.get(containerName);
 
+    // If container not in our registry, check if it's a running Docker container
     if (!container) {
+      const isDockerRunning = await this.isDockerContainerRunning(containerName);
+      if (isDockerRunning) {
+        info(`Docker container ${containerName} found but not in registry, stopping directly`);
+        try {
+          await this.executeCommand(`docker stop ${containerName}`);
+          debug(`Docker container ${containerName} stopped successfully`);
+          return;
+        } catch (err) {
+          error(`Failed to stop unregistered Docker container ${containerName}: ${err}`);
+          throw err;
+        }
+      }
       throw new Error(`Container ${containerName} not found`);
     }
 
-    if (childProcess && !childProcess.killed) {
-      info(`Stopping container ${containerName}`);
+    info(`Stopping container ${containerName} (strategy: ${container.strategy})`);
+
+    // Handle Docker containers
+    if (container.strategy === 'docker') {
+      try {
+        await this.executeCommand(`docker stop ${containerName}`);
+        debug(`Docker container ${containerName} stopped successfully`);
+      } catch (err) {
+        warn(`Failed to stop Docker container ${containerName}: ${err}`);
+        // Try force stop
+        try {
+          await this.executeCommand(`docker kill ${containerName}`);
+          debug(`Docker container ${containerName} force killed`);
+        } catch (killErr) {
+          error(`Failed to force kill Docker container ${containerName}: ${killErr}`);
+        }
+      }
+    }
+    // Handle process-based containers
+    else if (childProcess && !childProcess.killed) {
       childProcess.kill('SIGTERM');
       
       // Force kill after 5 seconds if not stopped
@@ -487,6 +528,20 @@ export class ContainerManager {
   }
 
   /**
+   * Checks if a Docker container is running (even if not in our registry)
+   */
+  private async isDockerContainerRunning(containerName: string): Promise<boolean> {
+    try {
+      const { stdout } = await this.executeCommand(
+        `docker ps -q --filter name=^${containerName}$`
+      );
+      return stdout.trim() !== '';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
    * Checks if a container exists and is running
    */
   async isContainerRunning(containerName: string): Promise<boolean> {
@@ -494,14 +549,12 @@ export class ContainerManager {
     
     // For Docker containers, check with Docker directly
     if (container?.strategy === 'docker') {
-      try {
-        const { stdout } = await this.executeCommand(
-          `docker ps -q --filter name=${containerName}`
-        );
-        return stdout.trim() !== '';
-      } catch (err) {
-        return false;
-      }
+      return this.isDockerContainerRunning(containerName);
+    }
+    
+    // If not in registry, check if it's a Docker container anyway
+    if (!container) {
+      return this.isDockerContainerRunning(containerName);
     }
     
     // For other containers, use our internal status

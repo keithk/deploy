@@ -165,6 +165,113 @@ export const migrations: Migration[] = [
       ('astro', 'Astro Site', 'Modern static site with Astro', '["package.json", "astro.config.mjs", "src/pages/index.astro"]', 'npm install', 'npm run build', 'npm run preview');
     `,
     down: `DROP TABLE site_templates;`
+  },
+  {
+    version: 6,
+    name: "create_site_repositories_table",
+    up: `
+      CREATE TABLE site_repositories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        site_name VARCHAR(100) NOT NULL,
+        site_id INTEGER,
+        git_initialized BOOLEAN DEFAULT FALSE,
+        main_branch VARCHAR(100) DEFAULT 'main',
+        
+        -- Git repository metadata
+        total_commits INTEGER DEFAULT 0,
+        last_commit_hash VARCHAR(40),
+        last_commit_message TEXT,
+        last_commit_date DATETIME,
+        
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+        UNIQUE(site_name)
+      );
+      
+      CREATE INDEX idx_site_repos_name ON site_repositories(site_name);
+      CREATE INDEX idx_site_repos_site_id ON site_repositories(site_id);
+    `,
+    down: `DROP TABLE site_repositories;`
+  },
+  {
+    version: 7,
+    name: "create_editing_sessions_table",
+    up: `
+      CREATE TABLE editing_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        site_name VARCHAR(100) NOT NULL,
+        branch_name VARCHAR(200) NOT NULL,
+        container_name VARCHAR(200),
+        
+        -- Session status
+        status VARCHAR(20) DEFAULT 'active', -- active, inactive, deploying, failed
+        mode VARCHAR(20) DEFAULT 'edit', -- edit, preview
+        
+        -- Preview container info
+        preview_port INTEGER,
+        preview_url VARCHAR(500),
+        
+        -- Activity tracking
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_save DATETIME,
+        last_commit DATETIME,
+        
+        -- Git info
+        base_commit_hash VARCHAR(40),
+        current_commit_hash VARCHAR(40),
+        commits_count INTEGER DEFAULT 0,
+        
+        -- Auto-cleanup
+        expires_at DATETIME,
+        auto_cleanup BOOLEAN DEFAULT TRUE,
+        
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(site_name, branch_name)
+      );
+      
+      CREATE INDEX idx_editing_sessions_user ON editing_sessions(user_id);
+      CREATE INDEX idx_editing_sessions_site ON editing_sessions(site_name);
+      CREATE INDEX idx_editing_sessions_status ON editing_sessions(status);
+      CREATE INDEX idx_editing_sessions_activity ON editing_sessions(last_activity);
+      CREATE INDEX idx_editing_sessions_expires ON editing_sessions(expires_at);
+    `,
+    down: `DROP TABLE editing_sessions;`
+  },
+  {
+    version: 8,
+    name: "create_branch_commits_table",
+    up: `
+      CREATE TABLE branch_commits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        site_name VARCHAR(100) NOT NULL,
+        branch_name VARCHAR(200) NOT NULL,
+        
+        -- Commit info
+        commit_hash VARCHAR(40) NOT NULL,
+        commit_message TEXT NOT NULL,
+        commit_author VARCHAR(255) NOT NULL,
+        
+        -- File changes
+        files_changed INTEGER DEFAULT 0,
+        files_added INTEGER DEFAULT 0,
+        files_deleted INTEGER DEFAULT 0,
+        files_modified TEXT, -- JSON array of changed files
+        
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        
+        FOREIGN KEY (session_id) REFERENCES editing_sessions(id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX idx_branch_commits_session ON branch_commits(session_id);
+      CREATE INDEX idx_branch_commits_site ON branch_commits(site_name);
+      CREATE INDEX idx_branch_commits_hash ON branch_commits(commit_hash);
+    `,
+    down: `DROP TABLE branch_commits;`
   }
 ];
 

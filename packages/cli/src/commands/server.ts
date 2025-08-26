@@ -21,6 +21,7 @@ import {
 } from "@keithk/deploy-core";
 import { startServer } from "@keithk/deploy-server";
 import { processManager } from "@keithk/deploy-server/src/utils/process-manager";
+import { gogsService } from "../utils/gogs-service";
 
 async function ensureCaddyRunning(mode: 'dev' | 'production'): Promise<boolean> {
   if (await isCaddyRunning()) {
@@ -140,6 +141,23 @@ async function doctorCommand(): Promise<void> {
     const domain = getDomain();
     info(`✅ Domain: ${domain}`);
     
+    // Check Gogs service
+    info("\n📋 Checking Gogs service...");
+    const gogsRunning = await gogsService.isRunning();
+    if (gogsRunning) {
+      info("✅ Gogs service is running");
+      info(`   URL: ${gogsService.getExternalUrl()}`);
+    } else {
+      warn("⚠️ Gogs service is not running");
+      info("Testing Gogs startup...");
+      const gogsSuccess = await gogsService.start();
+      if (gogsSuccess) {
+        info("✅ Gogs started successfully");
+      } else {
+        error("❌ Gogs failed to start - check Docker installation");
+      }
+    }
+    
     info("\n🎉 Diagnostics completed!");
     info("💡 If issues persist, try 'deploy start --foreground' for detailed logs");
     
@@ -233,14 +251,23 @@ export function registerServerCommands(program: Command): void {
         // Ensure Caddy is running with latest configuration
         await ensureCaddyRunning('production');
 
+        // Ensure Gogs service is running for Git operations
+        info("Ensuring Gogs service is running...");
+        const gogsSuccess = await gogsService.start();
+        if (!gogsSuccess) {
+          warn("Failed to start Gogs service. Git operations may not work properly.");
+        }
+
 
         // Register built-in sites BEFORE starting server
         // because startServer() immediately calls discoverSites()
         try {
           const { registerAdminSite } = await import("../admin/register");
           const { registerEditorSite } = await import("../editor/register");
+          const { registerGitSite } = await import("../git/register");
           await registerAdminSite();
           await registerEditorSite();
+          await registerGitSite();
         } catch (err) {
           warn("Failed to register built-in sites:", err);
         }
@@ -308,6 +335,13 @@ export function registerServerCommands(program: Command): void {
           warn("You can run 'bun run setup:macos' to set up Caddy.");
         }
 
+        // Ensure Gogs service is running for Git operations
+        info("Ensuring Gogs service is running...");
+        const gogsSuccess = await gogsService.start();
+        if (!gogsSuccess) {
+          warn("Failed to start Gogs service. Git operations may not work properly.");
+        }
+
 
         // Start the server
         info("Starting server in development mode...");
@@ -323,8 +357,10 @@ export function registerServerCommands(program: Command): void {
         try {
           const { registerAdminSite } = await import("../admin/register");
           const { registerEditorSite } = await import("../editor/register");
+          const { registerGitSite } = await import("../git/register");
           await registerAdminSite();
           await registerEditorSite();
+          await registerGitSite();
         } catch (err) {
           warn("Failed to register built-in sites:", err);
         }

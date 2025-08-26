@@ -30,6 +30,11 @@ export interface ProcessRegistryEntry {
   status: string;
 }
 
+// Export empty objects as placeholders to ensure types are available at runtime
+// This is a workaround for Bun's bundling removing interfaces
+export const ProcessInfo = {} as ProcessInfo;
+export const ProcessRegistryEntry = {} as ProcessRegistryEntry;
+
 /**
  * Process Model for managing process records in the database
  */

@@ -5,6 +5,9 @@ import chalk from "chalk";
 import { generateCaddyfileContent } from "@keithk/deploy-core";
 import { execCommand, ensureDir } from "../utils/setup-utils";
 
+// Import CaddyManager for dynamic route management
+import { CaddyManager } from "@keithk/deploy-server/dist/services/caddy-manager";
+
 // Log functions using chalk
 const log = {
   info: (message: string) => console.log(chalk.blue(`[INFO] `) + message),
@@ -214,6 +217,104 @@ export function registerCaddyfileCommands(program: Command): void {
             error instanceof Error ? error.message : String(error)
           }`
         );
+        process.exit(1);
+      }
+    });
+
+  // Dynamic routes management commands
+  caddyfileCommand
+    .command("routes")
+    .description("Manage dynamic preview routes")
+    .option("--list", "List all active dynamic routes")
+    .option("--cleanup", "Clean up expired routes")
+    .option("--reload", "Reload Caddy configuration")
+    .action(async (options) => {
+      try {
+        const caddyManager = CaddyManager.getInstance();
+
+        if (options.list) {
+          log.step("Listing active dynamic routes...");
+          const routes = caddyManager.getDynamicRoutes();
+          
+          if (routes.length === 0) {
+            log.info("No active dynamic routes found.");
+          } else {
+            console.log(chalk.cyan("\nActive Dynamic Routes:"));
+            console.log(chalk.gray("─".repeat(80)));
+            
+            for (const route of routes) {
+              console.log(`${chalk.green("●")} ${chalk.bold(route.subdomain)}`);
+              console.log(`   ${chalk.gray("Session:")} ${route.sessionId}`);
+              console.log(`   ${chalk.gray("Site:")} ${route.siteName}`);
+              console.log(`   ${chalk.gray("Target:")} localhost:${route.targetPort}`);
+              console.log(`   ${chalk.gray("Created:")} ${route.createdAt.toLocaleString()}`);
+              console.log("");
+            }
+          }
+        }
+
+        if (options.cleanup) {
+          log.step("Cleaning up expired routes...");
+          const cleanedUp = await caddyManager.cleanupExpiredRoutes();
+          
+          if (cleanedUp > 0) {
+            log.success(`Cleaned up ${cleanedUp} expired routes.`);
+          } else {
+            log.info("No expired routes found.");
+          }
+        }
+
+        if (options.reload) {
+          log.step("Reloading Caddy configuration...");
+          await caddyManager.reloadCaddy();
+          log.success("Caddy configuration reloaded successfully.");
+        }
+
+        // If no options provided, show status
+        if (!options.list && !options.cleanup && !options.reload) {
+          const info = caddyManager.getCaddyInfo();
+          
+          console.log(chalk.cyan("\nCaddy Manager Status:"));
+          console.log(chalk.gray("─".repeat(40)));
+          console.log(`${chalk.gray("Caddyfile:")} ${info.caddyfilePath}`);
+          console.log(`${chalk.gray("Domain:")} ${info.projectDomain}`);
+          console.log(`${chalk.gray("Mode:")} ${info.isDevelopment ? 'Development' : 'Production'}`);
+          console.log(`${chalk.gray("Dynamic Routes:")} ${info.dynamicRoutesCount}`);
+          
+          // Check Caddy health
+          const isHealthy = await caddyManager.checkCaddyHealth();
+          console.log(`${chalk.gray("Caddy Status:")} ${isHealthy ? chalk.green('Running') : chalk.red('Not Running')}`);
+        }
+
+        process.exit(0);
+      } catch (error) {
+        log.error(`Routes management error: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
+    });
+
+  caddyfileCommand
+    .command("generate-with-dynamic")
+    .description("Generate Caddyfile including current dynamic routes")
+    .option("--output <file>", "Output file path (defaults to stdout)")
+    .action(async (options) => {
+      try {
+        log.step("Generating Caddyfile with dynamic routes...");
+        
+        const caddyManager = CaddyManager.getInstance();
+        const content = await caddyManager.generateCaddyfileWithDynamicRoutes();
+        
+        if (options.output) {
+          await Bun.write(resolve(options.output), content);
+          log.success(`Caddyfile generated at ${resolve(options.output)}`);
+        } else {
+          console.log("\n" + chalk.cyan("Generated Caddyfile content:") + "\n");
+          console.log(content);
+        }
+        
+        process.exit(0);
+      } catch (error) {
+        log.error(`Generation error: ${error instanceof Error ? error.message : String(error)}`);
         process.exit(1);
       }
     });

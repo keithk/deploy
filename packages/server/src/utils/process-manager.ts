@@ -107,18 +107,7 @@ interface ProcessInfo {
   };
 }
 
-// Interface for process registry entry
-interface ProcessRegistryEntry {
-  id: string;
-  site: string;
-  port: number;
-  pid?: number;
-  startTime: number;
-  type: string;
-  script: string;
-  cwd: string;
-  status: string;
-}
+// Use the ProcessRegistryEntry from core package (imported as DbProcessRegistryEntry above)
 
 /**
  * Process Manager for managing site processes

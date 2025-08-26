@@ -5,6 +5,8 @@ import { existsSync } from 'fs';
 import { Database } from '@keithk/deploy-core/src/database/database';
 import { requireAuth } from './auth';
 import { sanitizePath, isEditableFile, getFileLanguage } from '../utils/site-helpers';
+import { editingSessionManager } from '@keithk/deploy-server/src/services/editing-session-manager';
+import { gogsClient } from '@keithk/deploy-server/src/services/simple-gogs-client';
 
 const fileRoutes = new Hono();
 
@@ -206,8 +208,38 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c) => {
       await mkdir(dir, { recursive: true });
     }
     
-    // Write file content
-    await writeFile(fullPath, content, 'utf-8');
+    // Check if user has active editing session
+    const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
+    
+    if (activeSession) {
+      // Save to Git branch via Gogs API instead of local file
+      try {
+        console.log(`Saving file ${filepath} to Git branch ${activeSession.branch_name} via Gogs`);
+        await gogsClient.updateFile(
+          siteName,
+          filepath,
+          content,
+          activeSession.branch_name,
+          `Update ${filepath}`
+        );
+        console.log(`File saved to Git successfully`);
+        
+        // Restart container (will pull latest changes)
+        console.log(`Restarting preview container for session ${activeSession.id} after Git save`);
+        editingSessionManager.restartPreviewContainer(activeSession.id)
+          .catch(err => console.error(`Failed to restart preview container: ${err}`));
+        
+      } catch (gitError) {
+        console.error(`Failed to save file to Git: ${gitError}`);
+        // Fallback to local file save if Git fails
+        console.log(`Falling back to local file save for ${filepath}`);
+        await writeFile(fullPath, content, 'utf-8');
+      }
+    } else {
+      // No active session - save to local filesystem (normal behavior)
+      console.log(`No active editing session - saving ${filepath} locally`);
+      await writeFile(fullPath, content, 'utf-8');
+    }
     
     // Update last_edited in database
     const db = Database.getInstance();
