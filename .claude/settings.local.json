@@ -75,7 +75,19 @@
       "Bash(docker restart:*)",
       "Bash(./railpack plan sites/home)",
       "Bash(docker run:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy bun packages/server/src/scripts/initialize-git-repos.ts)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy bun run packages/server/src/scripts/initialize-git-repos.ts)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy bun ./packages/server/src/scripts/initialize-git-repos.ts)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy bun src/scripts/initialize-git-repos.ts)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy LOG_LEVEL=0 bun src/scripts/initialize-git-repos.ts)",
+      "Bash(ROOT_DIR=/Users/keith/projects/deploy/sites timeout 5 bun src/index.ts)",
+      "Bash(PORT=3005 timeout 3 bun packages/cli/dist/index.js dev)",
+      "Bash(PORT=3005 timeout 3 bun packages/cli dev)",
+      "Bash(PORT=3005 timeout 3 bun run packages/cli dev)",
+      "Bash(PORT=3005 timeout 3 bun run dev)",
+      "Bash(docker exec:*)",
+      "Bash(docker inspect:*)"
     ],
     "deny": [],
     "additionalDirectories": [

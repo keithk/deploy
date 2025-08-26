@@ -2,7 +2,7 @@
 
 @font-face {
   font-family: 'MonaspaceNeon';
-  src: url('../admin/static/MonaspaceNeon.ttf') format('truetype');
+  src: url('/static/MonaspaceNeon.ttf') format('truetype');
   font-display: swap;
 }
 

@@ -14,7 +14,7 @@ app.get('/', (c) => {
       <style>
         body {
           font-family: 'MonaspaceNeon', 'Fira Code', monospace;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: green;
           color: #f8f9fa;
           margin: 0;
           padding: 0;
@@ -62,7 +62,7 @@ app.get('/', (c) => {
     <body>
       <div class="container">
         <h1>👋 Hey, I'm Keith</h1>
-        <p>Welcome to my corner of the internet. This is my home base for projects and experiments...? Whyyyy does it not update :( so close</p>
+        <p>Just testing that you can see this...</p>
         <div class="links">
           <a href="https://editor.dev.deploy" class="link">🛠️ Editor</a>
           <a href="https://admin.dev.deploy" class="link">⚙️ Admin</a>

@@ -1,4 +1,4 @@
-import { gitManager } from './git-manager';
+import { gitService } from './git-service';
 import { Database } from '@keithk/deploy-core/src/database/database';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -91,11 +91,11 @@ export class SiteRepositoryManager {
     }
 
     // Initialize Git repository
-    await gitManager.initializeRepository(sitePath);
+    await gitService.initializeRepository(sitePath);
 
     // Get initial commit info
-    const status = await gitManager.getStatus(sitePath);
-    const history = await gitManager.getCommitHistory(sitePath, 1);
+    const status = await gitService.getStatus(sitePath);
+    const history = await gitService.getCommitHistory(sitePath, 1);
     const firstCommit = history[0];
 
     // Create or update repository record
@@ -188,8 +188,8 @@ export class SiteRepositoryManager {
    */
   async updateRepositoryMetadata(siteName: string, sitePath: string): Promise<void> {
     try {
-      const status = await gitManager.getStatus(sitePath);
-      const history = await gitManager.getCommitHistory(sitePath, 1);
+      const status = await gitService.getStatus(sitePath);
+      const history = await gitService.getCommitHistory(sitePath, 1);
       const latestCommit = history[0];
 
       if (!latestCommit) {
@@ -197,7 +197,7 @@ export class SiteRepositoryManager {
       }
 
       // Count total commits
-      const allHistory = await gitManager.getCommitHistory(sitePath, 1000);
+      const allHistory = await gitService.getCommitHistory(sitePath, 1000);
       const totalCommits = allHistory.length;
 
       this.db.run(`

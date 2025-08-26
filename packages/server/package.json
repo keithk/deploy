@@ -12,7 +12,8 @@
   "dependencies": {
     "@keithk/deploy-actions": "workspace:*",
     "@keithk/deploy-core": "workspace:*",
-    "croner": "^9.0.0"
+    "croner": "^9.0.0",
+    "simple-git": "^3.28.0"
   },
   "devDependencies": {
     "bun-types": "latest"

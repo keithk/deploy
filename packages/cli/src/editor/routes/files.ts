@@ -5,8 +5,38 @@ import { existsSync } from 'fs';
 import { Database } from '@keithk/deploy-core/src/database/database';
 import { requireAuth } from './auth';
 import { sanitizePath, isEditableFile, getFileLanguage } from '../utils/site-helpers';
+
+/**
+ * Helper to detect if a project has file watching capability
+ */
+async function detectFileWatching(sitePath: string): Promise<boolean> {
+  try {
+    const { existsSync, readFileSync } = await import('fs');
+    const { join } = await import('path');
+    
+    const packageJsonPath = join(sitePath, 'package.json');
+    if (!existsSync(packageJsonPath)) {
+      return false;
+    }
+    
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+    
+    // Check for dev script (most common indicator)
+    if (packageJson.scripts?.dev) {
+      return true;
+    }
+    
+    // Check for file watching frameworks/tools
+    const watchingDependencies = ['vite', 'next', 'nuxt', 'webpack-dev-server', 'nodemon'];
+    const allDeps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    
+    return watchingDependencies.some(dep => allDeps[dep]);
+  } catch (err) {
+    return false;
+  }
+}
 import { editingSessionManager } from '@keithk/deploy-server/src/services/editing-session-manager';
-import { gogsClient } from '@keithk/deploy-server/src/services/simple-gogs-client';
+import { gitService } from '@keithk/deploy-server/src/services/git-service';
 
 const fileRoutes = new Hono();
 
@@ -212,22 +242,27 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c) => {
     const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
     
     if (activeSession) {
-      // Save to Git branch via Gogs API instead of local file
+      // Save to Git branch using local git service
       try {
-        console.log(`Saving file ${filepath} to Git branch ${activeSession.branch_name} via Gogs`);
-        await gogsClient.updateFile(
-          siteName,
-          filepath,
-          content,
-          activeSession.branch_name,
-          `Update ${filepath}`
-        );
-        console.log(`File saved to Git successfully`);
+        console.log(`Saving file ${filepath} to Git branch ${activeSession.branchName} using local Git service`);
         
-        // Restart container (will pull latest changes)
-        console.log(`Restarting preview container for session ${activeSession.id} after Git save`);
-        editingSessionManager.restartPreviewContainer(activeSession.id)
-          .catch(err => console.error(`Failed to restart preview container: ${err}`));
+        // Write file to local filesystem first (on the correct branch)
+        await writeFile(fullPath, content, 'utf-8');
+        
+        // Switch to the session branch and commit the changes
+        await gitService.checkoutBranch(sitePath, activeSession.branchName);
+        const commitHash = await gitService.commitChanges(sitePath, `Update ${filepath}`);
+        
+        if (commitHash) {
+          console.log(`File saved to Git branch successfully: ${commitHash}`);
+          
+          // Update session commit tracking
+          await editingSessionManager.commitSession(activeSession.id, sitePath, {
+            message: `Update ${filepath}`,
+            author: user.username || 'Anonymous'
+          });
+        }
+        
         
       } catch (gitError) {
         console.error(`Failed to save file to Git: ${gitError}`);
@@ -248,7 +283,53 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c) => {
       [siteName]
     );
     
-    return c.json({ success: true, message: 'File saved successfully' });
+    // Determine response based on whether we had an active session
+    let responseMessage = 'File saved successfully';
+    let containerStatus = 'none';
+    let updateType = 'none';
+    let estimatedDuration = 0;
+    
+    if (activeSession) {
+      const restartSuccess = await editingSessionManager.restartPreviewContainer(
+        activeSession.id, 
+        [filepath]
+      ).catch(err => {
+        console.error(`Container restart failed: ${err}`);
+        return false;
+      });
+      
+      if (restartSuccess === true) {
+        // Check if it was a fast file watching update or slow container restart
+        const hasWatching = await detectFileWatching(sitePath);
+        const isPackageChange = filepath.includes('package.json');
+        
+        if (hasWatching && !isPackageChange) {
+          responseMessage = 'File saved - preview updating automatically';
+          containerStatus = 'watching';
+          updateType = 'hot_reload';
+          estimatedDuration = 1;
+        } else {
+          responseMessage = 'File saved and preview updated';
+          containerStatus = 'restarted';
+          updateType = 'container_restart';
+          estimatedDuration = isPackageChange ? 20 : 5;
+        }
+      } else {
+        responseMessage = 'File saved, but preview update failed';
+        containerStatus = 'failed';
+        updateType = 'failed';
+      }
+    }
+    
+    return c.json({ 
+      success: true, 
+      message: responseMessage,
+      containerStatus,
+      updateType,
+      estimatedDuration,
+      hasActiveSession: !!activeSession,
+      timestamp: new Date().toISOString()
+    });
     
   } catch (error) {
     console.error('Error saving file:', error);

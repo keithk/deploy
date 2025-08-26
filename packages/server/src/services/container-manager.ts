@@ -257,6 +257,12 @@ export class ContainerManager {
       '--rm' // Auto-remove when stopped
     ];
 
+    // For preview containers, mount the site directory for live file updates
+    if (container.type === 'preview') {
+      runArgs.push('-v', `${site.path}:/app`);
+      debug(`Preview container mounting: ${site.path}:/app`);
+    }
+
     // Add environment variables
     if (site.environment) {
       for (const [key, value] of Object.entries(site.environment)) {
@@ -274,7 +280,23 @@ export class ContainerManager {
       debug(`Added GIT_BRANCH: ${site.gitBranch}`);
     }
 
-    runArgs.push(imageName);
+    // For preview containers, override the command to use dev mode
+    if (container.type === 'preview') {
+      // Check if site has mise configuration
+      const { detectPackageManager } = await import('@keithk/deploy-core/src/utils/packageManager');
+      const packageManager = detectPackageManager(site.path);
+      
+      if (packageManager === 'mise') {
+        runArgs.push(imageName, 'mise', 'run', 'dev');
+        debug(`Preview container using mise: mise run dev`);
+      } else {
+        // Fall back to traditional package manager dev command
+        runArgs.push(imageName, 'bun', 'run', 'dev');
+        debug(`Preview container using fallback: bun run dev`);
+      }
+    } else {
+      runArgs.push(imageName);
+    }
 
     debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
 
@@ -559,6 +581,53 @@ export class ContainerManager {
     
     // For other containers, use our internal status
     return container?.status === 'running' || false;
+  }
+
+  /**
+   * Waits for a container to be healthy and ready to serve traffic
+   */
+  async waitForContainerHealth(containerName: string, maxWaitMs: number = 30000): Promise<boolean> {
+    const container = this.containers.get(containerName);
+    if (!container) {
+      return false;
+    }
+
+    const startTime = Date.now();
+    const healthCheckUrl = `http://localhost:${container.port}/`;
+    
+    debug(`Waiting for container ${containerName} to be healthy at ${healthCheckUrl}`);
+    
+    while (Date.now() - startTime < maxWaitMs) {
+      try {
+        // Check if container is still running first
+        const isRunning = await this.isContainerRunning(containerName);
+        if (!isRunning) {
+          warn(`Container ${containerName} stopped during health check`);
+          return false;
+        }
+
+        // Try to fetch from the container's health endpoint
+        const response = await fetch(healthCheckUrl, {
+          method: 'GET',
+          timeout: 2000,
+        });
+        
+        if (response.ok) {
+          info(`Container ${containerName} is healthy and ready`);
+          return true;
+        }
+        
+        debug(`Health check failed for ${containerName}: ${response.status}`);
+      } catch (err) {
+        debug(`Health check error for ${containerName}: ${err}`);
+      }
+      
+      // Wait 500ms before next check
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    warn(`Container ${containerName} failed to become healthy within ${maxWaitMs}ms`);
+    return false;
   }
 
   private executeCommand(command: string): Promise<{ stdout: string; stderr: string }> {

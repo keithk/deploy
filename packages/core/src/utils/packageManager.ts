@@ -2,11 +2,17 @@ import { join } from "path";
 import { existsSync } from "fs";
 
 /**
- * Detects the package manager used in a project based on lock files.
+ * Detects the package manager used in a project, preferring mise when available.
  * @param sitePath The path to the site directory
- * @returns The detected package manager ('npm', 'yarn', 'pnpm', or 'bun')
+ * @returns The detected package manager ('mise', 'bun', 'yarn', 'pnpm', or 'npm')
  */
 export function detectPackageManager(sitePath: string): string {
+  // Check for mise configuration first
+  if (existsSync(join(sitePath, ".mise.toml"))) {
+    return "mise";
+  }
+  
+  // Fallback to traditional lock file detection
   if (existsSync(join(sitePath, "bun.lock"))) {
     return "bun";
   } else if (existsSync(join(sitePath, "yarn.lock"))) {
@@ -31,6 +37,8 @@ export function getPackageManagerCommand(
   args: string[] = []
 ): string[] {
   switch (packageManager) {
+    case "mise":
+      return ["mise", "run", script, ...args];
     case "yarn":
       return ["yarn", script, ...args];
     case "pnpm":

@@ -1,9 +1,10 @@
 import { Database } from '@keithk/deploy-core/src/database/database';
 import type { SiteConfig } from '@keithk/deploy-core';
-import { gitManager } from './git-manager';
+import { gitService } from './git-service';
 import { containerManager } from './container-manager';
 import { caddyManager } from './caddy-manager';
 import { debug, info, warn, error } from '../utils/logging';
+import { join } from 'path';
 
 export interface EditingSession {
   id: number;
@@ -72,14 +73,14 @@ export class EditingSessionManager {
     await this.enforceSessionLimits(userId);
     
     // Create Git branch
-    const branchName = await gitManager.createEditBranch(sitePath, baseName);
+    const branchName = await gitService.createEditBranch(sitePath, baseName);
     
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + expirationMinutes);
     
     // Get base commit hash
-    const status = await gitManager.getStatus(sitePath);
+    const status = await gitService.getStatus(sitePath);
     const baseCommitHash = await this.getCurrentCommitHash(sitePath);
     
     // Insert session record using prepared statement
@@ -105,7 +106,7 @@ export class EditingSessionManager {
     if (!session) {
       throw new Error(`Failed to retrieve created session ${sessionId}`);
     }
-    await this.startPreviewContainer(session, sitePath);
+    await this.startPreviewContainer(session, sitePath, false);
     
     info(`Created editing session ${sessionId} with branch ${branchName}`);
     return session;
@@ -177,10 +178,10 @@ export class EditingSessionManager {
     }
     
     // Switch to the session branch
-    await gitManager.checkoutBranch(sitePath, session.branchName);
+    await gitService.checkoutBranch(sitePath, session.branchName);
     
     // Commit changes
-    const commitHash = await gitManager.commitChanges(sitePath, options.message);
+    const commitHash = await gitService.commitChanges(sitePath, options.message);
     
     if (commitHash) {
       // Update session record
@@ -228,7 +229,7 @@ export class EditingSessionManager {
     
     try {
       // Merge branch to main
-      await gitManager.mergeBranchToMain(sitePath, session.branchName);
+      await gitService.mergeBranchToMain(sitePath, session.branchName);
       
       // Clean up session
       await this.cleanupSession(sessionId);
@@ -317,7 +318,7 @@ export class EditingSessionManager {
     if (session.status !== 'deploying') {
       try {
         const sitePath = this.getSitePathFromSession(session);
-        await gitManager.deleteBranch(sitePath, session.branchName, true);
+        await gitService.deleteBranch(sitePath, session.branchName, true);
       } catch (err) {
         warn(`Failed to delete branch ${session.branchName}: ${err}`);
       }
@@ -352,11 +353,17 @@ export class EditingSessionManager {
   /**
    * Starts a preview container for a session
    */
-  private async startPreviewContainer(session: EditingSession, sitePath: string): Promise<void> {
+  private async startPreviewContainer(session: EditingSession, sitePath: string, forceReinstall: boolean = false): Promise<void> {
     const containerName = `${session.branchName}-${session.siteName}-preview`;
     const previewPort = 4000 + session.id; // Start preview ports at 4000+
     
     try {
+      // Ensure we're on the correct branch before starting container
+      await gitService.checkoutBranch(sitePath, session.branchName);
+      
+      // Check if this is a Vite project for special handling
+      const isViteProject = await this.detectViteProject(sitePath);
+      
       // Create a site config for the preview container
       const previewSiteConfig: SiteConfig = {
         subdomain: `${session.branchName}-${session.siteName}`,
@@ -364,11 +371,18 @@ export class EditingSessionManager {
         path: sitePath,
         type: 'passthrough', // Default to passthrough for preview
         proxyPort: previewPort,
-        useContainers: true
+        useContainers: true,
+        // For local Git integration, we don't need clone URL since we mount the directory
+        // The container will use local files that are already on the correct branch
+        environment: {
+          NODE_ENV: 'development',
+          BRANCH_NAME: session.branchName, // Pass branch name for container awareness
+          SITE_NAME: session.siteName,
+          FORCE_REINSTALL: forceReinstall ? 'true' : 'false', // Signal if dependencies need reinstalling
+          IS_VITE_PROJECT: isViteProject ? 'true' : 'false', // Signal Vite project for container configuration
+          VITE_HOST: '0.0.0.0' // Ensure Vite dev server binds to all interfaces
+        }
       };
-      
-      // Checkout to the preview branch before starting container
-      await gitManager.checkoutBranch(sitePath, session.branchName);
       
       // Create and start the preview container
       const container = await containerManager.instance.createContainer(previewSiteConfig, 'preview');
@@ -427,8 +441,8 @@ export class EditingSessionManager {
    */
   private async getCurrentCommitHash(sitePath: string): Promise<string> {
     try {
-      const status = await gitManager.getStatus(sitePath);
-      const history = await gitManager.getCommitHistory(sitePath, 1);
+      const status = await gitService.getStatus(sitePath);
+      const history = await gitService.getCommitHistory(sitePath, 1);
       return history[0]?.hash || '';
     } catch (err) {
       return '';
@@ -441,7 +455,8 @@ export class EditingSessionManager {
   private getSitePathFromSession(session: EditingSession): string {
     // This is a placeholder - we'll need to look up the actual site path
     // from the sites table or pass it through the session
-    return `/path/to/sites/${session.siteName}`;
+    const rootDir = process.env.ROOT_DIR || './sites';
+    return join(rootDir, session.siteName);
   }
 
   /**
@@ -554,16 +569,57 @@ export class EditingSessionManager {
   /**
    * Restarts the preview container for a session to pick up file changes
    */
-  async restartPreviewContainer(sessionId: number): Promise<void> {
+  async restartPreviewContainer(sessionId: number, changedFiles?: string[]): Promise<boolean> {
     const session = await this.getSession(sessionId);
     if (!session || !session.containerName) {
       warn(`No container to restart for session ${sessionId}`);
-      return;
+      return false;
     }
     
     info(`Restarting preview container for session ${sessionId}: ${session.containerName}`);
     
     try {
+      // Get the site path first
+      const sitePath = this.getSitePathFromSession(session);
+      
+      // Ensure we're on the correct Git branch before restarting
+      await gitService.checkoutBranch(sitePath, session.branchName);
+      
+      // Check if package files were modified (requires dependency reinstall)
+      const needsReinstall = changedFiles?.some(file => 
+        file.includes('package.json') || 
+        file.includes('package-lock.json') || 
+        file.includes('bun.lockb') || 
+        file.includes('yarn.lock') ||
+        file.includes('pnpm-lock.yaml')
+      ) || false;
+      
+      // Check if this project supports file watching/hot reload
+      const hasFileWatching = await this.detectFileWatching(sitePath);
+      const isSourceFileChange = changedFiles?.some(file => 
+        !file.includes('package.json') && 
+        !file.includes('.md') &&
+        !file.includes('README') &&
+        (file.includes('.js') || file.includes('.ts') || file.includes('.jsx') || 
+         file.includes('.tsx') || file.includes('.vue') || file.includes('.css') ||
+         file.includes('.scss') || file.includes('.less') || file.includes('.html'))
+      ) || false;
+      
+      // For projects with file watching, only restart if dependencies changed
+      if (hasFileWatching && isSourceFileChange && !needsReinstall) {
+        info(`File watching detected - skipping container restart for ${changedFiles?.join(', ')}`);
+        
+        // Just commit the changes - the dev server will pick them up automatically
+        await gitService.checkoutBranch(sitePath, session.branchName);
+        const commitHash = await gitService.commitChanges(sitePath, `Update ${changedFiles?.join(', ')}`);
+        
+        if (commitHash) {
+          info(`Changes committed to branch: ${commitHash}`);
+        }
+        
+        return true; // File watching will handle updates automatically
+      }
+      
       // Check if container exists and is running
       const isRunning = await containerManager.instance.isContainerRunning(session.containerName);
       
@@ -573,20 +629,157 @@ export class EditingSessionManager {
         await containerManager.instance.stopContainer(session.containerName);
         
         // Wait a moment for cleanup
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
       } else {
         info(`Container ${session.containerName} is not running, will create new one`);
       }
       
-      // Get the site path and restart/start the container
-      const sitePath = this.getSitePathFromSession(session);
-      await this.startPreviewContainer(session, sitePath);
+      // Start the preview container on the updated branch
+      await this.startPreviewContainer(session, sitePath, needsReinstall);
       
-      info(`Successfully restarted preview container for session ${sessionId}`);
+      // Wait for container to be healthy before returning
+      const isHealthy = await containerManager.instance.waitForContainerHealth(session.containerName, 30000);
+      
+      if (isHealthy) {
+        info(`Successfully restarted preview container for session ${sessionId}`);
+        return true;
+      } else {
+        warn(`Preview container for session ${sessionId} started but failed health check`);
+        return false;
+      }
+      
     } catch (err) {
       error(`Failed to restart preview container for session ${sessionId}: ${err}`);
-      // Don't throw the error - log it but continue
-      // This allows the file save to succeed even if container restart fails
+      return false;
+    }
+  }
+
+  /**
+   * Detects if a project has file watching/hot reload capability
+   */
+  private async detectFileWatching(sitePath: string): Promise<boolean> {
+    try {
+      const { existsSync, readFileSync } = await import('fs');
+      
+      // Check for mise configuration first (highest priority)
+      const miseConfigPath = join(sitePath, '.mise.toml');
+      if (existsSync(miseConfigPath)) {
+        try {
+          const miseConfig = readFileSync(miseConfigPath, 'utf8');
+          // Check if mise config has dev task
+          if (miseConfig.includes('[tasks.dev]') || miseConfig.includes('tasks.dev')) {
+            info(`Mise dev task detected in .mise.toml`);
+            return true;
+          }
+        } catch (err) {
+          debug(`Failed to parse mise config: ${err}`);
+        }
+      }
+      
+      const packageJsonPath = join(sitePath, 'package.json');
+      if (!existsSync(packageJsonPath)) {
+        return false;
+      }
+      
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+      
+      // Check for dev script (most common indicator)
+      if (packageJson.scripts?.dev) {
+        info(`Dev script detected in package.json`);
+        return true;
+      }
+      
+      // Check for file watching frameworks/tools
+      const watchingDependencies = [
+        'vite', '@vitejs/plugin-react', '@vitejs/plugin-vue',
+        'next', 'nuxt', '@nuxt/core',
+        'webpack-dev-server', 'webpack',
+        'rollup', '@rollup/plugin-dev',
+        'parcel',
+        'astro', '@astrojs/core',
+        'svelte', '@sveltejs/kit',
+        'remix', '@remix-run/dev',
+        'gatsby',
+        'nodemon', 'ts-node-dev', 'concurrently'
+      ];
+      
+      const allDeps = {
+        ...packageJson.dependencies,
+        ...packageJson.devDependencies
+      };
+      
+      for (const dep of watchingDependencies) {
+        if (allDeps[dep]) {
+          info(`File watching dependency detected: ${dep}`);
+          return true;
+        }
+      }
+      
+      // Check for config files that indicate file watching
+      const watchingConfigs = [
+        'vite.config.js', 'vite.config.ts', 'vite.config.mjs',
+        'next.config.js', 'next.config.mjs', 'next.config.ts',
+        'nuxt.config.js', 'nuxt.config.ts',
+        'webpack.config.js', 'webpack.dev.js',
+        'rollup.config.js', 'rollup.config.mjs',
+        'astro.config.js', 'astro.config.mjs', 'astro.config.ts',
+        'svelte.config.js', 'remix.config.js',
+        'gatsby.config.js'
+      ];
+      
+      for (const configFile of watchingConfigs) {
+        if (existsSync(join(sitePath, configFile))) {
+          info(`File watching config detected: ${configFile}`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      warn(`Failed to detect file watching capability: ${err}`);
+      return false;
+    }
+  }
+
+  /**
+   * Detects if a project is using Vite for hot reload support
+   */
+  private async detectViteProject(sitePath: string): Promise<boolean> {
+    try {
+      const { existsSync, readFileSync } = await import('fs');
+      
+      // Check for vite.config files
+      const viteConfigFiles = [
+        'vite.config.js', 'vite.config.ts', 'vite.config.mjs',
+        'vitest.config.js', 'vitest.config.ts'
+      ];
+      
+      for (const configFile of viteConfigFiles) {
+        if (existsSync(join(sitePath, configFile))) {
+          info(`Vite config detected: ${configFile}`);
+          return true;
+        }
+      }
+      
+      // Check package.json for vite dependency
+      const packageJsonPath = join(sitePath, 'package.json');
+      if (existsSync(packageJsonPath)) {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        const hasVite = packageJson.dependencies?.vite || 
+                       packageJson.devDependencies?.vite ||
+                       packageJson.dependencies?.['@vitejs/plugin-react'] ||
+                       packageJson.devDependencies?.['@vitejs/plugin-react'];
+        
+        if (hasVite) {
+          info(`Vite dependency detected in package.json`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      warn(`Failed to detect Vite project: ${err}`);
+      return false;
     }
   }
 
