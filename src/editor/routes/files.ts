@@ -5,6 +5,7 @@ import { existsSync } from 'fs';
 import { Database } from '../../core/database/database';
 import { requireAuth } from './auth';
 import { sanitizePath, isEditableFile, getFileLanguage } from '../utils/site-helpers';
+import type { HonoContext, SiteData } from '../../types/hono';
 
 /**
  * Helper to detect if a project has file watching capability
@@ -59,6 +60,9 @@ async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolea
   }
   
   const site = sites[0];
+  if (!site) {
+    return { hasAccess: false };
+  }
   
   if (site.user_id !== userId && !isAdmin) {
     return { hasAccess: false };
@@ -122,7 +126,7 @@ async function buildFileTree(dirPath: string, basePath: string, maxDepth: number
 }
 
 // Get file tree for a site
-fileRoutes.get('/sites/:sitename/tree', async (c) => {
+fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   
@@ -148,7 +152,7 @@ fileRoutes.get('/sites/:sitename/tree', async (c) => {
 });
 
 // Read file content
-fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c) => {
+fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   const filepath = c.req.param('filepath');
@@ -200,7 +204,7 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c) => {
 });
 
 // Save file content
-fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c) => {
+fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   const filepath = c.req.param('filepath');
@@ -338,7 +342,7 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c) => {
 });
 
 // Create new file or folder
-fileRoutes.post('/sites/:sitename/file', async (c) => {
+fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   
@@ -389,7 +393,7 @@ fileRoutes.post('/sites/:sitename/file', async (c) => {
 });
 
 // Delete file or folder
-fileRoutes.delete('/sites/:sitename/file/:filepath{.+}', async (c) => {
+fileRoutes.delete('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   const filepath = c.req.param('filepath');

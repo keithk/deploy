@@ -68,7 +68,7 @@ export function getClientIP(request: Request): string {
   // Check common proxy headers
   const xForwardedFor = request.headers.get('x-forwarded-for');
   if (xForwardedFor) {
-    return xForwardedFor.split(',')[0].trim();
+    return xForwardedFor.split(',')[0]?.trim() || 'unknown';
   }
   
   const xRealIP = request.headers.get('x-real-ip');

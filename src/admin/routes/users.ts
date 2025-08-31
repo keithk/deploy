@@ -1,10 +1,44 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './auth';
-import { UserModel } from '../../core/database/models/user';
-import { Database } from '../../core/database/database';
+import { UserModel } from '@core/database/models/user';
+import { Database } from '@core/database/database';
+import type { AdminContext, AppContext } from '@core/types';
+import { spawn } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+
+// Type definitions for site data
+interface LegacySiteData {
+  site: string;
+  status: string;
+  type: string;
+  cwd: string;
+  port?: number;
+}
+
+interface NewSiteData {
+  name: string;
+  domain: string;
+  path: string;
+  status: string;
+  template: string;
+}
+
+type SiteData = LegacySiteData | NewSiteData;
+
+// Type guard functions
+function isLegacySite(site: SiteData): site is LegacySiteData {
+  return 'site' in site;
+}
+
+interface PackageJson {
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
 
 const userModel = new UserModel();
-const userRoutes = new Hono();
+const userRoutes = new Hono<AppContext>();
 
 // Apply admin authentication to all user routes
 userRoutes.use('*', requireAdmin);
@@ -404,7 +438,7 @@ userRoutes.post('/create', async (c) => {
     
   } catch (error) {
     console.error('User creation error:', error);
-    return c.redirect(`/users/create?error=${encodeURIComponent(error.message)}`);
+    return c.redirect(`/users/create?error=${encodeURIComponent((error as Error).message)}`);
   }
 });
 
@@ -701,9 +735,9 @@ userRoutes.get('/sites/:id/manage', async (c) => {
     let packageScripts = {};
     
     if (isLegacy) {
-      packageJsonPath = path.join(siteData.cwd, 'package.json');
+      packageJsonPath = path.join(isLegacySite(siteData) ? siteData.cwd : siteData.path, 'package.json');
     } else {
-      packageJsonPath = path.join('/Users/keith/projects/deploy', siteData.path, 'package.json');
+      packageJsonPath = path.join('/Users/keith/projects/deploy', isLegacySite(siteData) ? siteData.cwd : siteData.path, 'package.json');
     }
     
     try {
@@ -715,10 +749,10 @@ userRoutes.get('/sites/:id/manage', async (c) => {
       console.error('Error reading package.json:', error);
     }
     
-    const siteName = isLegacy ? siteData.site : siteData.name;
+    const siteName = isLegacy ? (siteData as LegacySiteData).site : (siteData as NewSiteData).name;
     const siteStatus = siteData.status;
-    const siteType = isLegacy ? siteData.type : siteData.template;
-    const sitePath = isLegacy ? siteData.cwd : siteData.path;
+    const siteType = isLegacy ? (siteData as LegacySiteData).type : (siteData as NewSiteData).template;
+    const sitePath = isLegacy ? (siteData as LegacySiteData).cwd : (siteData as NewSiteData).path;
     
     return c.html(`
       <!DOCTYPE html>
@@ -747,7 +781,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
               const result = await response.text();
               output.innerHTML = '<pre style="white-space: pre-wrap; font-size: 0.8rem;">' + result + '</pre>';
             } catch (error) {
-              output.innerHTML = '<div style="color: var(--accent-red);">Error: ' + error.message + '</div>';
+              output.innerHTML = '<div style="color: var(--accent-red);">Error: ' + (error as Error).message + '</div>';
             } finally {
               button.disabled = false;
               button.textContent = 'Run ' + script;
@@ -812,12 +846,12 @@ userRoutes.get('/sites/:id/manage', async (c) => {
                     ${isLegacy ? `
                     <div class="activity-item">
                       <span class="activity-action">Port:</span>
-                      <span style="color: var(--accent-blue);">:${siteData.port}</span>
+                      <span style="color: var(--accent-blue);">:${isLegacySite(siteData) ? siteData.port || 3000 : 3000}</span>
                     </div>
                     ` : `
                     <div class="activity-item">
                       <span class="activity-action">Domain:</span>
-                      <span style="color: var(--accent-blue);">${siteData.domain}</span>
+                      <span style="color: var(--accent-blue);">${isLegacySite(siteData) ? siteData.site : (siteData as NewSiteData).domain}</span>
                     </div>
                     `}
                     <div class="activity-item">
@@ -854,7 +888,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
                       </form>
                     `}
                     
-                    <a href="http://${isLegacy ? siteData.site + '.yourdomain' : siteData.domain}" target="_blank" class="btn" style="width: 100%; text-align: center;">
+                    <a href="http://${isLegacy ? (siteData as LegacySiteData).site + '.yourdomain' : (siteData as NewSiteData).domain}" target="_blank" class="btn" style="width: 100%; text-align: center;">
                       🌐 View Site
                     </a>
                   </div>
@@ -877,7 +911,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
                   >
                     <strong>npm run ${script}</strong>
                     <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.25rem;">
-                      ${packageScripts[script]}
+                      ${(packageScripts as Record<string, string>)[script]}
                     </div>
                   </button>
                 `).join('')}
@@ -911,7 +945,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
     
   } catch (error) {
     console.error('Site management error:', error);
-    return c.redirect('/users/sites?error=' + encodeURIComponent(error.message));
+    return c.redirect('/users/sites?error=' + encodeURIComponent((error as Error).message));
   }
 });
 
@@ -929,12 +963,12 @@ userRoutes.post('/sites/:id/run-script', async (c) => {
     
     const processResult = db.query<{ cwd: string }>(`SELECT cwd FROM processes WHERE id = ?`, [siteId]);
     if (processResult.length > 0) {
-      sitePath = processResult[0].cwd;
+      sitePath = processResult[0]?.cwd || '';
       isLegacy = true;
     } else {
       const sites = db.query<{ path: string }>(`SELECT path FROM sites WHERE id = ?`, [parseInt(siteId)]);
       if (sites.length > 0) {
-        sitePath = `/Users/keith/projects/deploy/${sites[0].path}`;
+        sitePath = `/Users/keith/projects/deploy/${sites[0]?.path || ''}`;
       }
     }
     
@@ -953,15 +987,15 @@ userRoutes.post('/sites/:id/run-script', async (c) => {
     let errorOutput = '';
     
     return new Promise((resolve) => {
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout.on('data', (data: Buffer) => {
         output += data.toString();
       });
       
-      childProcess.stderr.on('data', (data) => {
+      childProcess.stderr.on('data', (data: Buffer) => {
         errorOutput += data.toString();
       });
       
-      childProcess.on('close', (code) => {
+      childProcess.on('close', (code: number | null) => {
         const result = `$ npm run ${script}\n\n${output}${errorOutput ? '\nErrors:\n' + errorOutput : ''}\n\nProcess exited with code: ${code}`;
         resolve(c.text(result));
       });
@@ -975,7 +1009,7 @@ userRoutes.post('/sites/:id/run-script', async (c) => {
     
   } catch (error) {
     console.error('Script execution error:', error);
-    return c.json({ error: error.message }, 500);
+    return c.json({ error: (error as Error).message }, 500);
   }
 });
 
@@ -1012,7 +1046,7 @@ userRoutes.get('/projects/unclaimed', async (c) => {
     
     // Get all directories in /sites
     const sitesDir = '/Users/keith/projects/deploy/sites';
-    const directories = fs.readdirSync(sitesDir).filter(item => {
+    const directories = fs.readdirSync(sitesDir).filter((item: string) => {
       const itemPath = path.join(sitesDir, item);
       return fs.statSync(itemPath).isDirectory();
     });
@@ -1021,14 +1055,14 @@ userRoutes.get('/projects/unclaimed', async (c) => {
     const claimedProcesses = db.query<{ site: string }>(`SELECT DISTINCT site FROM processes`);
     const claimedSites = db.query<{ name: string }>(`SELECT DISTINCT name FROM sites`);
     const claimedNames = [
-      ...claimedProcesses.map(p => p.site),
-      ...claimedSites.map(s => s.name)
+      ...claimedProcesses.map((p: any) => p.site),
+      ...claimedSites.map((s: any) => s.name)
     ];
     
     // Find unclaimed directories
     const unclaimedProjects = directories
-      .filter(dir => !claimedNames.includes(dir))
-      .map(dir => {
+      .filter((dir: string) => !claimedNames.includes(dir))
+      .map((dir: string) => {
         const projectPath = path.join(sitesDir, dir);
         let hasPackageJson = false;
         let packageInfo = null;
@@ -1147,7 +1181,7 @@ userRoutes.get('/projects/unclaimed', async (c) => {
                     </tr>
                   </thead>
                   <tbody>
-                    ${unclaimedProjects.map(project => `
+                    ${unclaimedProjects.map((project: any) => `
                       <tr>
                         <td>
                           <strong>${project.name}</strong>
@@ -1257,7 +1291,7 @@ userRoutes.post('/projects/claim', async (c) => {
     
   } catch (error) {
     console.error('Claim project error:', error);
-    return c.redirect(`/users/projects/unclaimed?error=${encodeURIComponent(error.message)}`);
+    return c.redirect(`/users/projects/unclaimed?error=${encodeURIComponent((error as Error).message)}`);
   }
 });
 
@@ -1393,7 +1427,7 @@ userRoutes.get('/projects/:name/preview', async (c) => {
                 <div>
                   <h3 style="color: var(--accent-blue); margin-bottom: 1rem;">📂 File Tree</h3>
                   <div class="file-tree">
-                    ${files.slice(0, 20).map(file => {
+                    ${files.slice(0, 20).map((file: string) => {
                       const filePath = path.join(projectPath, file);
                       const isDir = fs.statSync(filePath).isDirectory();
                       return `<div>${isDir ? '📁' : '📄'} ${file}</div>`;
@@ -1423,7 +1457,7 @@ userRoutes.get('/projects/:name/preview', async (c) => {
               </div>
               
               <div class="activity-log">
-                ${Object.entries(packageInfo.scripts).map(([script, command]) => `
+                ${Object.entries(packageInfo.scripts || {}).map(([script, command]: [string, unknown]) => `
                   <div class="activity-item">
                     <span class="activity-action">npm run ${script}:</span>
                     <span style="color: var(--text-secondary); font-family: monospace; font-size: 0.8rem;">${command}</span>
@@ -1442,7 +1476,7 @@ userRoutes.get('/projects/:name/preview', async (c) => {
     console.error('Project preview error:', error);
     return c.html(`
       <div class="message error">
-        Error loading project preview: ${error.message}
+        Error loading project preview: ${(error as Error).message}
       </div>
     `);
   }
@@ -1475,14 +1509,14 @@ userRoutes.post('/projects/delete', async (c) => {
     
   } catch (error) {
     console.error('Project deletion error:', error);
-    return c.redirect(`/users/projects/unclaimed?error=${encodeURIComponent(error.message)}`);
+    return c.redirect(`/users/projects/unclaimed?error=${encodeURIComponent((error as Error).message)}`);
   }
 });
 
 // Toggle user active/inactive status
 userRoutes.post('/:id/toggle-status', async (c) => {
   const userId = parseInt(c.req.param('id'));
-  const currentUser = c.get('user');
+  const currentUser = c.get('user') as any;
   
   if (userId === currentUser.id) {
     return c.redirect('/users?error=Cannot disable your own account');
@@ -1500,7 +1534,7 @@ userRoutes.post('/:id/toggle-status', async (c) => {
     
   } catch (error) {
     console.error('Toggle status error:', error);
-    return c.redirect(`/users?error=${encodeURIComponent(error.message)}`);
+    return c.redirect(`/users?error=${encodeURIComponent((error as Error).message)}`);
   }
 });
 

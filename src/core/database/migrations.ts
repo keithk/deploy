@@ -317,7 +317,7 @@ export class MigrationManager {
       `SELECT COUNT(*) as count FROM schema_migrations WHERE version = ?`,
       [version]
     );
-    return result[0].count > 0;
+    return (result[0]?.count || 0) > 0;
   }
 
   /**

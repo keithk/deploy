@@ -3,7 +3,7 @@ import type {
   ActionContext,
   ActionHook,
   ActionResult
-} from "../core";
+} from "../../core";
 import { debug, info, warn } from "../../core";
 import { actionRegistry } from "./registry";
 

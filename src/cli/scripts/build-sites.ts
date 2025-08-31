@@ -33,6 +33,7 @@ async function getSites(): Promise<SiteConfig[]> {
 
   for (let i = 0; i < dirs.length; i++) {
     const dir = dirs[i];
+    if (!dir) continue;
     const sitePath = join(rootPath, dir);
 
     try {

@@ -62,7 +62,7 @@ app.get('/', (c) => {
     <body>
       <div class="container">
         <h1>👋 Hey, I'm Keith</h1>
-        <p>Just testing that you can see this...</p>
+        <p>Welcome to my corner of the internet. This is my home base for projects and experiments.</p>
         <div class="links">
           <a href="https://editor.dev.deploy" class="link">🛠️ Editor</a>
           <a href="https://admin.dev.deploy" class="link">⚙️ Admin</a>

@@ -119,7 +119,7 @@ function parseCommand(command: string): { env: Record<string, string>; cmd: stri
   // Look for environment variable assignments at the beginning
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
-    if (part.includes('=') && !part.startsWith('-')) {
+    if (part && part.includes('=') && !part.startsWith('-')) {
       const [key, ...valueParts] = part.split('=');
       if (key && valueParts.length > 0) {
         env[key] = valueParts.join('=');

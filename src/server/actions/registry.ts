@@ -1,4 +1,4 @@
-import type { Action, ActionContext, ActionResult } from "../core";
+import type { Action, ActionContext, ActionResult } from "../../core";
 import { debug, info, warn } from "../../core";
 import { join } from "path";
 import { loadEnvFile } from "../utils";

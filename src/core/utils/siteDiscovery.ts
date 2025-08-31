@@ -44,6 +44,7 @@ export async function discoverSites(
 
     for (let i = 0; i < dirs.length; i++) {
       const dir = dirs[i];
+      if (!dir) continue;
       const sitePath = join(absoluteRootDir, dir);
 
       try {

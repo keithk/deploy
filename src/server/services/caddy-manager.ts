@@ -303,37 +303,6 @@ ${this.config.projectDomain} {${this.config.sslCertPath && this.config.sslKeyPat
   }
 }
 
-# Git service configuration (Gogs)
-git.${this.config.projectDomain} {${this.config.sslCertPath && this.config.sslKeyPath
-  ? `
-  tls ${this.config.sslCertPath} ${this.config.sslKeyPath}`
-  : ''}
-  
-  # Enable compression
-  encode {
-    gzip 6
-    zstd
-  }
-  
-  # Security headers
-  header {
-    -Server
-    X-Content-Type-Options nosniff
-    X-Frame-Options SAMEORIGIN
-    X-XSS-Protection "1; mode=block"
-    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-  }
-  
-  # Proxy to Gogs service
-  reverse_proxy localhost:3010 {
-    header_up Host {host}
-    header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
-    header_up X-Forwarded-Proto {scheme}
-    flush_interval -1
-  }
-}
-
 `;
     }
 

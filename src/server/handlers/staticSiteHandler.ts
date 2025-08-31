@@ -1,5 +1,5 @@
 import { join } from "path";
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 
 /**
  * Creates a handler for static sites.

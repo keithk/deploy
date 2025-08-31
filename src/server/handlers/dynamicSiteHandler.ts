@@ -1,6 +1,6 @@
 import { join } from "path";
 import { existsSync } from "fs";
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 
 /**
  * Creates a handler for dynamic sites.

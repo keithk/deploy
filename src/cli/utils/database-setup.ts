@@ -21,10 +21,11 @@ export async function setupDatabase(domain: string, log: any): Promise<boolean> 
     const existingAdmins = await checkExistingAdmins();
     
     if (existingAdmins.length > 0) {
-      log.info(`Admin user already exists: ${existingAdmins[0].username}`);
+      const adminUser = existingAdmins[0]!;
+      log.info(`Admin user already exists: ${adminUser.username}`);
       
       // Migrate existing sites if any
-      const migratedCount = userModel.migrateExistingSitesToUser(existingAdmins[0].id);
+      const migratedCount = userModel.migrateExistingSitesToUser(adminUser.id);
       if (migratedCount > 0) {
         log.success(`Migrated ${migratedCount} existing sites to admin user`);
       }

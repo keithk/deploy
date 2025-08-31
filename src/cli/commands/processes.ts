@@ -611,7 +611,7 @@ export function registerProcessesCommand(program: Command): void {
                 console.log(chalk.green(`  ✅ ${proc.id} (${duration}ms)`));
               } else {
                 console.log(chalk.red(`  ❌ ${proc.id} (${duration}ms)`));
-                results[proc.id].error = "Restart failed - check logs for details";
+                results[proc.id]!.error = "Restart failed - check logs for details";
               }
               
               // Brief pause between restarts

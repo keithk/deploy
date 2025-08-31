@@ -1,4 +1,4 @@
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 import { processModel } from "../../core";
 import { processManager } from "../utils/process-manager";
 import { discoverSites } from "../discoverSites";
@@ -6,6 +6,14 @@ import { editingSessionManager } from "../services/editing-session-manager";
 import { gitManager } from "../services/git-manager";
 import { spawn } from "bun";
 import { join } from "path";
+import { 
+  ApiResponse, 
+  CreateSiteRequest, 
+  EditSessionRequest, 
+  isDefined, 
+  isNonEmptyString,
+  isCreateSiteRequest
+} from "../../types";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -23,7 +31,7 @@ export async function handleGetSites(request: Request, context: ApiContext): Pro
     
     // Enhance with process status
     const allProcesses = processModel.getAll();
-    const sitesWithStatus = sites.map(site => {
+    const sitesWithStatus = sites.map((site: any) => {
       const siteProcesses = allProcesses.filter(p => p.site === site.subdomain);
       const runningProcess = siteProcesses.find((p: any) => p.status === 'running');
       
@@ -53,7 +61,16 @@ export async function handleGetSites(request: Request, context: ApiContext): Pro
  */
 export async function handleCreateSite(request: Request, context: ApiContext): Promise<Response> {
   try {
-    const { name, type = 'static', force = false } = await request.json();
+    const requestData = await request.json() as unknown;
+    
+    if (!isCreateSiteRequest(requestData)) {
+      return new Response(JSON.stringify({ error: 'Invalid request format' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const { name, type = 'static', force = false } = requestData;
     
     if (!name) {
       return new Response(JSON.stringify({ error: 'Site name is required' }), {
@@ -281,7 +298,8 @@ export async function handleGetServerStatus(request: Request): Promise<Response>
  */
 export async function handleStartEditSession(request: Request, siteName: string, context: ApiContext): Promise<Response> {
   try {
-    const { userId = 1 } = await request.json().catch(() => ({})); // Default to user ID 1 for now
+    const requestData = await request.json().catch(() => ({})) as Partial<EditSessionRequest>;
+    const { userId = 1 } = requestData; // Default to user ID 1 for now
     const sitePath = join(context.rootDir, siteName);
 
     const session = await editingSessionManager.createSession({
@@ -320,7 +338,8 @@ export async function handleCommitEditSession(
   context: ApiContext
 ): Promise<Response> {
   try {
-    const { message } = await request.json().catch(() => ({}));
+    const requestData = await request.json().catch(() => ({})) as { message?: string };
+    const { message } = requestData;
     const sitePath = join(context.rootDir, siteName);
     const sessionIdNum = parseInt(sessionId, 10);
 
@@ -456,6 +475,10 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
 
   // Route API requests
   const firstPart = apiParts[0];
+  if (!firstPart) {
+    return null;
+  }
+  
   if (firstPart === 'sites') {
     if (method === 'GET' && apiParts.length === 1) {
       return handleGetSites(request, context);
@@ -464,15 +487,21 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
       return handleCreateSite(request, context);
     }
     if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'build') {
-      return handleBuildSite(request, apiParts[1], context);
+      const siteName = apiParts[1];
+      if (!siteName) return null;
+      return handleBuildSite(request, siteName, context);
     }
     if (method === 'POST' && apiParts.length === 4 && apiParts[2] === 'run') {
-      return handleRunSiteCommand(request, apiParts[1], apiParts[3], context);
+      const siteName = apiParts[1];
+      const command = apiParts[3];
+      if (!siteName || !command) return null;
+      return handleRunSiteCommand(request, siteName, command, context);
     }
     
     // Git workflow endpoints
     if (apiParts.length >= 3 && apiParts[2] === 'edit') {
       const siteName = apiParts[1];
+      if (!siteName) return null;
       
       // GET /api/sites/:name/edit/status
       if (method === 'GET' && apiParts.length === 4 && apiParts[3] === 'status') {
@@ -488,6 +517,7 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
       if (apiParts.length >= 5) {
         const sessionId = apiParts[3];
         const action = apiParts[4];
+        if (!sessionId || !action) return null;
         
         // POST /api/sites/:name/edit/:sessionId/commit
         if (method === 'POST' && action === 'commit') {
@@ -512,15 +542,20 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
       return handleGetProcesses(request);
     }
     if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'start') {
-      return handleStartProcess(request, apiParts[1]);
+      const siteName = apiParts[1];
+      if (!siteName) return null;
+      return handleStartProcess(request, siteName);
     }
     if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'stop') {
-      return handleStopProcess(request, apiParts[1]);
+      const siteName = apiParts[1];
+      if (!siteName) return null;
+      return handleStopProcess(request, siteName);
     }
   }
 
-  if (firstPart === 'server' && apiParts[1] === 'status') {
-    if (method === 'GET') {
+  if (firstPart === 'server') {
+    const secondPart = apiParts[1];
+    if (secondPart === 'status' && method === 'GET') {
       return handleGetServerStatus(request);
     }
   }

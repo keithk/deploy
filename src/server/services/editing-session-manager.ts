@@ -1,5 +1,5 @@
 import { Database } from '../../core/database/database';
-import type { SiteConfig } from '../core';
+import type { SiteConfig } from "../../core";
 import { gitService } from './git-service';
 import { containerManager } from './container-manager';
 import { caddyManager } from './caddy-manager';

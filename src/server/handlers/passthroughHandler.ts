@@ -1,4 +1,4 @@
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 import { detectPackageManager } from "../../core";
 import { proxyRequest } from "../utils/proxy";
 import { processManager } from "../utils/process-manager";

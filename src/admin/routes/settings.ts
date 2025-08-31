@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './auth';
-import { Database } from '../../core/database/database';
+import { Database } from '@core/database/database';
+import type { AdminContext, AppContext } from '@core/types';
 
-const settingsRoutes = new Hono();
+const settingsRoutes = new Hono<AppContext>();
 
 // Apply admin authentication to all settings routes
 settingsRoutes.use('*', requireAdmin);
@@ -261,7 +262,7 @@ settingsRoutes.post('/', async (c) => {
     
   } catch (error) {
     console.error('Save settings error:', error);
-    return c.redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+    return c.redirect(`/settings?error=${encodeURIComponent((error as Error).message)}`);
   }
 });
 

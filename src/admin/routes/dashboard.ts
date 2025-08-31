@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './auth';
-import { UserModel } from '../../core/database/models/user';
-import { Database } from '../../core/database/database';
+import { UserModel } from '@core/database/models/user';
+import { Database } from '@core/database/database';
+import type { AdminContext, AppContext } from '@core/types';
+import { Context } from 'hono';
 
 const userModel = new UserModel();
-const dashboardRoutes = new Hono();
+const dashboardRoutes = new Hono<AppContext>();
 
 // Apply admin authentication to all dashboard routes
 dashboardRoutes.use('*', requireAdmin);

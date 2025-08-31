@@ -1,6 +1,6 @@
 import { join, resolve, basename, dirname } from "path";
 import { existsSync, readdirSync } from "fs";
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 import type {
   Action,
   ActionContext,
@@ -8,7 +8,7 @@ import type {
   SiteActionConfig,
   ScheduledActionConfig,
   WebhookActionConfig
-} from "../core";
+} from "../../core";
 import { DEPLOY_PATHS, LEGACY_PATHS } from "../../core/config/paths";
 // Using Bun.spawn instead of child_process.spawnSync
 import {

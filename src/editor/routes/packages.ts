@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { join, resolve } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { Database } from '../../core/database/database';
+import { Database } from '@core/database/database';
 import { requireAuth } from './auth';
-import { detectPackageManager } from '../../core/utils/packageManager';
+import type { AuthenticatedContext, AuthenticatedUser } from '@core/types';
+import { detectPackageManager } from '@core/utils/packageManager';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 
-const packagesRoutes = new Hono();
+const packagesRoutes = new Hono<AuthenticatedContext>();
 
 // Apply authentication to all package routes
 packagesRoutes.use('*', requireAuth);
@@ -53,6 +54,10 @@ async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolea
   }
   
   const site = sites[0];
+  
+  if (!site) {
+    return { hasAccess: false };
+  }
   
   if (site.user_id !== userId && !isAdmin) {
     return { hasAccess: false };
@@ -147,9 +152,9 @@ function parseMiseToml(content: string): MiseConfig {
           config.env![key] = value;
         } else if (currentSection === 'tasks' && currentTaskName) {
           if (key === 'run') {
-            config.tasks![currentTaskName].run = value;
+            config.tasks![currentTaskName]!.run = value;
           } else if (key === 'description') {
-            config.tasks![currentTaskName].description = value;
+            config.tasks![currentTaskName]!.description = value;
           }
         }
       }
@@ -202,7 +207,7 @@ function configToToml(config: MiseConfig): string {
 
 // Get package manager overview for a site
 packagesRoutes.get('/sites/:sitename/packages', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   
   try {
@@ -281,7 +286,7 @@ packagesRoutes.get('/sites/:sitename/packages', async (c) => {
 
 // Get available runtime versions
 packagesRoutes.get('/sites/:sitename/packages/runtimes/:runtime/versions', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   const runtime = c.req.param('runtime');
   
@@ -322,7 +327,7 @@ packagesRoutes.get('/sites/:sitename/packages/runtimes/:runtime/versions', async
 
 // Install or update a runtime version
 packagesRoutes.post('/sites/:sitename/packages/runtimes/:runtime', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   const runtime = c.req.param('runtime');
   
@@ -360,7 +365,7 @@ packagesRoutes.post('/sites/:sitename/packages/runtimes/:runtime', async (c) => 
 
 // Run a package script
 packagesRoutes.post('/sites/:sitename/packages/scripts/:scriptName/run', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   const scriptName = c.req.param('scriptName');
   
@@ -425,7 +430,7 @@ packagesRoutes.post('/sites/:sitename/packages/scripts/:scriptName/run', async (
 
 // Install dependencies
 packagesRoutes.post('/sites/:sitename/packages/dependencies/install', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   
   try {
@@ -473,7 +478,7 @@ packagesRoutes.post('/sites/:sitename/packages/dependencies/install', async (c) 
 
 // Add a new dependency
 packagesRoutes.post('/sites/:sitename/packages/dependencies', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   
   try {
@@ -536,7 +541,7 @@ packagesRoutes.post('/sites/:sitename/packages/dependencies', async (c) => {
 
 // Update .mise.toml configuration
 packagesRoutes.put('/sites/:sitename/packages/mise-config', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
   
   try {

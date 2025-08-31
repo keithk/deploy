@@ -72,7 +72,7 @@ export class UserModel {
       [userData.username, userData.email]
     );
 
-    if (existing[0].count > 0) {
+    if (existing[0]?.count && existing[0].count > 0) {
       throw new Error('Username or email already exists');
     }
 
@@ -232,7 +232,7 @@ export class UserModel {
     const result = this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM users`
     );
-    return result[0].count;
+    return result[0]?.count || 0;
   }
 
   /**

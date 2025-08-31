@@ -1,14 +1,16 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { validateSession, destroySession, createSession } from '../../core/auth/sessions';
-import { verifyPassword } from '../../core/auth/password';
-import { UserModel } from '../../core/database/models/user';
+import { validateSession, destroySession, createSession } from '@core/auth/sessions';
+import { verifyPassword } from '@core/auth/password';
+import { UserModel } from '@core/database/models/user';
+import type { AuthenticatedContext, AdminContext, AppContext } from '@core/types';
+import { Context, Next } from 'hono';
 
 // Helper functions
 function getClientIP(request: Request): string {
   const xForwardedFor = request.headers.get('x-forwarded-for');
   if (xForwardedFor) {
-    return xForwardedFor.split(',')[0].trim();
+    return xForwardedFor.split(',')[0]?.trim() || '';
   }
   const xRealIP = request.headers.get('x-real-ip');
   if (xRealIP) {
@@ -22,10 +24,10 @@ function getUserAgent(request: Request): string {
 }
 
 const userModel = new UserModel();
-const authRoutes = new Hono();
+const authRoutes = new Hono<AppContext>();
 
 // Middleware to check if user is already logged in
-const redirectIfLoggedIn = async (c: any, next: any) => {
+const redirectIfLoggedIn = async (c: Context<AppContext>, next: Next) => {
   const sessionId = getCookie(c, 'session');
   if (sessionId) {
     const user = await validateSession(sessionId);
@@ -37,7 +39,7 @@ const redirectIfLoggedIn = async (c: any, next: any) => {
 };
 
 // Middleware to require admin authentication
-export const requireAdmin = async (c: any, next: any) => {
+export const requireAdmin = async (c: Context<AppContext>, next: Next) => {
   const sessionId = getCookie(c, 'session');
   if (!sessionId) {
     return c.redirect('/auth/login');

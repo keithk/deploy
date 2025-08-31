@@ -1,7 +1,8 @@
-import { validateSession, type User } from "./sessions";
+import { validateSession } from "./sessions";
+import { UserData } from "../database/models/user";
 
 export interface AuthenticatedRequest extends Request {
-  user?: User;
+  user?: UserData;
   sessionId?: string;
 }
 

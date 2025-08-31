@@ -4,8 +4,9 @@ import { readdirSync, statSync, existsSync } from 'fs';
 import { Database } from '../../core/database/database';
 import { requireAuth } from './auth';
 import { getSiteUrl } from '../utils/site-helpers';
+import { AuthenticatedContext, AppContext } from '@core/types';
 
-const dashboardRoutes = new Hono();
+const dashboardRoutes = new Hono<AuthenticatedContext>();
 
 // Apply authentication to all dashboard routes
 dashboardRoutes.use('*', requireAuth);
@@ -126,6 +127,10 @@ async function getAllSites(userId: number, isAdmin: boolean = false): Promise<Si
 dashboardRoutes.get('/', async (c) => {
   const user = c.get('user');
   
+  if (!user) {
+    return c.redirect('/auth/login');
+  }
+  
   try {
     const sites = await getAllSites(user.id, user.is_admin);
     
@@ -165,8 +170,8 @@ dashboardRoutes.get('/', async (c) => {
             <div class="sites-section">
               <div class="section-header">
                 <h2>My Sites</h2>
-                <span class="site-count">${mySites.length} / ${user.max_sites}</span>
-                ${mySites.length < user.max_sites ? `
+                <span class="site-count">${mySites.length} / ${user.max_sites || 10}</span>
+                ${mySites.length < (user.max_sites || 10) ? `
                   <button id="create-new-site-btn" class="btn small primary">+ Create New Site</button>
                 ` : ''}
               </div>

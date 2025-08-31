@@ -1,5 +1,5 @@
-import { ActionRegistry } from "@actions/registry";
-import type { ActionContext } from "../core";
+import { ActionRegistry } from "../actions/registry";
+import type { ActionContext } from "../../core";
 
 /**
  * Middleware for handling webhook requests
@@ -96,7 +96,7 @@ export function webhookMiddleware(
     // Execute all matching actions
     const results = [];
 
-    for (const action of actions) {
+    for (const action of actions as any[]) {
       try {
         const result = await registry.execute(action.id, payload, context);
         results.push({

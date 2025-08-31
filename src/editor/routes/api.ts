@@ -5,8 +5,10 @@ import { getSiteDomain } from '../utils/site-helpers';
 import { packagesRoutes } from './packages';
 import { editingSessionRoutes } from './editing-sessions';
 import { templatesRoutes } from './templates';
+import { AuthenticatedContext, AppContext } from '@core/types';
+import { Context } from 'hono';
 
-const apiRoutes = new Hono();
+const apiRoutes = new Hono<AuthenticatedContext>();
 
 // Apply authentication to all API routes
 apiRoutes.use('*', requireAuth);
@@ -14,6 +16,10 @@ apiRoutes.use('*', requireAuth);
 // Claim an unclaimed site
 apiRoutes.post('/sites/claim', async (c) => {
   const user = c.get('user');
+  
+  if (!user) {
+    return c.json({ success: false, error: 'User not authenticated' });
+  }
   
   try {
     const { siteName } = await c.req.json();
@@ -30,7 +36,7 @@ apiRoutes.post('/sites/claim', async (c) => {
       [siteName]
     );
     
-    if (existing[0].count > 0) {
+    if (existing[0]?.count && existing[0].count > 0) {
       return c.json({ success: false, error: 'Site is already claimed' });
     }
     
@@ -40,7 +46,7 @@ apiRoutes.post('/sites/claim', async (c) => {
       [user.id]
     );
     
-    if (userSites[0].count >= user.max_sites) {
+    if (userSites[0]?.count && userSites[0].count >= (user.max_sites || 10)) {
       return c.json({ success: false, error: 'Site limit reached' });
     }
     

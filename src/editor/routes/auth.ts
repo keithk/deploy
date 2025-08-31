@@ -3,11 +3,12 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Database } from '../../core/database/database';
 import { verifyPassword } from '../../core/auth/password';
 import { createSession, validateSession, destroySession } from '../../core/auth/sessions';
+import type { HonoContext, AuthenticatedUser } from '../../types/hono';
 
 const authRoutes = new Hono();
 
 // Middleware to check authentication
-export async function requireAuth(c: any, next: any) {
+export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
   const sessionId = getCookie(c, 'editor_session');
   
   if (!sessionId) {
@@ -23,7 +24,8 @@ export async function requireAuth(c: any, next: any) {
       return c.redirect('/auth/login');
     }
     
-    c.set('user', user);
+    // Type assertion after validation - we know user is valid here
+    c.set('user', user as AuthenticatedUser);
     await next();
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -114,6 +116,9 @@ authRoutes.post('/login', async (c) => {
     }
     
     const user = users[0];
+    if (!user) {
+      return c.redirect('/auth/login?error=Invalid username or password');
+    }
     const isValid = await verifyPassword(password as string, user.password_hash);
     
     if (!isValid) {
@@ -277,7 +282,7 @@ authRoutes.post('/register', async (c) => {
       [username, email]
     );
     
-    if (existing[0].count > 0) {
+    if (existing[0]?.count && existing[0].count > 0) {
       return c.redirect('/auth/register?error=Username or email already exists');
     }
     

@@ -77,7 +77,7 @@ export function listActions(): string {
         siteGroups[action.siteId] = [];
       }
 
-      siteGroups[action.siteId].push(action);
+      siteGroups[action.siteId]!.push(action);
     }
 
     // Display grouped actions

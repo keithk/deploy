@@ -1,7 +1,7 @@
 import { resolve, join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { existsSync } from 'fs';
-import type { SiteConfig } from '../core';
+import type { SiteConfig } from '../../core';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -32,14 +32,14 @@ async function isAdminEnabled(): Promise<boolean> {
   }
   
   // Check if site.json exists and is configured
-  // In development: resolve from src/utils to src/admin
-  // In production: the admin files should be included in the dist build
-  const adminPath = resolve(__dirname, '../admin');
-  const srcAdminPath = resolve(__dirname, '../src/admin'); // Corrected path for dev mode
+  // In production (dist): resolve to dist/admin
+  // In development (src): resolve to src/admin
+  const isInDist = __dirname.includes('/dist/');
+  const adminPath = isInDist 
+    ? resolve(__dirname, '../admin')
+    : resolve(__dirname, '../../admin');
   
-  const siteConfigPath = existsSync(join(adminPath, 'site.json')) 
-    ? join(adminPath, 'site.json')
-    : join(srcAdminPath, 'site.json');
+  const siteConfigPath = join(adminPath, 'site.json');
   
   if (!existsSync(siteConfigPath)) {
     return false;
@@ -59,9 +59,10 @@ async function isAdminEnabled(): Promise<boolean> {
  */
 async function createAdminSiteConfig(): Promise<SiteConfig> {
   // Use same path resolution logic as isAdminEnabled
-  const adminPath = resolve(__dirname, '../admin');
-  const srcAdminPath = resolve(__dirname, '../src/admin'); // Corrected path for dev mode
-  const finalAdminPath = existsSync(join(adminPath, 'site.json')) ? adminPath : srcAdminPath;
+  const isInDist = __dirname.includes('/dist/');
+  const finalAdminPath = isInDist 
+    ? resolve(__dirname, '../admin')
+    : resolve(__dirname, '../../admin');
   const siteConfigPath = join(finalAdminPath, 'site.json');
   
   // Load site configuration
@@ -92,7 +93,9 @@ async function createAdminSiteConfig(): Promise<SiteConfig> {
     // Built-in specific properties
     isBuiltIn: true,
     module: () => {
-      const adminIndexPath = join(finalAdminPath, 'index.ts');
+      // In production, use the compiled JS file
+      const isDev = process.env.NODE_ENV === 'development' || !existsSync(join(finalAdminPath, 'index.js'));
+      const adminIndexPath = join(finalAdminPath, isDev ? 'index.ts' : 'index.js');
       const fileUrl = pathToFileURL(adminIndexPath).href;
       return import(fileUrl);
     },

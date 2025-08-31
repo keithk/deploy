@@ -39,7 +39,9 @@ export async function loadEnvFile(
           value = value.slice(1, -1);
         }
 
-        env[key] = value;
+        if (key) { // Ensure key is defined before using as index
+          env[key] = value;
+        }
       }
     }
 

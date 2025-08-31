@@ -108,6 +108,10 @@ export class GitManager {
       
       for (const line of lines) {
         const [name, current, commit, dateStr] = line.split('|');
+        if (!name || !current || !commit || !dateStr) {
+          continue; // Skip malformed lines
+        }
+        
         branches.push({
           name: name.trim(),
           current: current.trim() === '*',
@@ -270,11 +274,15 @@ export class GitManager {
       
       for (const line of lines) {
         const [hash, message, author, dateStr] = line.split('|');
+        if (!hash || !message) {
+          continue; // Skip malformed lines
+        }
+        
         commits.push({
           hash: hash.substring(0, 7),
           message: message.trim(),
-          author: author.trim(),
-          date: new Date(dateStr.trim())
+          author: author?.trim() || "",
+          date: new Date(dateStr?.trim() || "")
         });
       }
 

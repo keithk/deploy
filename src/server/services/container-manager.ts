@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { debug, info, warn, error } from '../utils/logging';
-import type { SiteConfig } from '../core';
+import type { SiteConfig } from "../../core";
 
 export interface ContainerConfig {
   name: string;
@@ -66,9 +66,13 @@ export class ContainerManager {
         for (const line of lines) {
           const [name, ports] = line.split('\t');
           
+          if (!name || !ports) {
+            continue; // Skip malformed lines
+          }
+          
           // Extract port mapping (e.g., "0.0.0.0:3001->3000/tcp")
           const portMatch = ports.match(/0\.0\.0\.0:(\d+)->/);
-          if (portMatch) {
+          if (portMatch && portMatch[1]) {
             const port = parseInt(portMatch[1], 10);
             
             debug(`Discovered existing Docker container: ${name} on port ${port}`);
@@ -607,19 +611,28 @@ export class ContainerManager {
         }
 
         // Try to fetch from the container's health endpoint
-        const response = await fetch(healthCheckUrl, {
-          method: 'GET',
-          timeout: 2000,
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
         
-        if (response.ok) {
-          info(`Container ${containerName} is healthy and ready`);
-          return true;
+        try {
+          const response = await fetch(healthCheckUrl, {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+        
+          if (response.ok) {
+            info(`Container ${containerName} is healthy and ready`);
+            return true;
+          }
+          
+          debug(`Health check failed for ${containerName}: ${response.status}`);
+        } catch (err) {
+          clearTimeout(timeoutId);
+          debug(`Health check error for ${containerName}: ${err}`);
         }
-        
-        debug(`Health check failed for ${containerName}: ${response.status}`);
-      } catch (err) {
-        debug(`Health check error for ${containerName}: ${err}`);
+      } catch (outerErr) {
+        debug(`Health check outer error for ${containerName}: ${outerErr}`);
       }
       
       // Wait 500ms before next check

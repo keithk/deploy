@@ -34,6 +34,32 @@ deploy migrate <codemod-name> --force
 
 ## 📦 Available Codemods
 
+### update-package-imports (v1.0.0)
+
+Updates old package imports to the new consolidated `@keithk/deploy` package.
+
+**What it does:**
+- Updates `@keithk/deploy-actions` → `@keithk/deploy`
+- Updates `@keithk/deploy-core` → `@keithk/deploy`
+- Updates `@keithk/deploy-server` → `@keithk/deploy`
+- Updates `@keithk/deploy-cli` → `@keithk/deploy`
+
+**Usage:**
+```bash
+# Run in current directory
+deploy migrate update-package-imports
+
+# Run in specific directory
+deploy migrate update-package-imports /path/to/project
+
+# Preview changes
+deploy migrate update-package-imports --dry-run
+```
+
+**Files affected:**
+- All `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` files
+- Ignores `node_modules`, `dist`, `.next`, `build` directories
+
 ### config-migration (v1.0.0)
 
 Migrates configuration files from the old `.dialup` structure to the new standardized structure.

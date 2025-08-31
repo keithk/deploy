@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { join, resolve } from 'path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { Database } from '../../core/database/database';
+import { Database } from '@core/database/database';
 import { requireAuth } from './auth';
+import type { AuthenticatedContext, AuthenticatedUser } from '@core/types';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 // Import the mise functionality (path may need adjustment)
@@ -37,7 +38,7 @@ NODE_ENV = "development"
   }
 }
 
-const templatesRoutes = new Hono();
+const templatesRoutes = new Hono<AuthenticatedContext>();
 
 // Apply authentication to all template routes
 templatesRoutes.use('*', requireAuth);
@@ -213,7 +214,7 @@ async function execCommand(command: string, args: string[], cwd: string): Promis
 
 // Get available site templates
 templatesRoutes.get('/templates', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   
   try {
     // Check user's site count for display purposes
@@ -223,8 +224,8 @@ templatesRoutes.get('/templates', async (c) => {
       [user.id]
     );
     
-    const sitesUsed = userSites[0].count;
-    const sitesLimit = user.max_sites;
+    const sitesUsed = userSites[0]?.count || 0;
+    const sitesLimit = user.max_sites || 10; // Default to 10 if not set
     const canCreateSite = sitesUsed < sitesLimit;
     
     return c.json({
@@ -247,7 +248,7 @@ templatesRoutes.get('/templates', async (c) => {
 
 // Create new site from template
 templatesRoutes.post('/templates/create', async (c) => {
-  const user = c.get('user');
+  const user = c.get('user') as AuthenticatedUser;
   
   try {
     const { templateId, siteName, options = {} } = await c.req.json();
@@ -268,7 +269,7 @@ templatesRoutes.post('/templates/create', async (c) => {
       [user.id]
     );
     
-    if (userSites[0].count >= user.max_sites) {
+    if ((userSites[0]?.count || 0) >= (user.max_sites || 10)) {
       return c.json({ success: false, error: 'Site limit reached' });
     }
     
@@ -278,7 +279,7 @@ templatesRoutes.post('/templates/create', async (c) => {
       [siteName]
     );
     
-    if (existingSites[0].count > 0) {
+    if ((existingSites[0]?.count || 0) > 0) {
       return c.json({ success: false, error: 'Site name already exists' });
     }
     
@@ -403,7 +404,8 @@ templatesRoutes.post('/templates/check-requirements', async (c) => {
     const checkResults = await Promise.all(
       requirements.map(async (req) => {
         const [tool, version] = req.split(' >= ');
-        return checkToolVersion(tool, version);
+        if (!tool) return { available: false, version: null };
+        return checkToolVersion(tool, version || '');
       })
     );
     
@@ -450,7 +452,7 @@ async function checkToolVersion(tool: string, requiredVersion?: string): Promise
         versionCommand = [tool, ['--version']];
     }
     
-    const result = await execCommand(versionCommand[0], versionCommand[1], process.cwd());
+    const result = await execCommand(versionCommand[0] as string, versionCommand[1] as string[], process.cwd());
     
     if (result.exitCode === 0) {
       const versionOutput = result.stdout.trim();
@@ -491,7 +493,7 @@ async function checkToolVersion(tool: string, requiredVersion?: string): Promise
  */
 function extractVersionNumber(output: string): string {
   const versionMatch = output.match(/(\d+\.\d+\.\d+)/);
-  return versionMatch ? versionMatch[1] : output.replace(/[^\d.]/g, '');
+  return versionMatch ? versionMatch[1]! : output.replace(/[^\d.]/g, '');
 }
 
 /**

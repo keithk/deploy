@@ -1,5 +1,5 @@
-import type { SiteConfig } from "../core";
-import { ActionRegistry } from "@actions/registry";
+import type { SiteConfig } from "../../core";
+import { ActionRegistry } from "../actions/registry";
 import { join } from "path";
 import { existsSync } from "fs";
 import { proxyRequest } from "../utils/proxy";

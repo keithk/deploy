@@ -25,6 +25,7 @@ export async function getSites(rootDir?: string): Promise<SiteConfig[]> {
 
   for (let i = 0; i < dirs.length; i++) {
     const dir = dirs[i];
+    if (!dir) continue;
     const sitePath = join(rootPath, dir);
 
     // Use the centralized config loader

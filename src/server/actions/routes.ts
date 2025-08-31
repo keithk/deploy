@@ -1,4 +1,4 @@
-import type { Action, ActionContext, ActionRoute } from "../core";
+import type { Action, ActionContext, ActionRoute } from "../../core";
 import { debug, info, warn } from "../../core";
 import { actionRegistry } from "./registry";
 import { hookManager } from "./hooks";
@@ -206,8 +206,8 @@ export class RouteManager {
     return Array.from(this.routes.entries()).map(([key, { action, route }]) => {
       const [method, path] = key.split(":");
       return {
-        method,
-        path,
+        method: method || 'GET',
+        path: path || '/',
         actionId: action.id
       };
     });

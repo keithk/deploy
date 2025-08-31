@@ -812,10 +812,10 @@ export class ProcessManager {
         return null;
       }
       
-      const parts = lines[0].trim().split(/\s+/);
-      if (parts.length >= 3) {
-        const cpu = parseFloat(parts[1]) || 0;
-        const memoryKB = parseInt(parts[2]) || 0;
+      const parts = lines[0]?.trim().split(/\s+/);
+      if (parts && parts.length >= 3) {
+        const cpu = parseFloat(parts[1] || '0') || 0;
+        const memoryKB = parseInt(parts[2] || '0', 10) || 0;
         const memory = memoryKB * 1024; // Convert KB to bytes
         
         return {

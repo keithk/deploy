@@ -8,8 +8,9 @@ import { dashboardRoutes } from './routes/dashboard';
 import { userRoutes } from './routes/users';
 import { settingsRoutes } from './routes/settings';
 import { serveStatic } from 'hono/bun';
+import type { AppContext } from '@core/types';
 
-const app = new Hono();
+const app = new Hono<AppContext>();
 
 // Get the current admin directory path
 const __filename = fileURLToPath(import.meta.url);

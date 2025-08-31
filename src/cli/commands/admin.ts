@@ -74,8 +74,8 @@ async function resetAdminPassword(): Promise<void> {
     // Prompt for username (default to admin)
     const username = await readlineSync("Enter admin username (default: admin): ") || "admin";
     
-    // Check if user exists
-    const user = db.prepare("SELECT * FROM users WHERE email = ? AND is_admin = 1").get(username);
+    // Check if user exists by username
+    const user = db.prepare("SELECT * FROM users WHERE username = ? AND is_admin = 1").get(username);
     
     if (!user) {
       warn(`Admin user '${username}' not found.`);
@@ -83,6 +83,8 @@ async function resetAdminPassword(): Promise<void> {
       
       if (createNew?.toLowerCase() === 'y') {
         await createAdminUser(username);
+      } else {
+        process.exit(0);
       }
       return;
     }
@@ -105,14 +107,16 @@ async function resetAdminPassword(): Promise<void> {
     const passwordHash = await hashPassword(password);
     
     // Update the password in database
-    db.prepare("UPDATE users SET password_hash = ? WHERE email = ?").run(passwordHash, username);
+    db.prepare("UPDATE users SET password_hash = ? WHERE username = ?").run(passwordHash, username);
     
     info(`✅ Password reset successfully for admin user: ${username}`);
     info("🔐 You can now login to the admin panel with your new password");
+    process.exit(0);
   } catch (err) {
     error(`Failed to reset admin password: ${
       err instanceof Error ? err.message : String(err)
     }`);
+    process.exit(1);
   }
 }
 
@@ -122,6 +126,9 @@ async function resetAdminPassword(): Promise<void> {
 async function createAdminUser(username: string): Promise<void> {
   try {
     const db = Database.getInstance();
+    
+    // Prompt for email (optional, can be same as username)
+    const email = await readlineSync(`Enter email for ${username} (press enter to use ${username}@localhost): `) || `${username}@localhost`;
     
     // Prompt for password
     const password = await readlineSync("Enter password for new admin: ", true);
@@ -140,18 +147,21 @@ async function createAdminUser(username: string): Promise<void> {
     // Hash the password
     const passwordHash = await hashPassword(password);
     
-    // Create the admin user
+    // Create the admin user with both username and email
     db.prepare(`
-      INSERT INTO users (email, password_hash, is_admin, created_at)
-      VALUES (?, ?, 1, datetime('now'))
-    `).run(username, passwordHash);
+      INSERT INTO users (username, email, password_hash, is_admin, created_at)
+      VALUES (?, ?, ?, 1, datetime('now'))
+    `).run(username, email, passwordHash);
     
     info(`✅ Admin user '${username}' created successfully!`);
+    info(`📧 Email: ${email}`);
     info("🔐 You can now login to the admin panel");
+    process.exit(0);
   } catch (err) {
     error(`Failed to create admin user: ${
       err instanceof Error ? err.message : String(err)
     }`);
+    process.exit(1);
   }
 }
 

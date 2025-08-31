@@ -48,6 +48,10 @@ export async function ensureNodeModules(sitePath: string): Promise<boolean> {
     const command = cmdParts[0];
     const args = cmdParts.slice(1);
 
+    if (!command) {
+      throw new Error(`No command found for package manager: ${packageManager}`);
+    }
+
     const result = spawnSync(command, args, {
       cwd: sitePath,
       stdio: "inherit",
@@ -91,6 +95,10 @@ export function runPackageManagerCommand(
   const cmdParts = getPackageManagerCommand(packageManager, scriptName);
   const command = cmdParts[0];
   const args = cmdParts.slice(1);
+
+  if (!command) {
+    throw new Error(`No command found for package manager: ${packageManager}`);
+  }
 
   console.log(
     `Using package manager: ${packageManager} to run "${scriptName}"`

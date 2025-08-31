@@ -5,11 +5,11 @@ import type {
   ActionResult,
   ActionRoute,
   SiteConfig
-} from "../core";
+} from "@core/index";
 import { buildSite } from "../discovery";
 import { createHmac } from "crypto";
-import { processManager } from "../../utils/process-manager";
-import { debug, info, warn } from "../../../core";
+import { processManager } from "@server/utils/process-manager";
+import { debug, info, warn } from "@core/index";
 
 /**
  * Verify the GitHub webhook signature
@@ -364,7 +364,7 @@ export function createGitHubAction(config: {
   const webhookRoute: ActionRoute = {
     path: "/webhook/github",
     method: "POST",
-    handler: async (req, context) => {
+    handler: async (req: Request, context: ActionContext) => {
       return processGitHubWebhook(req, context, config);
     }
   };
@@ -378,7 +378,7 @@ export function createGitHubAction(config: {
     // Add server lifecycle hooks
     hooks: ["server:after-start"],
     // Handler for direct execution (e.g., for testing)
-    async handler(payload, context: ActionContext): Promise<ActionResult> {
+    async handler(payload: any, context: ActionContext): Promise<ActionResult> {
       info("GitHub action executed directly");
 
       // If this is a webhook payload, process it
@@ -395,7 +395,7 @@ export function createGitHubAction(config: {
             context,
             config
           );
-          const responseBody = await response.json();
+          const responseBody = await response.json() as { success: boolean; message: string; data?: any };
 
           return {
             success: responseBody.success,

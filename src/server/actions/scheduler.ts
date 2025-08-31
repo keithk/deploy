@@ -1,4 +1,4 @@
-import type { Action, ActionContext } from "../core";
+import type { Action, ActionContext } from "../../core";
 import { actionRegistry } from "./registry";
 import { Cron } from "croner";
 

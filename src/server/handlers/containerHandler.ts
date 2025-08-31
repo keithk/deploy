@@ -1,4 +1,4 @@
-import type { SiteConfig } from "../core";
+import type { SiteConfig } from "../../core";
 import { proxyRequest } from "../utils/proxy";
 import { containerManager as containerManagerService } from "../services/container-manager";
 import { debug, info, warn, error } from "../utils/logging";

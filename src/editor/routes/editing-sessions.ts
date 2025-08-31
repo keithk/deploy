@@ -4,8 +4,9 @@ import { existsSync } from 'fs';
 import { Database } from '../../core/database/database';
 import { requireAuth } from './auth';
 import { editingSessionManager } from '../../server/services/editing-session-manager';
+import type { AuthenticatedContext, AuthenticatedUser } from '@core/types';
 
-const editingSessionRoutes = new Hono();
+const editingSessionRoutes = new Hono<AuthenticatedContext>();
 
 // Apply authentication to all editing session routes
 editingSessionRoutes.use('*', requireAuth);
@@ -26,6 +27,9 @@ async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolea
   }
   
   const site = sites[0];
+  if (!site) {
+    return { hasAccess: false };
+  }
   
   if (site.user_id !== userId && !isAdmin) {
     return { hasAccess: false };

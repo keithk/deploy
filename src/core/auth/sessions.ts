@@ -1,6 +1,7 @@
 import { Database } from "../database/database";
 import { generateSessionToken } from "./utils";
 import { debug, error } from "../utils/logging";
+import { UserData } from "../database/models/user";
 
 export interface SessionData {
   id: string;
@@ -11,14 +12,6 @@ export interface SessionData {
   user_agent?: string;
 }
 
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  is_admin: boolean;
-  is_active: boolean;
-  last_login?: string;
-}
 
 /**
  * Create a new user session
@@ -66,26 +59,21 @@ export async function createSession(
 /**
  * Validate a session token and return user data
  */
-export async function validateSession(sessionId: string): Promise<User | null> {
+export async function validateSession(sessionId: string): Promise<UserData | null> {
   if (!sessionId) return null;
   
   const db = Database.getInstance();
   
   try {
-    const result = db.query<SessionData & User>(
+    const result = db.query<SessionData & UserData>(
       `SELECT 
          s.id as session_id,
          s.user_id,
-         s.created_at,
+         s.created_at as session_created_at,
          s.expires_at,
          s.ip_address,
          s.user_agent,
-         u.id,
-         u.username,
-         u.email,
-         u.is_admin,
-         u.is_active,
-         u.last_login
+         u.*
        FROM user_sessions s
        JOIN users u ON s.user_id = u.id
        WHERE s.id = ? AND s.expires_at > datetime('now') AND u.is_active = 1`,
@@ -98,12 +86,26 @@ export async function validateSession(sessionId: string): Promise<User | null> {
     }
     
     const sessionUser = result[0];
+    if (!sessionUser) {
+      debug(`Session ${sessionId} not found`);
+      return null;
+    }
+    
+    // Return the full UserData, converting any boolean fields from SQLite integers
     return {
       id: sessionUser.id,
       username: sessionUser.username,
       email: sessionUser.email,
+      password_hash: sessionUser.password_hash,
       is_admin: Boolean(sessionUser.is_admin),
       is_active: Boolean(sessionUser.is_active),
+      created_at: sessionUser.created_at,
+      updated_at: sessionUser.updated_at,
+      max_sites: sessionUser.max_sites,
+      max_memory_mb: sessionUser.max_memory_mb,
+      max_cpu_cores: sessionUser.max_cpu_cores,
+      max_storage_mb: sessionUser.max_storage_mb,
+      can_create_sites: Boolean(sessionUser.can_create_sites),
       last_login: sessionUser.last_login
     };
   } catch (err) {

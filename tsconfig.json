@@ -35,6 +35,9 @@
       ],
       "@editor/*": [
         "editor/*"
+      ],
+      "@types/*": [
+        "core/types/*"
       ]
     },
     "types": [

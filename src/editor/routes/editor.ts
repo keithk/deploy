@@ -4,6 +4,7 @@ import { existsSync } from 'fs';
 import { Database } from '../../core/database/database';
 import { requireAuth } from './auth';
 import { getSiteUrl, isEditableFile } from '../utils/site-helpers';
+import type { HonoContext, AuthenticatedUser, SiteData } from '../../types/hono';
 
 const editorRoutes = new Hono();
 
@@ -11,7 +12,7 @@ const editorRoutes = new Hono();
 editorRoutes.use('*', requireAuth);
 
 // Main editor page for a site
-editorRoutes.get('/:sitename', async (c) => {
+editorRoutes.get('/:sitename', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
   
@@ -19,7 +20,7 @@ editorRoutes.get('/:sitename', async (c) => {
     const db = Database.getInstance();
     
     // Check if user owns the site or is admin
-    const sites = db.query<{ user_id: number; name: string; path: string }>(
+    const sites = db.query<SiteData>(
       `SELECT user_id, name, path FROM sites WHERE name = ?`,
       [siteName]
     );
@@ -34,6 +35,14 @@ editorRoutes.get('/:sitename', async (c) => {
     }
     
     const site = sites[0];
+    if (!site) {
+      return c.html(`
+        <div class="message error">
+          Site "${siteName}" not found.
+          <a href="/dashboard">Back to Dashboard</a>
+        </div>
+      `);
+    }
     
     // Check ownership
     if (site.user_id !== user.id && !user.is_admin) {
