@@ -223,6 +223,218 @@ editorRoutes.get('/:sitename', async (c) => {
             width: 100%;
             height: 100%;
           }
+          
+          /* Package Manager Modal Styles */
+          .packages-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+          }
+          
+          .packages-modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+          }
+          
+          .packages-modal-content {
+            background: var(--bg-dark);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+          }
+          
+          .packages-modal-header {
+            background: var(--bg-darker);
+            padding: 1rem 1.5rem;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          
+          .packages-modal-body {
+            padding: 1.5rem;
+          }
+          
+          .packages-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 1.5rem;
+          }
+          
+          .packages-tab {
+            padding: 0.75rem 1.5rem;
+            background: var(--bg-dark);
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-size: 0.9rem;
+          }
+          
+          .packages-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+            background: var(--bg-darker);
+          }
+          
+          .packages-tab-content {
+            display: none;
+          }
+          
+          .packages-tab-content.active {
+            display: block;
+          }
+          
+          .packages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+          }
+          
+          .packages-card {
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+          }
+          
+          .packages-card h4 {
+            margin: 0 0 0.5rem 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+          }
+          
+          .packages-section {
+            margin-bottom: 2rem;
+          }
+          
+          .packages-section h3 {
+            color: var(--text-primary);
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+          }
+          
+          .runtime-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+          }
+          
+          .runtime-info {
+            flex: 1;
+          }
+          
+          .runtime-name {
+            font-weight: bold;
+            color: var(--text-primary);
+          }
+          
+          .runtime-version {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+          }
+          
+          .script-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+          }
+          
+          .script-info h5 {
+            margin: 0;
+            color: var(--text-primary);
+          }
+          
+          .script-command {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-family: monospace;
+          }
+          
+          .terminal-output {
+            background: #1a1a1a;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #00ff00;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 1rem;
+          }
+          
+          .dependency-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            margin-bottom: 0.25rem;
+          }
+          
+          .dependency-info {
+            flex: 1;
+          }
+          
+          .dependency-name {
+            font-weight: bold;
+            color: var(--text-primary);
+          }
+          
+          .dependency-version {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+          }
+          
+          .status-indicator {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+          }
+          
+          .status-installed {
+            background: var(--accent-green);
+            color: white;
+          }
+          
+          .status-missing {
+            background: var(--accent-red);
+            color: white;
+          }
+          
+          .status-outdated {
+            background: var(--accent-yellow);
+            color: black;
+          }
         </style>
       </head>
       <body>
@@ -275,9 +487,14 @@ editorRoutes.get('/:sitename', async (c) => {
             <div class="file-tree-panel">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h3 style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">FILES</h3>
-                <button id="new-file-btn" class="btn small" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" title="New File">
-                  + New
-                </button>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button id="packages-btn" class="btn small" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" title="Package Manager">
+                    📦 Packages
+                  </button>
+                  <button id="new-file-btn" class="btn small" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" title="New File">
+                    + New
+                  </button>
+                </div>
               </div>
               <div id="file-tree" class="file-tree">
                 <div class="file-tree-item" style="color: var(--text-secondary);">
@@ -312,6 +529,146 @@ editorRoutes.get('/:sitename', async (c) => {
               </div>
               <div class="preview-content">
                 <iframe id="preview-iframe" src="" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Package Manager Modal -->
+        <div id="packages-modal" class="packages-modal">
+          <div class="packages-modal-content">
+            <div class="packages-modal-header">
+              <h2 style="margin: 0; color: var(--text-primary);">📦 Package Manager</h2>
+              <button id="close-packages-modal" class="btn small secondary">✕ Close</button>
+            </div>
+            
+            <div class="packages-modal-body">
+              <div class="packages-tabs">
+                <button class="packages-tab active" data-tab="overview">Overview</button>
+                <button class="packages-tab" data-tab="runtimes">Runtimes</button>
+                <button class="packages-tab" data-tab="scripts">Scripts</button>
+                <button class="packages-tab" data-tab="dependencies">Dependencies</button>
+                <button class="packages-tab" data-tab="config">Config</button>
+              </div>
+              
+              <!-- Overview Tab -->
+              <div id="packages-tab-overview" class="packages-tab-content active">
+                <div class="packages-grid">
+                  <div class="packages-card">
+                    <h4>Project Info</h4>
+                    <div id="project-info">Loading project information...</div>
+                  </div>
+                  
+                  <div class="packages-card">
+                    <h4>Package Manager</h4>
+                    <div id="package-manager-info">
+                      <p>Detected: <span id="detected-pm">Loading...</span></p>
+                      <p>Mise Config: <span id="mise-status">Loading...</span></p>
+                    </div>
+                  </div>
+                  
+                  <div class="packages-card">
+                    <h4>Quick Actions</h4>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                      <button id="install-deps-btn" class="btn small primary">📥 Install Dependencies</button>
+                      <button id="generate-mise-btn" class="btn small secondary">🔧 Generate Mise Config</button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div id="command-output" style="display: none;">
+                  <h4>Command Output</h4>
+                  <div id="terminal-output" class="terminal-output"></div>
+                </div>
+              </div>
+              
+              <!-- Runtimes Tab -->
+              <div id="packages-tab-runtimes" class="packages-tab-content">
+                <div class="packages-section">
+                  <h3>Installed Runtimes</h3>
+                  <div id="installed-runtimes">Loading runtimes...</div>
+                </div>
+                
+                <div class="packages-section">
+                  <h3>Add Runtime</h3>
+                  <div style="display: flex; gap: 0.5rem; align-items: end;">
+                    <div>
+                      <label style="color: var(--text-secondary); font-size: 0.9rem;">Runtime</label>
+                      <select id="runtime-select" class="btn small secondary" style="min-width: 120px;">
+                        <option value="node">Node.js</option>
+                        <option value="bun">Bun</option>
+                        <option value="python">Python</option>
+                        <option value="go">Go</option>
+                        <option value="rust">Rust</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="color: var(--text-secondary); font-size: 0.9rem;">Version</label>
+                      <input id="runtime-version" type="text" placeholder="latest" class="btn small secondary" style="min-width: 100px; text-align: center;">
+                    </div>
+                    <button id="add-runtime-btn" class="btn small primary">+ Add Runtime</button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Scripts Tab -->
+              <div id="packages-tab-scripts" class="packages-tab-content">
+                <div class="packages-section">
+                  <h3>Available Scripts</h3>
+                  <div id="available-scripts">Loading scripts...</div>
+                </div>
+              </div>
+              
+              <!-- Dependencies Tab -->
+              <div id="packages-tab-dependencies" class="packages-tab-content">
+                <div class="packages-section">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Production Dependencies</h3>
+                    <button id="add-dependency-btn" class="btn small primary">+ Add Package</button>
+                  </div>
+                  <div id="production-dependencies">Loading dependencies...</div>
+                </div>
+                
+                <div class="packages-section">
+                  <h3>Development Dependencies</h3>
+                  <div id="development-dependencies">Loading dev dependencies...</div>
+                </div>
+                
+                <!-- Add Dependency Form -->
+                <div id="add-dependency-form" style="display: none; background: var(--bg-darker); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+                  <h4 style="margin-top: 0;">Add New Package</h4>
+                  <div style="display: flex; gap: 0.5rem; align-items: end;">
+                    <div style="flex: 1;">
+                      <label style="color: var(--text-secondary); font-size: 0.9rem;">Package Name</label>
+                      <input id="dependency-name" type="text" placeholder="express" class="btn small secondary" style="width: 100%;">
+                    </div>
+                    <div>
+                      <label style="color: var(--text-secondary); font-size: 0.9rem;">Version</label>
+                      <input id="dependency-version" type="text" placeholder="latest" class="btn small secondary" style="min-width: 100px;">
+                    </div>
+                    <div>
+                      <label style="color: var(--text-secondary); font-size: 0.9rem;">Type</label>
+                      <select id="dependency-type" class="btn small secondary">
+                        <option value="false">Production</option>
+                        <option value="true">Development</option>
+                      </select>
+                    </div>
+                    <button id="install-dependency-btn" class="btn small primary">Install</button>
+                    <button id="cancel-add-dependency-btn" class="btn small secondary">Cancel</button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Config Tab -->
+              <div id="packages-tab-config" class="packages-tab-content">
+                <div class="packages-section">
+                  <h3>.mise.toml Configuration</h3>
+                  <div style="margin-bottom: 1rem;">
+                    <button id="save-mise-config-btn" class="btn small primary">💾 Save Config</button>
+                    <button id="reload-mise-config-btn" class="btn small secondary">🔄 Reload</button>
+                  </div>
+                  <textarea id="mise-config-editor" style="width: 100%; height: 400px; font-family: monospace; background: var(--bg-darker); color: var(--text-primary); border: 1px solid var(--border); padding: 1rem; border-radius: 4px;" placeholder="# Mise configuration will appear here"></textarea>
+                </div>
               </div>
             </div>
           </div>
@@ -860,6 +1217,9 @@ editorRoutes.get('/:sitename', async (c) => {
           // New file button click
           document.getElementById('new-file-btn').onclick = createNewFile;
           
+          // Packages button click
+          document.getElementById('packages-btn').onclick = openPackagesModal;
+          
           // Check for edit mode in URL and restore session
           async function checkAndRestoreEditMode() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -941,6 +1301,482 @@ editorRoutes.get('/:sitename', async (c) => {
               loadFile(fileParam);
             }
           });
+          
+          // Package Manager Modal Functionality
+          let packagesData = null;
+          
+          async function openPackagesModal() {
+            const modal = document.getElementById('packages-modal');
+            modal.classList.add('show');
+            
+            // Load packages data
+            await loadPackagesData();
+          }
+          
+          function closePackagesModal() {
+            const modal = document.getElementById('packages-modal');
+            modal.classList.remove('show');
+          }
+          
+          async function loadPackagesData() {
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/packages\`);
+              const result = await response.json();
+              
+              if (result.success) {
+                packagesData = result.data;
+                updatePackagesUI();
+              } else {
+                console.error('Failed to load packages data:', result.error);
+                showPackagesError('Failed to load packages data: ' + result.error);
+              }
+            } catch (error) {
+              console.error('Error loading packages data:', error);
+              showPackagesError('Error loading packages data');
+            }
+          }
+          
+          function updatePackagesUI() {
+            if (!packagesData) return;
+            
+            // Update project info
+            const projectInfo = document.getElementById('project-info');
+            if (packagesData.packageJson.name) {
+              projectInfo.innerHTML = \`
+                <p><strong>Name:</strong> \${packagesData.packageJson.name}</p>
+                <p><strong>Version:</strong> \${packagesData.packageJson.version || 'Not specified'}</p>
+              \`;
+            } else {
+              projectInfo.innerHTML = '<p>No package.json found</p>';
+            }
+            
+            // Update package manager info
+            document.getElementById('detected-pm').textContent = packagesData.packageManager;
+            document.getElementById('mise-status').textContent = packagesData.hasMise ? 'Available' : 'Not configured';
+            
+            // Update runtimes
+            updateRuntimesUI();
+            
+            // Update scripts
+            updateScriptsUI();
+            
+            // Update dependencies
+            updateDependenciesUI();
+            
+            // Update mise config
+            updateMiseConfigUI();
+          }
+          
+          function updateRuntimesUI() {
+            const container = document.getElementById('installed-runtimes');
+            
+            if (packagesData.runtimes && packagesData.runtimes.length > 0) {
+              container.innerHTML = packagesData.runtimes.map(runtime => \`
+                <div class="runtime-item">
+                  <div class="runtime-info">
+                    <div class="runtime-name">\${runtime.name}</div>
+                    <div class="runtime-version">\${runtime.current || 'Not installed'}</div>
+                  </div>
+                  <div class="status-indicator status-\${runtime.status}">\${runtime.status}</div>
+                </div>
+              \`).join('');
+            } else {
+              container.innerHTML = '<p style="color: var(--text-secondary);">No runtimes configured</p>';
+            }
+          }
+          
+          function updateScriptsUI() {
+            const container = document.getElementById('available-scripts');
+            const scripts = packagesData.scripts || {};
+            
+            if (Object.keys(scripts).length > 0) {
+              container.innerHTML = Object.entries(scripts).map(([name, command]) => \`
+                <div class="script-item">
+                  <div class="script-info">
+                    <h5>\${name}</h5>
+                    <div class="script-command">\${command}</div>
+                  </div>
+                  <button class="btn small primary" onclick="runScript('\${name}')">▶️ Run</button>
+                </div>
+              \`).join('');
+            } else {
+              container.innerHTML = '<p style="color: var(--text-secondary);">No scripts defined</p>';
+            }
+          }
+          
+          function updateDependenciesUI() {
+            const prodContainer = document.getElementById('production-dependencies');
+            const devContainer = document.getElementById('development-dependencies');
+            
+            const prodDeps = packagesData.dependencies.production || {};
+            const devDeps = packagesData.dependencies.development || {};
+            
+            prodContainer.innerHTML = Object.keys(prodDeps).length > 0 
+              ? Object.entries(prodDeps).map(([name, version]) => \`
+                  <div class="dependency-item">
+                    <div class="dependency-info">
+                      <div class="dependency-name">\${name}</div>
+                      <div class="dependency-version">\${version}</div>
+                    </div>
+                  </div>
+                \`).join('')
+              : '<p style="color: var(--text-secondary);">No production dependencies</p>';
+            
+            devContainer.innerHTML = Object.keys(devDeps).length > 0
+              ? Object.entries(devDeps).map(([name, version]) => \`
+                  <div class="dependency-item">
+                    <div class="dependency-info">
+                      <div class="dependency-name">\${name}</div>
+                      <div class="dependency-version">\${version}</div>
+                    </div>
+                  </div>
+                \`).join('')
+              : '<p style="color: var(--text-secondary);">No development dependencies</p>';
+          }
+          
+          function updateMiseConfigUI() {
+            const editor = document.getElementById('mise-config-editor');
+            if (packagesData.miseConfig && Object.keys(packagesData.miseConfig).length > 0) {
+              // Convert config object back to TOML format for display
+              editor.value = configToToml(packagesData.miseConfig);
+            } else {
+              editor.value = '# No .mise.toml file found\\n# Use "Generate Mise Config" to create one';
+            }
+          }
+          
+          function configToToml(config) {
+            let toml = '# Mise configuration\\n';
+            
+            if (config.tools && Object.keys(config.tools).length > 0) {
+              toml += '\\n[tools]\\n';
+              Object.entries(config.tools).forEach(([tool, version]) => {
+                toml += \`\${tool} = "\${version}"\\n\`;
+              });
+            }
+            
+            if (config.tasks && Object.keys(config.tasks).length > 0) {
+              Object.entries(config.tasks).forEach(([taskName, task]) => {
+                toml += \`\\n[tasks.\${taskName}]\\n\`;
+                toml += \`run = "\${task.run}"\\n\`;
+                if (task.description) {
+                  toml += \`description = "\${task.description}"\\n\`;
+                }
+              });
+            }
+            
+            if (config.env && Object.keys(config.env).length > 0) {
+              toml += '\\n[env]\\n';
+              Object.entries(config.env).forEach(([key, value]) => {
+                toml += \`\${key} = "\${value}"\\n\`;
+              });
+            }
+            
+            return toml;
+          }
+          
+          async function runScript(scriptName) {
+            showCommandOutput('Running ' + scriptName + '...');
+            
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/packages/scripts/\${scriptName}/run\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ args: [] })
+              });
+              
+              const result = await response.json();
+              
+              const output = \`
+Exit Code: \${result.exitCode}
+
+STDOUT:
+\${result.stdout || '(no output)'}
+
+STDERR:
+\${result.stderr || '(no errors)'}
+              \`.trim();
+              
+              showCommandOutput(output);
+              
+              if (result.success) {
+                showSaveIndicator(\`✅ \${scriptName} completed successfully\`);
+              } else {
+                alert(\`❌ Script failed: \${result.message}\`);
+              }
+            } catch (error) {
+              console.error('Error running script:', error);
+              showCommandOutput('Error running script: ' + error.message);
+            }
+          }
+          
+          async function installDependencies() {
+            showCommandOutput('Installing dependencies...');
+            
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/packages/dependencies/install\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              
+              const result = await response.json();
+              
+              const output = \`
+Exit Code: \${result.exitCode}
+
+STDOUT:
+\${result.stdout || '(no output)'}
+
+STDERR:
+\${result.stderr || '(no errors)'}
+              \`.trim();
+              
+              showCommandOutput(output);
+              
+              if (result.success) {
+                showSaveIndicator('✅ Dependencies installed successfully');
+                // Reload packages data
+                await loadPackagesData();
+              } else {
+                alert(\`❌ Installation failed: \${result.message}\`);
+              }
+            } catch (error) {
+              console.error('Error installing dependencies:', error);
+              showCommandOutput('Error installing dependencies: ' + error.message);
+            }
+          }
+          
+          async function addRuntime() {
+            const runtime = document.getElementById('runtime-select').value;
+            const version = document.getElementById('runtime-version').value || 'latest';
+            
+            showCommandOutput(\`Installing \${runtime}@\${version}...\`);
+            
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/packages/runtimes/\${runtime}\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ version })
+              });
+              
+              const result = await response.json();
+              
+              showCommandOutput(result.output || result.message);
+              
+              if (result.success) {
+                showSaveIndicator(\`✅ \${runtime}@\${version} installed successfully\`);
+                // Reload packages data
+                await loadPackagesData();
+                // Clear form
+                document.getElementById('runtime-version').value = '';
+              } else {
+                alert(\`❌ Runtime installation failed: \${result.error}\`);
+              }
+            } catch (error) {
+              console.error('Error installing runtime:', error);
+              showCommandOutput('Error installing runtime: ' + error.message);
+            }
+          }
+          
+          function showCommandOutput(output) {
+            const outputDiv = document.getElementById('command-output');
+            const terminalDiv = document.getElementById('terminal-output');
+            
+            terminalDiv.textContent = output;
+            outputDiv.style.display = 'block';
+            
+            // Switch to overview tab to show output
+            switchPackagesTab('overview');
+            
+            // Scroll to output
+            setTimeout(() => {
+              terminalDiv.scrollTop = terminalDiv.scrollHeight;
+            }, 100);
+          }
+          
+          function showPackagesError(message) {
+            showCommandOutput('ERROR: ' + message);
+          }
+          
+          function switchPackagesTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.packages-tab').forEach(tab => {
+              if (tab.dataset.tab === tabName) {
+                tab.classList.add('active');
+              } else {
+                tab.classList.remove('active');
+              }
+            });
+            
+            // Update tab content
+            document.querySelectorAll('.packages-tab-content').forEach(content => {
+              if (content.id === \`packages-tab-\${tabName}\`) {
+                content.classList.add('active');
+              } else {
+                content.classList.remove('active');
+              }
+            });
+          }
+          
+          // Package Manager Modal Event Listeners
+          document.getElementById('close-packages-modal').onclick = closePackagesModal;
+          
+          // Tab switching
+          document.querySelectorAll('.packages-tab').forEach(tab => {
+            tab.onclick = () => switchPackagesTab(tab.dataset.tab);
+          });
+          
+          // Quick actions
+          document.getElementById('install-deps-btn').onclick = installDependencies;
+          document.getElementById('add-runtime-btn').onclick = addRuntime;
+          
+          // Add dependency functionality
+          document.getElementById('add-dependency-btn').onclick = () => {
+            document.getElementById('add-dependency-form').style.display = 'block';
+          };
+          
+          document.getElementById('cancel-add-dependency-btn').onclick = () => {
+            document.getElementById('add-dependency-form').style.display = 'none';
+          };
+          
+          document.getElementById('install-dependency-btn').onclick = async () => {
+            const packageName = document.getElementById('dependency-name').value;
+            const version = document.getElementById('dependency-version').value || 'latest';
+            const isDev = document.getElementById('dependency-type').value === 'true';
+            
+            if (!packageName) {
+              alert('Please enter a package name');
+              return;
+            }
+            
+            showCommandOutput(\`Installing \${packageName}@\${version}...\`);
+            
+            try {
+              const response = await fetch(\`/api/sites/\${siteName}/packages/dependencies\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ packageName, version, isDev })
+              });
+              
+              const result = await response.json();
+              
+              const output = \`
+Exit Code: \${result.exitCode}
+
+STDOUT:
+\${result.stdout || '(no output)'}
+
+STDERR:
+\${result.stderr || '(no errors)'}
+              \`.trim();
+              
+              showCommandOutput(output);
+              
+              if (result.success) {
+                showSaveIndicator(\`✅ \${packageName} installed successfully\`);
+                // Reload packages data
+                await loadPackagesData();
+                // Hide form and clear inputs
+                document.getElementById('add-dependency-form').style.display = 'none';
+                document.getElementById('dependency-name').value = '';
+                document.getElementById('dependency-version').value = '';
+              } else {
+                alert(\`❌ Package installation failed: \${result.error}\`);
+              }
+            } catch (error) {
+              console.error('Error installing package:', error);
+              showCommandOutput('Error installing package: ' + error.message);
+            }
+          };
+          
+          // Mise config save functionality
+          document.getElementById('save-mise-config-btn').onclick = async () => {
+            const configContent = document.getElementById('mise-config-editor').value;
+            
+            try {
+              // Parse TOML content back to config object (simplified)
+              const response = await fetch(\`/api/sites/\${siteName}/packages/mise-config\`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  config: parseTomlToConfig(configContent) 
+                })
+              });
+              
+              const result = await response.json();
+              
+              if (result.success) {
+                showSaveIndicator('✅ Mise config saved successfully');
+                // Reload packages data
+                await loadPackagesData();
+              } else {
+                alert('❌ Failed to save mise config: ' + result.error);
+              }
+            } catch (error) {
+              console.error('Error saving mise config:', error);
+              alert('Error saving mise config: ' + error.message);
+            }
+          };
+          
+          document.getElementById('reload-mise-config-btn').onclick = () => {
+            updateMiseConfigUI();
+          };
+          
+          function parseTomlToConfig(toml) {
+            // This is a simplified TOML parser - in production you'd want a proper parser
+            const config = { tools: {}, tasks: {}, env: {} };
+            
+            const lines = toml.split('\\n');
+            let currentSection = '';
+            let currentTaskName = '';
+            
+            for (const line of lines) {
+              const trimmed = line.trim();
+              
+              if (trimmed === '' || trimmed.startsWith('#')) {
+                continue;
+              }
+              
+              if (trimmed.startsWith('[')) {
+                if (trimmed === '[tools]') {
+                  currentSection = 'tools';
+                } else if (trimmed === '[env]') {
+                  currentSection = 'env';
+                } else if (trimmed.startsWith('[tasks.')) {
+                  currentSection = 'tasks';
+                  currentTaskName = trimmed.slice(7, -1);
+                  config.tasks[currentTaskName] = { run: '' };
+                }
+                continue;
+              }
+              
+              const equalIndex = trimmed.indexOf('=');
+              if (equalIndex > 0) {
+                const key = trimmed.slice(0, equalIndex).trim();
+                const value = trimmed.slice(equalIndex + 1).trim().replace(/^["']|["']$/g, '');
+                
+                if (currentSection === 'tools') {
+                  config.tools[key] = value;
+                } else if (currentSection === 'env') {
+                  config.env[key] = value;
+                } else if (currentSection === 'tasks' && currentTaskName) {
+                  if (key === 'run') {
+                    config.tasks[currentTaskName].run = value;
+                  } else if (key === 'description') {
+                    config.tasks[currentTaskName].description = value;
+                  }
+                }
+              }
+            }
+            
+            return config;
+          }
+          
+          // Close modal when clicking outside
+          document.getElementById('packages-modal').onclick = (e) => {
+            if (e.target.id === 'packages-modal') {
+              closePackagesModal();
+            }
+          };
         </script>
       </body>
       </html>

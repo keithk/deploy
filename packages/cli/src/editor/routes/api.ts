@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { Database } from '@keithk/deploy-core/src/database/database';
 import { requireAuth } from './auth';
 import { getSiteDomain } from '../utils/site-helpers';
+import { packagesRoutes } from './packages';
+import { editingSessionRoutes } from './editing-sessions';
+import { templatesRoutes } from './templates';
 
 const apiRoutes = new Hono();
 
@@ -59,5 +62,14 @@ apiRoutes.post('/sites/claim', async (c) => {
     return c.json({ success: false, error: 'Failed to claim site' });
   }
 });
+
+// Mount packages routes
+apiRoutes.route('/', packagesRoutes);
+
+// Mount editing session routes
+apiRoutes.route('/', editingSessionRoutes);
+
+// Mount templates routes
+apiRoutes.route('/', templatesRoutes);
 
 export { apiRoutes };
