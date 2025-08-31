@@ -6,7 +6,7 @@ Execute code at specific points in the server lifecycle.
 
 ```typescript
 // sites/mysite/.dialup/actions/startup.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+import { defineHookAction } from "@@keithk/deploy";
 
 export default defineHookAction({
   id: "startup",
@@ -50,7 +50,7 @@ Hook actions are useful for a variety of scenarios:
 
 ```typescript
 // sites/mysite/.dialup/actions/server-lifecycle.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+import { defineHookAction } from "@@keithk/deploy";
 import { connect, disconnect } from "./database";
 
 export default defineHookAction({
@@ -96,7 +96,7 @@ export default defineHookAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/request-logger.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+import { defineHookAction } from "@@keithk/deploy";
 import { appendFile } from "fs/promises";
 import { join } from "path";
 
@@ -155,7 +155,7 @@ export default defineHookAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/build-notifications.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+import { defineHookAction } from "@@keithk/deploy";
 
 export default defineHookAction({
   id: "build-notifications",

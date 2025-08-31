@@ -8,7 +8,7 @@ Create a file in your site's `.dialup/actions` directory:
 
 ```typescript
 // sites/mysite/.dialup/actions/nightly-build.ts
-import { defineScheduledAction, executeCommand, buildSite } from "@keithk/deploy-actions";
+import { defineScheduledAction, executeCommand, buildSite } from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "nightly-build",
@@ -71,7 +71,7 @@ Scheduled actions use cron syntax to define when they should run:
 
 ```typescript
 // sites/mysite/.dialup/actions/backup.ts
-import { defineScheduledAction } from "@keithk/deploy-actions";
+import { defineScheduledAction } from "@keithk/deploy";
 import { join } from "path";
 import { writeFile } from "fs/promises";
 

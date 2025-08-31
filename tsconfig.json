@@ -1,37 +1,64 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "lib": [
+      "ES2022"
+    ],
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "dist",
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "paths": {
+      "@core/*": [
+        "core/*"
+      ],
+      "@server/*": [
+        "server/*"
+      ],
+      "@actions/*": [
+        "actions/*"
+      ],
+      "@cli/*": [
+        "cli/*"
+      ],
+      "@admin/*": [
+        "admin/*"
+      ],
+      "@editor/*": [
+        "editor/*"
+      ]
+    },
+    "types": [
+      "bun-types"
+    ],
+    "allowImportingTsExtensions": false,
+    "moduleDetection": "force",
+    "noUncheckedIndexedAccess": true,
+    "strictNullChecks": true,
+    "allowJs": true,
+    "checkJs": false,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "resolveJsonModule": true,
     "incremental": true,
-    "composite": true,
-    "baseUrl": ".",
-    "paths": {
-      "@keithk/deploy-core": ["./packages/core/src"],
-      "@keithk/deploy-core/*": ["./packages/core/src/*"],
-      "@keithk/deploy-actions": ["./packages/actions/src"],
-      "@keithk/deploy-actions/*": ["./packages/actions/src/*"],
-      "@keithk/deploy-server": ["./packages/server/src"],
-      "@keithk/deploy-server/*": ["./packages/server/src/*"],
-      "@keithk/deploy-cli": ["./packages/cli/src"],
-      "@keithk/deploy-cli/*": ["./packages/cli/src/*"]
-    }
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/actions" },
-    { "path": "./packages/server" },
-    { "path": "./packages/cli" }
+  "include": [
+    "src/**/*"
   ],
-  "files": [],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
 }

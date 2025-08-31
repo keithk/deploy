@@ -28,7 +28,7 @@ Create a custom webhook handler:
 
 ```typescript
 // sites/mysite/.dialup/actions/stripe-webhook.ts
-import { defineWebhookAction } from "@keithk/deploy-actions";
+import { defineWebhookAction } from "@keithk/deploy";
 
 export default defineWebhookAction({
   id: "stripe-webhook",
@@ -62,7 +62,7 @@ When setting up webhooks, it's important to implement proper security measures:
 
 ```typescript
 // sites/mysite/.dialup/actions/github-webhook.ts
-import { defineWebhookAction } from "@keithk/deploy-actions";
+import { defineWebhookAction } from "@keithk/deploy";
 import { createHmac } from "crypto";
 
 export default defineWebhookAction({
@@ -125,7 +125,7 @@ export default defineWebhookAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/stripe-webhook.ts
-import { defineWebhookAction } from "@keithk/deploy-actions";
+import { defineWebhookAction } from "@keithk/deploy";
 import Stripe from "stripe";
 
 export default defineWebhookAction({

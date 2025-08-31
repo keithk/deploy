@@ -1,52 +1,62 @@
 {
-  "name": "dialup-deploy",
+  "name": "@keithk/deploy",
   "version": "0.1.0",
   "description": "A simple way to deploy websites with automatic SSL and subdomains",
-  "private": false,
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
+  "main": "dist/index.js",
+  "bin": {
+    "deploy": "./dist/cli/index.js",
+    "dd": "./dist/cli/index.js"
+  },
   "scripts": {
-    "start": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js start",
-    "dev": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js dev",
-    "build": "bun run build:all",
-    "build:all": "bun run clear:dist && bun run build:tsc && bun run build:bun",
-    "build:tsc": "tsc --build",
-    "build:bun": "bun run build:core && bun run build:actions && bun run build:server && bun run build:cli",
-    "build:core": "bun run --cwd packages/core build",
-    "build:server": "bun run --cwd packages/server build",
-    "build:cli": "bun run --cwd packages/cli build",
-    "build:actions": "bun run --cwd packages/actions build",
-    "build:sites": "ROOT_DIR=$(pwd)/sites bun run --cwd packages/cli build:sites",
-    "clear:dist": "rm -rf packages/*/dist && rm -f tsconfig.tsbuildinfo && rm -f packages/*/tsconfig.tsbuildinfo",
-    "typecheck": "tsc --build --dry",
-    "typecheck:watch": "tsc --build --watch",
-    "setup:local": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup local",
-    "setup:production": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup production",
-    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup local",
-    "changeset": "changeset",
-    "changeset:version": "changeset version",
-    "changeset:publish": "changeset publish --otp",
-    "changeset:status": "changeset status",
-    "version": "changeset version && bun run build:all",
-    "publish": "bun run build:all && bun run resolve:workspace && bun run validate:packages && changeset publish --otp",
-    "validate:packages": "node scripts/validate-packages.js",
-    "resolve:workspace": "node scripts/resolve-workspace-deps.js",
-    "restore:workspace": "node scripts/restore-workspace-deps.js"
+    "start": "bun run dist/cli/index.js start",
+    "dev": "bun run build:watch & bun run start",
+    "build": "bun run clean && bun run build:tsc && bun run build:bundle",
+    "build:tsc": "tsc",
+    "build:bundle": "bun build src/cli/index.ts --outdir dist/cli --target bun --minify",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "bun test",
+    "cli:dev": "bun run src/index.ts dev",
+    "cli:build": "bun build src/index.ts --outdir dist --target bun --minify",
+    "server:dev": "bun run src/index.ts",
+    "server:build": "bun build src/index.ts --outdir dist --target bun --minify",
+    "core:build": "bun build src/index.ts --outdir dist --target bun --minify",
+    "actions:build": "bun build src/index.ts --outdir dist --target bun --minify"
   },
   "keywords": [
     "bun",
+    "deploy",
     "static-site",
-    "file-router"
+    "ssl",
+    "subdomain",
+    "hosting"
   ],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "croner": "^9.0.0",
+    "fs-extra": "^11.2.0",
+    "hono": "^4.0.0",
+    "inquirer": "^9.2.15",
+    "ora": "^8.0.1",
+    "simple-git": "^3.28.0"
+  },
   "devDependencies": {
     "@changesets/cli": "^2.29.4",
     "@types/node": "^20.17.32",
     "bun-plugin-dtsx": "^0.21.9",
     "bun-types": "latest",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

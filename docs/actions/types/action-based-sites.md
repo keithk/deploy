@@ -11,7 +11,7 @@ You can create sites that are primarily or entirely driven by actions. This appr
 
 ```typescript
 // sites/api-site/.dialup/actions/api-endpoints.ts
-import { defineRouteAction } from "@dialup-deploy/actions";
+import { defineRouteAction } from "@@keithk/deploy";
 
 export default defineRouteAction({
   id: "api-endpoints",
@@ -55,7 +55,7 @@ export default defineRouteAction({
 
 ```typescript
 // sites/data-processor/.dialup/actions/process-data.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@@keithk/deploy";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -99,7 +99,7 @@ export default defineScheduledAction({
 
 ```typescript
 // sites/integration-hub/.dialup/actions/github-to-slack.ts
-import { defineWebhookAction } from "@dialup-deploy/actions";
+import { defineWebhookAction } from "@@keithk/deploy";
 
 export default defineWebhookAction({
   id: "github-to-slack",
@@ -222,7 +222,7 @@ export default defineWebhookAction({
 
 ```typescript
 // sites/reports/.dialup/actions/weekly-report.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+import { defineScheduledAction } from "@@keithk/deploy";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import nodemailer from "nodemailer";

@@ -6,7 +6,7 @@ Expose custom HTTP endpoints for your site.
 
 ```typescript
 // sites/mysite/.dialup/actions/api-routes.ts
-import { defineRouteAction } from "@keithk/deploy-actions";
+import { defineRouteAction } from "@keithk/deploy";
 
 export default defineRouteAction({
   id: "api-routes",
@@ -90,7 +90,7 @@ You can add authentication to your routes:
 
 ```typescript
 // sites/mysite/.dialup/actions/protected-routes.ts
-import { defineRouteAction } from "@keithk/deploy-actions";
+import { defineRouteAction } from "@keithk/deploy";
 
 export default defineRouteAction({
   id: "protected-routes",
@@ -171,7 +171,7 @@ Enable Cross-Origin Resource Sharing (CORS) for your routes:
 
 ```typescript
 // sites/mysite/.dialup/actions/cors-routes.ts
-import { defineRouteAction } from "@keithk/deploy-actions";
+import { defineRouteAction } from "@keithk/deploy";
 
 export default defineRouteAction({
   id: "cors-routes",
@@ -215,7 +215,7 @@ export default defineRouteAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/users-api.ts
-import { defineRouteAction } from "@keithk/deploy-actions";
+import { defineRouteAction } from "@keithk/deploy";
 
 // Mock database
 const users = [

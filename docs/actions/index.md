@@ -20,7 +20,7 @@ Example of using environment variables in an action:
 
 ```typescript
 // sites/mysite/.dialup/actions/api-key-action.ts
-import { defineScheduledAction } from "@keithk/deploy-actions";
+import { defineScheduledAction } from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "api-key-action",
@@ -99,14 +99,14 @@ Actions can execute CLI commands using the `executeCommand` utility. This is use
 
 ```typescript
 // sites/mysite/.dialup/actions/build-action.ts
-import { defineScheduledAction } from "@keithk/deploy-actions";
+import { defineScheduledAction } from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "build-action",
   schedule: "0 3 * * *", // Run at 3 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@keithk/deploy-server");
+    const { executeCommand } = await import("@keithk/deploy");
 
     // Execute a command
     const result = await executeCommand("bun run build", {
@@ -126,14 +126,14 @@ export default defineScheduledAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/deploy-action.ts
-import { defineScheduledAction } from "@keithk/deploy-actions";
+import { defineScheduledAction } from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "deploy-action",
   schedule: "0 4 * * *", // Run at 4 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@keithk/deploy-server");
+    const { executeCommand } = await import("@keithk/deploy");
 
     // Get environment variables from context
     const env = context.env || {};
@@ -160,14 +160,14 @@ export default defineScheduledAction({
 
 ```typescript
 // sites/mysite/.dialup/actions/build-and-deploy.ts
-import { defineScheduledAction } from "@keithk/deploy-actions";
+import { defineScheduledAction } from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "build-and-deploy",
   schedule: "0 5 * * *", // Run at 5 AM UTC
   async handler(payload, context) {
     // Import the executeCommand utility
-    const { executeCommand } = await import("@keithk/deploy-server");
+    const { executeCommand } = await import("@keithk/deploy");
 
     // Execute build command
     const buildResult = await executeCommand("bun run build", {
@@ -205,19 +205,19 @@ export default defineScheduledAction({
 
 Actions have access to several built-in packages and utilities to help with common tasks.
 
-### Core Packages
+### Core Package
 
-These packages are available to all actions:
+Everything is now available from the single `@keithk/deploy` package:
 
-| Package                  | Description              | Import Example                                                    |
-| ------------------------ | ------------------------ | ----------------------------------------------------------------- |
-| `@keithk/deploy-core`    | Core types and utilities | `import { SiteConfig } from "@keithk/deploy-core";`               |
-| `@keithk/deploy-actions` | Action definitions       | `import { defineScheduledAction } from "@keithk/deploy-actions";` |
-| `@keithk/deploy-server`  | Server utilities         | `import { executeCommand } from "@keithk/deploy-server";`         |
+| Export | Description | Import Example |
+| ------ | ----------- | -------------- |
+| Types & Utilities | Core types like `SiteConfig`, logging utilities | `import { SiteConfig, info, error } from "@keithk/deploy";` |
+| Action Definitions | Functions to define actions | `import { defineScheduledAction, defineWebhookAction } from "@keithk/deploy";` |
+| Server Utilities | Command execution and server functions | `import { executeCommand, startServer } from "@keithk/deploy";` |
 
 ### Utility Functions
 
-These utility functions are available from the server package:
+These utility functions are available from `@keithk/deploy`:
 
 | Function         | Description                | Example                                                                    |
 | ---------------- | -------------------------- | -------------------------------------------------------------------------- |

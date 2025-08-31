@@ -6,7 +6,7 @@ Combine multiple capabilities in a single action.
 
 ```typescript
 // sites/mysite/.dialup/actions/multi-purpose.ts
-import { defineAction } from "@dialup-deploy/actions";
+import { defineAction } from "@@keithk/deploy";
 
 export default defineAction({
   id: "multi-purpose",
@@ -104,7 +104,7 @@ async handler(payload, context) {
 
 ```typescript
 // sites/mysite/.dialup/actions/system-monitor.ts
-import { defineAction } from "@dialup-deploy/actions";
+import { defineAction } from "@@keithk/deploy";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import os from "os";
@@ -223,7 +223,7 @@ async function collectSystemStats() {
 
 ```typescript
 // sites/mysite/.dialup/actions/content-sync.ts
-import { defineAction } from "@dialup-deploy/actions";
+import { defineAction } from "@@keithk/deploy";
 import { writeFile, readFile } from "fs/promises";
 import { join } from "path";
 

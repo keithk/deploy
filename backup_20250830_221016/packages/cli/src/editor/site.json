@@ -1,0 +1,11 @@
+{
+  "name": "editor",
+  "type": "built-in",
+  "subdomain": "editor",
+  "main": "index.ts",
+  "config": {
+    "enableByDefault": true,
+    "requiresAuth": true,
+    "dependsOn": ["admin"]
+  }
+}

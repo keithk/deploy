@@ -54,6 +54,21 @@ Each site has its own configuration in `sites/[site-name]/.deploy/config.json` (
 }
 ```
 
+### Built-in Sites Configuration
+
+With the new single-package architecture, built-in sites like the admin panel can be configured directly:
+
+```json
+{
+  "builtInSites": {
+    "admin": {
+      "enabled": true,
+      "subdomain": "admin",
+      "path": "/src/admin"
+    }
+  }
+}```
+
 ## 📋 Configuration Loading Order
 
 When the system loads configuration files, it follows this order:
@@ -92,10 +107,14 @@ This loading order provides a clear configuration hierarchy with fallback option
   - `repository`: GitHub repository name (username/repo)
   - `branch`: Branch to monitor for changes
   - `secret`: Webhook secret for GitHub authentication
+- `builtInSites`: Configuration for built-in sites
+  - `enabled`: Enable/disable specific built-in sites
+  - `path`: Relative path to the built-in site's source
+  - `subdomain`: Optional custom subdomain for the site
 
 ### Site Config Options
 
-- `type`: The type of site (supports: "static", "dynamic", "passthrough", "static-build", "docker")
+- `type`: The type of site (supports: "static", "dynamic", "passthrough", "static-build", "docker", "built-in")
 - `buildDir`: For static-build sites, the directory where built files are output
 - `devPort`: For static-build sites, the port for the dev server
 - `proxyPort`: For passthrough sites, the port to proxy to
