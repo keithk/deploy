@@ -56,9 +56,9 @@ export class ContainerManager {
    */
   private async discoverExistingContainers() {
     try {
-      // Find all running Docker containers with deploy- prefix
+      // Find all running Docker containers with -production or -preview suffix
       const { stdout } = await this.executeCommand(
-        'docker ps --format "{{.Names}}\t{{.Ports}}" --filter name=default-production'
+        'docker ps --format "{{.Names}}\t{{.Ports}}"'
       );
       
       if (stdout.trim()) {
@@ -70,12 +70,17 @@ export class ContainerManager {
             continue; // Skip malformed lines
           }
           
+          // Only include containers ending with -production or -preview
+          if (!name.endsWith('-production') && !name.endsWith('-preview')) {
+            continue;
+          }
+          
           // Extract port mapping (e.g., "0.0.0.0:3001->3000/tcp")
           const portMatch = ports.match(/0\.0\.0\.0:(\d+)->/);
           if (portMatch && portMatch[1]) {
             const port = parseInt(portMatch[1], 10);
             
-            debug(`Discovered existing Docker container: ${name} on port ${port}`);
+            info(`Discovered existing Docker container: ${name} on port ${port}`);
             
             // Register the discovered container
             this.containers.set(name, {

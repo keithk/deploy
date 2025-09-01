@@ -19,7 +19,9 @@
       "Bash(./dist/cli/index.js:*)",
       "Bash(bun link:*)",
       "Bash(deploy dev)",
-      "Bash(deploy admin reset-password)"
+      "Bash(deploy admin reset-password)",
+      "Bash(git checkout:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": [],
