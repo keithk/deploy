@@ -24,7 +24,10 @@
       "Bash(curl:*)",
       "Bash(sqlite3:*)",
       "Bash(echo:*)",
-      "Bash(bun scripts/diagnose-database.ts:*)"
+      "Bash(bun scripts/diagnose-database.ts:*)",
+      "Bash(cat:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)"
     ],
     "deny": [],
     "ask": [],

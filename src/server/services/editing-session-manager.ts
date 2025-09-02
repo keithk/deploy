@@ -72,6 +72,12 @@ export class EditingSessionManager {
     // Check if user already has too many active sessions (max 10)
     await this.enforceSessionLimits(userId);
     
+    // Ensure the site has a git repository initialized
+    if (!gitService.isGitRepository(sitePath)) {
+      info(`Initializing git repository for site: ${siteName}`);
+      await gitService.initializeRepository(sitePath);
+    }
+    
     // Create Git branch
     const branchName = await gitService.createEditBranch(sitePath, baseName);
     

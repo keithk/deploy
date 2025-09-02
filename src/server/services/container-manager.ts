@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { debug, info, warn, error } from '../utils/logging';
 import type { SiteConfig } from "../../core";
@@ -34,7 +34,7 @@ export class ContainerManager {
   private processes = new Map<string, ChildProcess>();
   private railpackPath: string;
 
-  constructor(railpackPath = './railpack') {
+  constructor(railpackPath = 'railpack') {
     this.railpackPath = railpackPath;
     this.ensureContainerWorkspace();
     
@@ -243,26 +243,173 @@ export class ContainerManager {
     site: SiteConfig,
     plan: RailpackPlan
   ) {
-    // For now, we'll run the site directly with the detected command
-    // Later we can integrate with Docker using the Railpack plan
+    // For preview containers, run dev command directly without building
+    if (container.type === 'preview') {
+      await this.createDevContainer(container, site);
+      return;
+    }
     
-    const startCommand = plan.deploy.startCommand;
-    const envVars = { 
-      ...process.env,
-      ...plan.deploy.variables,
-      PORT: container.port.toString()
-    };
-
-    debug(`Starting ${container.name} with command: ${startCommand}`);
+    // For production containers, build with railpacks
+    const imageName = `deploy-${container.name}:latest`;
     
-    const childProcess = spawn('sh', ['-c', startCommand], {
-      cwd: site.path,
-      env: envVars,
+    // Import the railpack utility
+    const { buildWithRailpack } = await import('../../utils/railpack');
+    
+    info(`Building Docker image with Railpack for ${container.name}`);
+    
+    // Build the Docker image using Railpack
+    const buildSuccess = await buildWithRailpack(site.path, imageName, {
+      env: {
+        NODE_ENV: 'production',
+        PORT: container.port.toString(),
+        ...site.environment
+      }
+    });
+    
+    if (!buildSuccess) {
+      throw new Error(`Failed to build Docker image with Railpack for ${container.name}`);
+    }
+    
+    // Now run the production Docker container
+    await this.runProductionContainer(container, site, imageName, plan);
+  }
+  
+  private async createDevContainer(
+    container: ContainerConfig,
+    site: SiteConfig
+  ) {
+    // Clean up any existing container with the same name
+    await this.cleanupExistingDockerContainer(container.name);
+    
+    // Get railpack plan to understand the project structure
+    const { getRailpackPlan } = await import('../../utils/railpack');
+    const plan = await getRailpackPlan(site.path);
+    
+    // Generate and write mise configuration based on railpack analysis
+    const { generateMiseConfig, writeMiseConfig } = await import('../utils/generate-mise-config');
+    const miseConfig = generateMiseConfig(plan, site.path);
+    writeMiseConfig(site.path, miseConfig);
+    
+    debug(`Generated mise.toml for ${container.name}`);
+    
+    // Run Docker container with volume mount for hot reloading
+    // Exclude node_modules to avoid platform-specific binary issues
+    const runArgs = [
+      'run', '-d',
+      '--name', container.name,
+      '-p', `${container.port}:${site.exposedPort || 3000}`,
+      '--rm', // Auto-remove when stopped
+      '-v', `${site.path}:/app`, // Mount for hot reloading
+      '-v', '/app/node_modules', // Create anonymous volume for node_modules to avoid conflicts
+      '-w', '/app' // Set working directory
+    ];
+    
+    // Add environment variables
+    if (site.environment) {
+      for (const [key, value] of Object.entries(site.environment)) {
+        runArgs.push('-e', `${key}=${value}`);
+      }
+    }
+    
+    // Add the PORT environment variable
+    runArgs.push('-e', `PORT=${site.exposedPort || 3000}`);
+    runArgs.push('-e', 'HOST=0.0.0.0'); // Ensure server binds to all interfaces
+    
+    // Use a base image with curl for installing mise
+    const baseImage = 'node:20-bookworm'; // Use bookworm for better compatibility
+    
+    // Add the base image
+    runArgs.push(baseImage);
+    
+    // Always use mise since we generated the config
+    // Install mise, then use it to install dependencies and run dev
+    let installCmd = 'curl -fsSL https://mise.run | sh && ';
+    installCmd += 'export PATH="$HOME/.local/bin:$PATH" && ';
+    installCmd += 'mise trust && ';  // Trust the config file
+    installCmd += 'mise install && ';  // This will install all tools defined in .mise.toml
+    installCmd += 'mise run install && '; // Run the install task to install npm dependencies
+    installCmd += 'mise run dev'; // Run the dev task
+    
+    debug(`Will use mise for all dependency management and execution`);
+    
+    // Use bash for better compatibility with mise
+    runArgs.push('bash', '-c', installCmd);
+    
+    debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
+    
+    const runChildProcess = spawn('docker', runArgs, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
-
-    this.setupProcessHandlers(container, childProcess);
-    this.processes.set(container.name, childProcess);
+    
+    // Wait for Docker container to start successfully
+    await this.waitForProcess(runChildProcess, `Docker run for ${container.name}`);
+    
+    // Verify the container is actually running and get its ID
+    const { stdout: containerIdOutput } = await this.executeCommand(
+      `docker ps -q --filter name=${container.name}`
+    );
+    
+    if (containerIdOutput.trim()) {
+      container.containerId = containerIdOutput.trim();
+      debug(`Docker container ${container.name} started with ID: ${container.containerId}`);
+    } else {
+      throw new Error(`Docker container ${container.name} failed to start`);
+    }
+  }
+  
+  private async runProductionContainer(
+    container: ContainerConfig,
+    site: SiteConfig,
+    imageName: string,
+    plan: RailpackPlan
+  ) {
+    // Clean up any existing container with the same name
+    await this.cleanupExistingDockerContainer(container.name);
+    
+    // For production containers, use the built image with start command
+    const startCommand = plan.deploy?.startCommand || 'caddy run --config /Caddyfile --adapter caddyfile';
+    
+    const runArgs = [
+      'run', '-d',
+      '--name', container.name,
+      '-p', `${container.port}:${site.exposedPort || 3000}`,
+      '--rm' // Auto-remove when stopped
+    ];
+    
+    // Add environment variables
+    if (site.environment) {
+      for (const [key, value] of Object.entries(site.environment)) {
+        runArgs.push('-e', `${key}=${value}`);
+      }
+    }
+    
+    // Add the PORT environment variable
+    runArgs.push('-e', `PORT=${site.exposedPort || 3000}`);
+    runArgs.push('-e', 'HOST=0.0.0.0'); // Ensure server binds to all interfaces
+    
+    // Add the image and command
+    runArgs.push(imageName, 'sh', '-c', startCommand);
+    
+    debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
+    
+    const runChildProcess = spawn('docker', runArgs, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    // Wait for Docker container to start successfully
+    await this.waitForProcess(runChildProcess, `Docker run for ${container.name}`);
+    
+    // Verify the container is actually running and get its ID
+    const { stdout: containerIdOutput } = await this.executeCommand(
+      `docker ps -q --filter name=${container.name}`
+    );
+    
+    if (containerIdOutput.trim()) {
+      container.containerId = containerIdOutput.trim();
+      debug(`Docker container ${container.name} started with ID: ${container.containerId}`);
+    } else {
+      throw new Error(`Docker container ${container.name} failed to start`);
+    }
   }
 
   private async createDockerContainer(

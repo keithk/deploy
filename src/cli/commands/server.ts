@@ -341,6 +341,34 @@ export function registerServerCommands(program: Command): void {
         const logLevel = parseInt(options.logLevel);
         const server = await startServer("dev", { rootDir, logLevel });
 
+        // Initialize git repos for all sites that don't have them
+        info("Checking git repositories for all sites...");
+        try {
+          const { discoverSites } = await import("../../core");
+          const { initGitRepos } = await import("../../core/utils/gitInit");
+          
+          const sites = await discoverSites(rootDir, "dev");
+          const siteDirs = sites.map(site => ({
+            name: site.subdomain || site.route.replace(/^\//, ''),
+            path: site.path
+          }));
+          
+          const initialized = initGitRepos(siteDirs, {
+            createInitialCommit: true,
+            addGitignore: true,
+            silent: false
+          });
+          
+          if (initialized.length > 0) {
+            info(`Initialized git repositories for ${initialized.length} site(s): ${initialized.join(", ")}`);
+          } else {
+            debug("All sites already have git repositories");
+          }
+        } catch (err) {
+          warn(`Failed to check/initialize git repositories: ${err}`);
+          // Don't fail the entire dev command if git init fails
+        }
+
         // Restart any processes that were running before
         info("Checking for processes to restart...");
         try {
