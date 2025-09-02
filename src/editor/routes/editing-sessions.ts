@@ -118,15 +118,16 @@ editingSessionRoutes.post('/sites/:sitename/edit/start', async (c) => {
     console.error('Error starting editing session:', error);
     
     // Enhanced error logging
+    const errorObj = error instanceof Error ? error : new Error(String(error));
     const detailedErrorLog = {
       message: 'Failed to start editing session',
       siteName,
       userId: user.id,
       timestamp: new Date().toISOString(),
       errorDetails: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
+        name: errorObj.name,
+        message: errorObj.message,
+        stack: errorObj.stack
       }
     };
     
@@ -136,8 +137,8 @@ editingSessionRoutes.post('/sites/:sitename/edit/start', async (c) => {
       success: false, 
       error: 'Failed to start editing session',
       details: {
-        message: error.message,
-        name: error.name
+        message: errorObj.message,
+        name: errorObj.name
       }
     });
   }
