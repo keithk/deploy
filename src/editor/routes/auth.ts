@@ -20,7 +20,10 @@ export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
     const user = await validateSession(sessionId);
     
     if (!user) {
-      deleteCookie(c, 'editor_session');
+      // Clear cookie with the same options as when setting it
+      deleteCookie(c, 'editor_session', {
+        path: '/'
+      });
       return c.redirect('/auth/login');
     }
     
@@ -29,7 +32,9 @@ export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
     await next();
   } catch (error) {
     console.error('Auth middleware error:', error);
-    deleteCookie(c, 'editor_session');
+    deleteCookie(c, 'editor_session', {
+      path: '/'
+    });
     return c.redirect('/auth/login');
   }
 }
@@ -131,15 +136,21 @@ authRoutes.post('/login', async (c) => {
       [user.id]
     );
     
-    // Create session
-    const sessionId = await createSession(user.id);
+    // Create session with 7 days duration to match cookie
+    const sessionId = await createSession(user.id, undefined, undefined, 7 * 24);
     
-    // Set cookie
+    // Clear any existing editor_session cookies first to avoid duplicates
+    deleteCookie(c, 'editor_session');
+    deleteCookie(c, 'editor_session', { path: '/' });
+    deleteCookie(c, 'editor_session', { path: '/editor' });
+    
+    // Set cookie with explicit path
     setCookie(c, 'editor_session', sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to false for development
       sameSite: 'Lax',
-      maxAge: 7 * 24 * 60 * 60 // 7 days
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: '/'
     });
     
     return c.redirect('/dashboard');
@@ -332,7 +343,9 @@ authRoutes.get('/logout', async (c) => {
     }
   }
   
-  deleteCookie(c, 'editor_session');
+  deleteCookie(c, 'editor_session', {
+    path: '/'
+  });
   return c.redirect('/auth/login?message=Logged out successfully');
 });
 

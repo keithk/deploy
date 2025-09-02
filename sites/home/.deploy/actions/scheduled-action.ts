@@ -2,7 +2,7 @@ import {
   defineScheduledAction,
   executeCommand,
   buildSite
-} from "@keithk/deploy-actions";
+} from "@keithk/deploy";
 
 export default defineScheduledAction({
   id: "scheduled-action",

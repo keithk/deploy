@@ -87,8 +87,8 @@ async function buildFileTree(dirPath: string, basePath: string, maxDepth: number
     const entries = await readdir(dirPath, { withFileTypes: true });
     
     for (const entry of entries) {
-      // Skip hidden files and node_modules
-      if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+      // Skip hidden files, .gitignore files, and node_modules
+      if (entry.name.startsWith('.') || entry.name === '.gitignore' || entry.name === 'node_modules') {
         continue;
       }
       

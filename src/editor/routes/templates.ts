@@ -183,10 +183,17 @@ const SITE_TEMPLATES: SiteTemplate[] = [
  */
 async function execCommand(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
+    console.log(`Executing command: ${command} ${args.join(' ')} in ${cwd}`);
+    
     const child = spawn(command, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env }
+    });
+    
+    child.on('error', (error) => {
+      console.error(`Command error: ${error.message}`);
+      resolve({ stdout: '', stderr: `Failed to spawn command: ${error.message}`, exitCode: 1 });
     });
 
     let stdout = '';
@@ -307,8 +314,12 @@ templatesRoutes.post('/templates/create', async (c) => {
       arg.replace('{siteName}', siteName)
     );
     
+    console.log(`Creating site from template: ${template.command} ${processedArgs.join(' ')} in ${rootDir}`);
+    
     // Execute template creation command
     const result = await execCommand(template.command, processedArgs, rootDir);
+    
+    console.log(`Template creation result: exitCode=${result.exitCode}, stdout length=${result.stdout.length}, stderr length=${result.stderr.length}`);
     
     if (result.exitCode !== 0) {
       return c.json({ 

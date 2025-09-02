@@ -12,7 +12,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "bun-types": "^1.2.14"
+    "bun-types": "^1.2.14",
+    "@keithk/deploy": "latest"
   },
   "scripts": {
     "dev": "bun --watch index.ts",

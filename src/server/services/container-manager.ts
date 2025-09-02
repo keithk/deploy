@@ -124,6 +124,34 @@ export class ContainerManager {
     console.log(`🔧 ContainerManager.createContainer debug:`);
     console.log(`  - Site: ${site.subdomain} (${site.type})`);
     console.log(`  - Type: ${type}`);
+    console.log(`  - Site Path: ${site.path}`);
+    console.log(`  - Site Configuration: ${JSON.stringify(site, null, 2)}`);
+    
+    // Validate site path
+    const { existsSync, readFileSync } = require('fs');
+    const { join } = require('path');
+    
+    if (!existsSync(site.path)) {
+      console.error(`ERROR: Site path does not exist: ${site.path}`);
+      throw new Error(`Site path not found: ${site.path}`);
+    }
+    
+    // Check Dockerfile
+    const dockerfilePath = join(site.path, site.dockerFile || 'Dockerfile');
+    if (!existsSync(dockerfilePath)) {
+      console.warn(`No Dockerfile found at: ${dockerfilePath}`);
+    }
+    
+    // Check package.json for possible issues
+    const packageJsonPath = join(site.path, 'package.json');
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        console.log('Package Scripts:', packageJson.scripts);
+      } catch (err) {
+        console.error(`Error reading package.json: ${err}`);
+      }
+    }
     
     const containerName = `${site.subdomain}-${type}`;
     console.log(`  - Container name: ${containerName}`);

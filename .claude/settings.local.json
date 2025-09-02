@@ -21,7 +21,9 @@
       "Bash(deploy dev)",
       "Bash(deploy admin reset-password)",
       "Bash(git checkout:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": [],

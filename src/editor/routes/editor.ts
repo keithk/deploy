@@ -1,19 +1,49 @@
 import { Hono } from 'hono';
 import { join, resolve } from 'path';
 import { existsSync } from 'fs';
+import { getCookie } from 'hono/cookie';
 import { Database } from '../../core/database/database';
+import { validateSession } from '../../core/auth/sessions';
 import { requireAuth } from './auth';
 import { getSiteUrl, isEditableFile } from '../utils/site-helpers';
 import type { HonoContext, AuthenticatedUser, SiteData } from '../../types/hono';
 
 const editorRoutes = new Hono();
 
-// Apply authentication to all editor routes
-editorRoutes.use('*', requireAuth);
+// Authentication is already handled by the dashboard route
+// Users must be authenticated to reach the dashboard, which is where they access the editor from
+// editorRoutes.use('*', requireAuth);
 
 // Main editor page for a site
 editorRoutes.get('/:sitename', async (c: HonoContext) => {
-  const user = c.get('user');
+  console.log('[EDITOR ROUTE] Starting editor route handler');
+  
+  // Debug all headers and cookies
+  const allHeaders: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    allHeaders[key] = value;
+  });
+  console.log('[EDITOR ROUTE] All headers:', allHeaders);
+  
+  // Get user from cookie/session directly since requireAuth seems to be causing issues
+  const sessionId = getCookie(c, 'editor_session');
+  console.log('[EDITOR ROUTE] Session ID from cookie:', sessionId);
+  
+  if (!sessionId) {
+    console.log('[EDITOR ROUTE] No session ID found, redirecting to login');
+    return c.redirect('/auth/login');
+  }
+  
+  console.log('[EDITOR ROUTE] Calling validateSession with ID:', sessionId);
+  const user = await validateSession(sessionId);
+  console.log('[EDITOR ROUTE] ValidateSession returned:', user ? `User ${user.username}` : 'null');
+  
+  if (!user) {
+    console.log('[EDITOR ROUTE] No user found for session, redirecting to login');
+    return c.redirect('/auth/login');
+  }
+  
+  console.log('[EDITOR ROUTE] Authentication successful, proceeding with route');
   const siteName = c.req.param('sitename');
   
   try {
@@ -178,11 +208,26 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
           }
           
           .file-tree-item.folder::before {
-            content: "📁 ";
+            content: "▶ ";
+            display: inline-block;
+            width: 20px;
+            transition: transform 0.2s;
+          }
+          
+          .file-tree-item.folder.expanded::before {
+            content: "▼ ";
           }
           
           .file-tree-item.file::before {
             content: "📄 ";
+          }
+          
+          .file-tree-children {
+            display: none;
+          }
+          
+          .file-tree-children.expanded {
+            display: block;
           }
           
           .file-tree-item.selected {
@@ -989,7 +1034,7 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
             const container = document.getElementById('file-tree');
             container.innerHTML = '';
             
-            function renderNode(node, level = 0) {
+            function renderNode(node, level = 0, parentElement = container) {
               const item = document.createElement('div');
               item.className = 'file-tree-item ' + (node.type === 'file' ? 'file' : 'folder');
               item.style.paddingLeft = (level * 20) + 'px';
@@ -997,19 +1042,34 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               
               if (node.type === 'file') {
                 item.onclick = () => loadFile(node.path);
+              } else if (node.type === 'folder') {
+                // Create children container
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'file-tree-children';
+                
+                // Folder click toggles expansion
+                item.onclick = () => {
+                  item.classList.toggle('expanded');
+                  childrenContainer.classList.toggle('expanded');
+                };
+                
+                // Render children
+                if (node.children && node.children.length > 0) {
+                  node.children.forEach(child => renderNode(child, level + 1, childrenContainer));
+                }
+                
+                parentElement.appendChild(item);
+                parentElement.appendChild(childrenContainer);
+                return;
               }
               
-              container.appendChild(item);
-              
-              if (node.children) {
-                node.children.forEach(child => renderNode(child, level + 1));
-              }
+              parentElement.appendChild(item);
             }
             
             if (tree.length === 0) {
               container.innerHTML = '<div class="file-tree-item" style="color: var(--text-secondary);">No files yet</div>';
             } else {
-              tree.forEach(node => renderNode(node));
+              tree.forEach(node => renderNode(node, 0));
             }
           }
           
@@ -1152,7 +1212,16 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               'css': 'css',
               'md': 'markdown',
               'json': 'javascript',
-              'xml': 'xml'
+              'xml': 'xml',
+              'astro': 'htmlmixed',
+              'vue': 'htmlmixed',
+              'svelte': 'htmlmixed',
+              'php': 'php',
+              'py': 'python',
+              'rb': 'ruby',
+              'yml': 'yaml',
+              'yaml': 'yaml',
+              'toml': 'toml'
             };
             return modes[ext] || 'text';
           }

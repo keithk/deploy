@@ -45,7 +45,11 @@ function discoverFilesystemSites(rootDir: string): Site[] {
         
         if (stat.isDirectory()) {
           // Check if it looks like a site (has common files)
-          const commonFiles = ['index.html', 'index.js', 'index.ts', 'package.json'];
+          const commonFiles = [
+            'index.html', 'index.js', 'index.ts', 'package.json',
+            'Gemfile', 'config.ru', 'app.rb', 'requirements.txt', 'app.py',
+            'go.mod', 'main.go', 'Cargo.toml', 'composer.json', 'index.php'
+          ];
           const hasCommonFile = commonFiles.some(file => existsSync(join(sitePath, file)));
           
           if (hasCommonFile) {
@@ -125,7 +129,17 @@ async function getAllSites(userId: number, isAdmin: boolean = false): Promise<Si
 
 // Dashboard page
 dashboardRoutes.get('/', async (c) => {
+  console.log('[DASHBOARD ROUTE] Starting dashboard route handler');
+  
+  // Debug all headers and cookies
+  const allHeaders: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    allHeaders[key] = value;
+  });
+  console.log('[DASHBOARD ROUTE] All headers:', allHeaders);
+  
   const user = c.get('user');
+  console.log('[DASHBOARD ROUTE] User from context:', user ? `User ${user.username}` : 'null');
   
   if (!user) {
     return c.redirect('/auth/login');

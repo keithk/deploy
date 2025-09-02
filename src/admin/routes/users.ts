@@ -620,9 +620,12 @@ userRoutes.get('/sites', async (c) => {
                           <span class="status-badge user">${s.template}</span>
                         </td>
                         <td>
-                          <span class="status-badge ${s.status === 'running' ? 'running' : 'stopped'}">
-                            ${s.status}
-                          </span>
+                          ${(s.template === 'static' || s.template === 'static-build' || s.template === 'astro' || s.template === 'nextjs' || s.template === 'vite') ? 
+                            '<span class="status-badge running">always running</span>' :
+                            `<span class="status-badge ${s.status === 'running' ? 'running' : 'stopped'}">
+                              ${s.status}
+                            </span>`
+                          }
                         </td>
                         <td style="font-size: 0.8rem; color: var(--text-secondary);">
                           ${s.domain}
@@ -763,7 +766,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
         <title>Manage ${siteName} - Admin Panel</title>
         <link rel="stylesheet" href="/static/admin.css">
         <script>
-          async function runScript(script) {
+          async function runScript(script, event) {
             const button = event.target;
             const output = document.getElementById('script-output');
             
@@ -779,7 +782,14 @@ userRoutes.get('/sites/:id/manage', async (c) => {
               });
               
               const result = await response.text();
-              output.innerHTML = '<pre style="white-space: pre-wrap; font-size: 0.8rem;">' + result + '</pre>';
+              // Escape HTML characters to prevent display issues
+              const escapedResult = result
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+              output.innerHTML = '<pre style="white-space: pre-wrap; font-size: 0.8rem;">' + escapedResult + '</pre>';
             } catch (error) {
               output.innerHTML = '<div style="color: var(--accent-red);">Error: ' + (error as Error).message + '</div>';
             } finally {
@@ -839,9 +849,12 @@ userRoutes.get('/sites/:id/manage', async (c) => {
                     </div>
                     <div class="activity-item">
                       <span class="activity-action">Status:</span>
-                      <span class="status-badge ${siteStatus === 'running' ? 'running' : 'stopped'}">
-                        ${siteStatus}
-                      </span>
+                      ${(siteType === 'static' || siteType === 'static-build' || siteType === 'astro' || siteType === 'nextjs' || siteType === 'vite') ? 
+                        '<span class="status-badge running">always running</span>' :
+                        `<span class="status-badge ${siteStatus === 'running' ? 'running' : 'stopped'}">
+                          ${siteStatus}
+                        </span>`
+                      }
                     </div>
                     ${isLegacy ? `
                     <div class="activity-item">
@@ -903,18 +916,22 @@ userRoutes.get('/sites/:id/manage', async (c) => {
               </div>
               
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-                ${Object.keys(packageScripts).map(script => `
+                ${Object.keys(packageScripts).map(script => {
+                  const escapedScript = script.replace(/'/g, "\\'");
+                  const scriptCommand = (packageScripts as Record<string, string>)[script] || '';
+                  const escapedCommand = scriptCommand.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                  return `
                   <button 
-                    onclick="runScript('${script}')" 
+                    onclick="runScript('${escapedScript}', event)" 
                     class="btn success"
                     style="text-align: left;"
                   >
                     <strong>npm run ${script}</strong>
                     <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.25rem;">
-                      ${(packageScripts as Record<string, string>)[script]}
+                      ${escapedCommand}
                     </div>
                   </button>
-                `).join('')}
+                `;}).join('')}
               </div>
               
               <div>

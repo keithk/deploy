@@ -17,27 +17,59 @@ editingSessionRoutes.use('*', requireAuth);
 async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolean): Promise<{ hasAccess: boolean; sitePath?: string }> {
   const db = Database.getInstance();
   
-  const sites = db.query<{ user_id: number; path: string }>(
-    `SELECT user_id, path FROM sites WHERE name = ?`,
-    [siteName]
-  );
+  console.log(`Checking site access: siteName=${siteName}, userId=${userId}, isAdmin=${isAdmin}`);
+  
+  // Attempt to get database connection details
+  try {
+    const tables = db.query('SELECT name FROM sqlite_master WHERE type="table"');
+    console.log('Available tables:', tables.map(t => t.name));
+  } catch (dbError) {
+    console.error('Database connection error:', dbError);
+  }
+  
+  let sites;
+  try {
+    sites = db.query<{ user_id: number; path: string }>(
+      `SELECT user_id, path FROM sites WHERE name = ?`,
+      [siteName]
+    );
+  } catch (queryError) {
+    console.error(`Query error for site ${siteName}:`, queryError);
+    return { hasAccess: false };
+  }
+  
+  console.log(`Found ${sites.length} sites matching name: ${siteName}`);
   
   if (sites.length === 0) {
+    console.warn(`No site found with name: ${siteName}`);
     return { hasAccess: false };
   }
   
   const site = sites[0];
   if (!site) {
+    console.warn(`Unexpected: sites array has 0 length but wasn't caught earlier`);
     return { hasAccess: false };
   }
   
+  console.log(`Site details: user_id=${site.user_id}, path=${site.path}`);
+  
   if (site.user_id !== userId && !isAdmin) {
+    console.warn(`Access denied: userId ${userId} does not match site owner ${site.user_id} and is not admin`);
     return { hasAccess: false };
   }
   
   const sitePath = site.path.startsWith('/')
     ? site.path
     : resolve(process.env.ROOT_DIR || './sites', siteName);
+  
+  console.log(`Resolved site path: ${sitePath}`);
+  
+  // Additional checks
+  const { existsSync } = require('fs');
+  if (!existsSync(sitePath)) {
+    console.error(`Site path does not exist: ${sitePath}`);
+    return { hasAccess: false };
+  }
     
   return { hasAccess: true, sitePath };
 }
@@ -84,7 +116,30 @@ editingSessionRoutes.post('/sites/:sitename/edit/start', async (c) => {
     
   } catch (error) {
     console.error('Error starting editing session:', error);
-    return c.json({ success: false, error: 'Failed to start editing session' });
+    
+    // Enhanced error logging
+    const detailedErrorLog = {
+      message: 'Failed to start editing session',
+      siteName,
+      userId: user.id,
+      timestamp: new Date().toISOString(),
+      errorDetails: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      }
+    };
+    
+    console.error('Detailed Error Log:', JSON.stringify(detailedErrorLog, null, 2));
+    
+    return c.json({ 
+      success: false, 
+      error: 'Failed to start editing session',
+      details: {
+        message: error.message,
+        name: error.name
+      }
+    });
   }
 });
 
