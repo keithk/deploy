@@ -41,9 +41,9 @@ config/caddy-data/*
 # Build reports
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
-CLAUDE.md
-
 # where i keep all my test files
 scratch/
 
 sites/
+.claude
+CLAUDE.md
