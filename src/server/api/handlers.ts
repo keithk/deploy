@@ -4,6 +4,7 @@ import { processManager } from "../utils/process-manager";
 import { discoverSites } from "../discoverSites";
 import { editingSessionManager } from "../services/editing-session-manager";
 import { gitManager } from "../services/git-manager";
+import { containerManager } from "../services/container-manager";
 import { spawn } from "bun";
 import { join } from "path";
 import { 
@@ -437,6 +438,17 @@ export async function handleGetEditStatus(request: Request, siteName: string, co
       });
     }
 
+    // Check container status
+    let containerStatus = 'building';
+    if (session.containerName) {
+      const isRunning = await containerManager.instance.isContainerRunning(session.containerName);
+      if (isRunning) {
+        containerStatus = 'running';
+      } else if (session.status === 'failed') {
+        containerStatus = 'error';
+      }
+    }
+
     return new Response(JSON.stringify({
       editing: true,
       session: {
@@ -444,6 +456,7 @@ export async function handleGetEditStatus(request: Request, siteName: string, co
         branchName: session.branchName,
         previewUrl: session.previewUrl,
         status: session.status,
+        containerStatus: containerStatus,
         createdAt: session.createdAt,
         lastCommitAt: session.lastCommit
       }

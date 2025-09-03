@@ -1,7 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { debug, info, warn, error } from '../utils/logging';
+import { detectSiteFramework } from '../../utils/railpack';
 import type { SiteConfig } from "../../core";
 
 export interface ContainerConfig {
@@ -15,19 +16,8 @@ export interface ContainerConfig {
   strategy: 'railpack' | 'docker' | 'basic';
 }
 
-export interface RailpackPlan {
-  deploy: {
-    startCommand: string;
-    variables: Record<string, string>;
-  };
-  steps: Array<{
-    name: string;
-    commands: Array<{
-      cmd?: string;
-      customName?: string;
-    }>;
-  }>;
-}
+// Using the RailpackPlan from utils/railpack
+import type { RailpackPlan } from '../../utils/railpack';
 
 export class ContainerManager {
   private containers = new Map<string, ContainerConfig>();
@@ -127,12 +117,10 @@ export class ContainerManager {
     console.log(`  - Site Path: ${site.path}`);
     console.log(`  - Site Configuration: ${JSON.stringify(site, null, 2)}`);
     
-    // Validate site path
-    const { existsSync, readFileSync } = require('fs');
-    const { join } = require('path');
-    
+    // Ensure site path exists and is valid
     if (!existsSync(site.path)) {
       console.error(`ERROR: Site path does not exist: ${site.path}`);
+      error(`Site path does not exist: ${site.path}`);
       throw new Error(`Site path not found: ${site.path}`);
     }
     
@@ -163,7 +151,7 @@ export class ContainerManager {
 
     // Determine containerization strategy
     console.log(`  - Determining strategy...`);
-    const strategy = this.determineStrategy(site);
+    const strategy = await this.determineStrategy(site);
     console.log(`  - Strategy: ${strategy}`);
 
     const container: ContainerConfig = {
@@ -183,11 +171,17 @@ export class ContainerManager {
           await this.createDockerContainer(container, site);
           break;
         case 'railpack':
-          const plan = await this.analyzeRailpackSite(site.path);
+          // Import railpack utilities
+          console.log(`[DEBUG] Railpack strategy selected for ${container.name}`);
+          const { getRailpackPlan } = await import('../../utils/railpack');
+          const plan = await getRailpackPlan(site.path);
+          console.log(`[DEBUG] Railpack plan generated:`, plan ? 'YES' : 'NO');
           if (plan) {
+            console.log(`[DEBUG] Calling createRailpackContainer for ${container.name}`);
             await this.createRailpackContainer(container, site, plan);
           } else {
             // Fallback to basic if Railpack fails
+            warn(`Railpack plan generation failed for ${site.subdomain}, falling back to basic strategy`);
             container.strategy = 'basic';
             await this.createBasicContainer(container, site);
           }
@@ -213,29 +207,248 @@ export class ContainerManager {
   /**
    * Determines the best containerization strategy for a site
    */
-  private determineStrategy(site: SiteConfig): 'railpack' | 'docker' | 'basic' {
-    // Docker sites always use Docker strategy
-    if (site.type === 'docker') {
-      return 'docker';
-    }
-
-    // Check for existing Dockerfile
-    if (existsSync(join(site.path, 'Dockerfile'))) {
-      return 'docker';
-    }
-
+  private async determineStrategy(site: SiteConfig): Promise<'railpack' | 'docker' | 'basic'> {
+    // Check for existing Dockerfile first
+    const hasDockerfile = existsSync(join(site.path, 'Dockerfile'));
+    
+    // Debug logging for strategy determination
+    debug(`Determining container strategy for site: ${site.subdomain}`);
+    debug(`Site path: ${site.path}`);
+    debug(`Site type: ${site.type}`);
+    debug(`Has Dockerfile: ${hasDockerfile}`);
+    debug(`Use containers: ${site.useContainers}`);
+    
     // Sites that explicitly disable containers use basic strategy
     if (site.useContainers === false) {
+      info('Strategy: Basic (containers disabled)');
       return 'basic';
     }
 
-    // For passthrough and dynamic sites, try Railpack first
-    if (site.type === 'passthrough' || site.type === 'dynamic') {
+    // If Dockerfile exists, use Docker strategy
+    if (hasDockerfile) {
+      info('Strategy: Docker (Dockerfile exists)');
+      return 'docker';
+    }
+    
+    // No Dockerfile - try Railpack first
+    try {
+      const { getRailpackPlan, isRailpackInstalled } = await import('../../utils/railpack');
+      
+      // Check if Railpack is installed and can handle this site
+      if (await isRailpackInstalled()) {
+        const plan = await getRailpackPlan(site.path);
+        if (plan) {
+          info('Strategy: Railpack (No Dockerfile, Railpack can build this site)');
+          return 'railpack';
+        }
+      }
+    } catch (err) {
+      warn(`Railpack check failed: ${err}`);
+    }
+    
+    // Fallback to framework detection
+    try {
+      const { detectSiteFramework } = await import('../../utils/railpack');
+      
+      const frameworkInfo = await detectSiteFramework(site.path);
+      
+      debug(`Framework Detection Result: ${JSON.stringify(frameworkInfo)}`);
+      
+      // For dynamic sites without Dockerfile, use railpack
+      if (frameworkInfo.type === 'docker' || frameworkInfo.startCommand) {
+        info('Strategy: Railpack (Dynamic site without Dockerfile)');
+        return 'railpack';
+      }
+      
+      // Static sites can use basic strategy
+      if (frameworkInfo.type === 'static' || frameworkInfo.type === 'static-build') {
+        info('Strategy: Basic (Static site)');
+        return 'basic';
+      }
+    } catch (err) {
+      warn(`Framework detection failed: ${err}`);
+    }
+    
+    // Specific framework checks - use railpack when no Dockerfile
+    const frameworkChecks = [
+      { 
+        files: ['Gemfile', '.ruby-version', 'config.ru'], 
+        framework: 'ruby',
+        strategy: 'railpack' as const 
+      },
+      { 
+        files: ['next.config.js', 'nuxt.config.js', 'gatsby-config.js'], 
+        framework: 'nextjs/nuxt/gatsby',
+        strategy: 'railpack' as const 
+      },
+      { 
+        files: ['app.py', 'requirements.txt', 'pyproject.toml'], 
+        framework: 'python',
+        strategy: 'railpack' as const 
+      },
+      { 
+        files: ['server.js', 'app.js'], 
+        framework: 'node',
+        strategy: 'railpack' as const 
+      }
+    ];
+    
+    for (const check of frameworkChecks) {
+      if (check.files.some(file => existsSync(join(site.path, file)))) {
+        info(`Strategy: Docker (Detected ${check.framework} framework)`);
+        return check.strategy;
+      }
+    }
+
+    // Railpack strategy as a fallback
+    if (await this.isRailpackSuitable(site.path)) {
+      info('Strategy: Railpack (Generic dynamic site)');
       return 'railpack';
     }
 
+    // For passthrough or dynamic sites, prefer Docker
+    if (site.type === 'passthrough' || site.type === 'dynamic') {
+      const strategy = hasDockerfile ? 'docker' : 'basic';
+      info(`Strategy: ${strategy} (Passthrough/Dynamic site)`);
+      return strategy;
+    }
+
     // Static sites use basic strategy by default
+    info('Strategy: Basic (Default fallback)');
     return 'basic';
+  }
+
+  /**
+   * Additional check to see if Railpack is suitable for site
+   */
+  private async isRailpackSuitable(sitePath: string): Promise<boolean> {
+    try {
+      // Check for package.json or other build-related files
+      const packageJsonPath = join(sitePath, 'package.json');
+      const hasPackageJson = existsSync(packageJsonPath);
+      
+      if (hasPackageJson) {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        const hasDevOrBuildScripts = !!(
+          packageJson.scripts?.dev || 
+          packageJson.scripts?.build || 
+          packageJson.scripts?.start
+        );
+        
+        return hasDevOrBuildScripts;
+      }
+      
+      // Check for other framework config files
+      const frameworkConfigs = [
+        'astro.config.js', 
+        'astro.config.mjs', 
+        'vite.config.js', 
+        '.babelrc', 
+        'babel.config.js'
+      ];
+      
+      return frameworkConfigs.some(config => existsSync(join(sitePath, config)));
+    } catch (err) {
+      warn(`Railpack suitability check failed: ${err}`);
+      return false;
+    }
+  }
+
+  /**
+   * Create a temporary railpack.json config for preview containers
+   * This allows us to customize the dev command with --host flag
+   */
+  private async createRailpackConfigForPreview(sitePath: string): Promise<void> {
+    const configPath = join(sitePath, 'railpack.json');
+    
+    // Check if project already has a railpack.json
+    if (existsSync(configPath)) {
+      debug('Project already has railpack.json, skipping custom config creation');
+      return;
+    }
+    
+    // Detect the framework to determine the appropriate dev command
+    const packageJsonPath = join(sitePath, 'package.json');
+    let devCommand = 'npm run dev';
+    
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        const hasAstro = packageJson.dependencies?.astro || packageJson.devDependencies?.astro;
+        const hasVite = packageJson.dependencies?.vite || packageJson.devDependencies?.vite;
+        const hasNext = packageJson.dependencies?.next || packageJson.devDependencies?.next;
+        
+        // Determine package manager
+        const hasBun = existsSync(join(sitePath, 'bun.lockb'));
+        const hasYarn = existsSync(join(sitePath, 'yarn.lock'));
+        const hasPnpm = existsSync(join(sitePath, 'pnpm-lock.yaml'));
+        
+        let pm = 'npm';
+        if (hasBun) pm = 'bun';
+        else if (hasYarn) pm = 'yarn';
+        else if (hasPnpm) pm = 'pnpm';
+        
+        // Build the dev command with --host flag
+        // Note: We need to use the direct command, not npm run, for proper flag passing
+        if (hasAstro) {
+          devCommand = `astro dev --host --port $PORT`;
+        } else if (hasVite) {
+          devCommand = `vite --host --port $PORT`;
+        } else if (hasNext) {
+          // Next.js uses -H for host and -p for port
+          devCommand = `next dev -H 0.0.0.0 -p $PORT`;
+        } else if (packageJson.scripts?.dev) {
+          // For generic dev scripts, we'll use the package manager
+          // This might not work perfectly for all frameworks but is a fallback
+          devCommand = `${pm === 'bun' ? 'bun' : pm + ' run'} dev`;
+        }
+        
+        info(`Using custom dev command for preview: ${devCommand}`);
+      } catch (err) {
+        warn(`Failed to parse package.json: ${err}`);
+      }
+    }
+    
+    // Create the railpack.json config
+    const railpackConfig = {
+      "$schema": "https://schema.railpack.com",
+      "deploy": {
+        "startCommand": devCommand
+      }
+    };
+    
+    try {
+      writeFileSync(configPath, JSON.stringify(railpackConfig, null, 2));
+      info(`Created temporary railpack.json for preview container at ${configPath}`);
+    } catch (err) {
+      error(`Failed to write railpack.json: ${err}`);
+    }
+  }
+  
+  /**
+   * Clean up temporary railpack.json after build
+   */
+  private cleanupRailpackConfig(sitePath: string): void {
+    const configPath = join(sitePath, 'railpack.json');
+    
+    // Only remove if it's our generated config (check for our specific structure)
+    if (existsSync(configPath)) {
+      try {
+        const content = JSON.parse(readFileSync(configPath, 'utf8'));
+        // Check if this is our minimal config (only has deploy.startCommand)
+        if (content.$schema === "https://schema.railpack.com" && 
+            Object.keys(content).length === 2 && 
+            content.deploy && 
+            Object.keys(content.deploy).length === 1 &&
+            content.deploy.startCommand) {
+          unlinkSync(configPath);
+          debug('Cleaned up temporary railpack.json');
+        }
+      } catch (err) {
+        // Ignore cleanup errors
+        debug(`Failed to cleanup railpack.json: ${err}`);
+      }
+    }
   }
 
   private async createRailpackContainer(
@@ -243,35 +456,159 @@ export class ContainerManager {
     site: SiteConfig,
     plan: RailpackPlan
   ) {
-    // For preview containers, run dev command directly without building
-    if (container.type === 'preview') {
-      await this.createDevContainer(container, site);
-      return;
-    }
+    try {
+      const imageName = `deploy-${container.name}:latest`;
+      
+      console.log(`[DEBUG] createRailpackContainer called for ${container.name}`);
+      info(`Starting Railpack container creation for ${container.name}`);
+      
+      // For preview containers, create a custom railpack.json with --host flag
+      if (container.type === 'preview') {
+        await this.createRailpackConfigForPreview(site.path);
+      }
+      
+      // Import the railpack utility
+      const { buildWithRailpack } = await import('../../utils/railpack');
+      
+      info(`Building Docker image with Railpack for ${container.name}`);
     
-    // For production containers, build with railpacks
-    const imageName = `deploy-${container.name}:latest`;
-    
-    // Import the railpack utility
-    const { buildWithRailpack } = await import('../../utils/railpack');
-    
-    info(`Building Docker image with Railpack for ${container.name}`);
+    // For preview containers, build with dev environment
+    const buildEnv = container.type === 'preview' ? {
+      NODE_ENV: 'development',
+      PORT: (site.exposedPort || 3000).toString(),
+      ...site.environment
+    } : {
+      NODE_ENV: 'production', 
+      PORT: container.port.toString(),
+      ...site.environment
+    };
     
     // Build the Docker image using Railpack
+    console.log(`[DEBUG] Calling buildWithRailpack for ${imageName}`);
     const buildSuccess = await buildWithRailpack(site.path, imageName, {
-      env: {
-        NODE_ENV: 'production',
-        PORT: container.port.toString(),
-        ...site.environment
-      }
+      env: buildEnv
     });
+    
+    console.log(`[DEBUG] buildWithRailpack returned:`, buildSuccess);
+    
+    // Clean up temporary railpack.json if we created one
+    if (container.type === 'preview') {
+      this.cleanupRailpackConfig(site.path);
+    }
     
     if (!buildSuccess) {
       throw new Error(`Failed to build Docker image with Railpack for ${container.name}`);
     }
     
-    // Now run the production Docker container
-    await this.runProductionContainer(container, site, imageName, plan);
+    // Run the Docker container from the built image
+    console.log(`[DEBUG] About to run Docker container from image: ${imageName}`);
+    info(`Running Docker container from Railpack-built image: ${imageName}`);
+    
+    // Clean up any existing container
+    try {
+      console.log(`[DEBUG] Cleaning up existing container: ${container.name}`);
+      await this.cleanupExistingDockerContainer(container.name);
+      console.log(`[DEBUG] Cleanup complete`);
+    } catch (cleanupErr) {
+      console.log(`[DEBUG] Cleanup error:`, cleanupErr);
+      warn(`Failed to cleanup existing container: ${cleanupErr}`);
+    }
+    
+    // Use the deploy start command from the railpack plan
+    let runCommand = plan.deploy?.startCommand || 'npm start';
+    
+    // For Ruby apps with Puma, ensure we bind to the correct port
+    if (runCommand.includes('puma')) {
+      // Puma uses the PORT environment variable by default
+      // No need to modify the command, just ensure PORT is set
+    } else if (existsSync(join(site.path, 'Gemfile')) && container.type === 'preview') {
+      // For other Ruby apps in dev mode, use rackup
+      runCommand = `bundle exec rackup -o 0.0.0.0 -p ${site.exposedPort || site.proxyPort || 3000}`;
+    }
+    
+    // Run the container
+    const runArgs = [
+      'run', '-d',
+      '--name', container.name,
+      '-p', `${container.port}:${site.exposedPort || site.proxyPort || 3000}`,
+      '--rm',
+      '-e', `PORT=${site.exposedPort || site.proxyPort || 3000}`,
+      '-e', `NODE_ENV=${container.type === 'preview' ? 'development' : 'production'}`
+    ];
+    
+    // For preview containers, mount only the source files, not the entire directory
+    // This preserves the container's installed dependencies
+    if (container.type === 'preview') {
+      // Detect framework type from the plan
+      const isRuby = plan.deploy?.startCommand?.includes('ruby') || 
+                     plan.deploy?.startCommand?.includes('puma') ||
+                     plan.deploy?.startCommand?.includes('rackup');
+      
+      if (isRuby) {
+        // Mount Ruby-specific files/directories to preserve bundled gems
+        if (existsSync(join(site.path, 'app.rb'))) {
+          runArgs.push('-v', `${site.path}/app.rb:/app/app.rb`);
+        }
+        if (existsSync(join(site.path, 'views'))) {
+          runArgs.push('-v', `${site.path}/views:/app/views`);
+        }
+        if (existsSync(join(site.path, 'public'))) {
+          runArgs.push('-v', `${site.path}/public:/app/public`);
+        }
+        if (existsSync(join(site.path, 'config.ru'))) {
+          runArgs.push('-v', `${site.path}/config.ru:/app/config.ru`);
+        }
+      } else {
+        // For non-Ruby apps, mount the source directory but exclude node_modules
+        // This is safer for JS/TS projects that need hot reload
+        console.log('[DEBUG] Not mounting volumes for non-Ruby container in preview mode');
+        // We don't mount volumes for Astro/Next.js as they handle their own build process
+      }
+    }
+    
+    // Add environment variables
+    if (site.environment) {
+      for (const [key, value] of Object.entries(site.environment)) {
+        runArgs.push('-e', `${key}=${value}`);
+      }
+    }
+    
+    // Add the image
+    runArgs.push(imageName);
+    
+    // For Ruby preview containers, use puma with hot reload support
+    if (container.type === 'preview' && plan.deploy?.startCommand?.includes('puma')) {
+      // Override command to use puma with hot reload in development
+      runArgs.push('bundle', 'exec', 'puma', '-C', 'config/puma.rb', '--prune-bundler');
+    }
+    // Otherwise, let railpack's default command run
+    
+    const dockerCommand = `docker ${runArgs.join(' ')}`;
+    debug(`Docker run command: ${dockerCommand}`);
+    console.log(`[DEBUG] Full docker command: ${dockerCommand}`);
+    
+    try {
+      console.log(`[DEBUG] Executing docker run command`);
+      await this.executeCommand(dockerCommand);
+      console.log(`[DEBUG] Docker run command completed`);
+      info(`Docker container ${container.name} started successfully`);
+      container.containerId = container.name;
+    } catch (err) {
+      console.error(`[DEBUG] Docker run failed:`, err);
+      error(`Failed to run Docker container: ${err}`);
+      throw err;
+    }
+    } catch (mainErr) {
+      console.error(`[DEBUG] createRailpackContainer failed:`, mainErr);
+      error(`Failed in createRailpackContainer: ${mainErr}`);
+      
+      // Clean up temporary railpack.json if we created one
+      if (container.type === 'preview') {
+        this.cleanupRailpackConfig(site.path);
+      }
+      
+      throw mainErr;
+    }
   }
   
   private async createDevContainer(
@@ -281,59 +618,89 @@ export class ContainerManager {
     // Clean up any existing container with the same name
     await this.cleanupExistingDockerContainer(container.name);
     
-    // Get railpack plan to understand the project structure
-    const { getRailpackPlan } = await import('../../utils/railpack');
-    const plan = await getRailpackPlan(site.path);
+    // Import required utilities
+    const { detectSiteFramework } = await import('../../utils/railpack');
+    const { detectPackageManager } = await import('../../core/utils/packageManager');
     
-    // Generate and write mise configuration based on railpack analysis
-    const { generateMiseConfig, writeMiseConfig } = await import('../utils/generate-mise-config');
-    const miseConfig = generateMiseConfig(plan, site.path);
-    writeMiseConfig(site.path, miseConfig);
+    // Detect framework and package manager
+    const frameworkInfo = await detectSiteFramework(site.path);
+    const packageManager = detectPackageManager(site.path);
     
-    debug(`Generated mise.toml for ${container.name}`);
+    debug(`Detected framework: ${frameworkInfo.framework}, Package Manager: ${packageManager}`);
+    
+    // Determine best dev command
+    let devCommand = 'npm run dev'; // Default fallback
+    
+    if (frameworkInfo.framework === 'astro') {
+      devCommand = 'bun dev';
+    } else if (frameworkInfo.framework === 'nextjs') {
+      devCommand = 'bun run dev';
+    } else if (packageManager === 'bun') {
+      devCommand = 'bun dev';
+    }
+    
+    // Prefer explicit dev command from package.json if available
+    if (site.commands?.dev) {
+      devCommand = site.commands.dev;
+    }
     
     // Run Docker container with volume mount for hot reloading
-    // Exclude node_modules to avoid platform-specific binary issues
     const runArgs = [
       'run', '-d',
       '--name', container.name,
       '-p', `${container.port}:${site.exposedPort || 3000}`,
       '--rm', // Auto-remove when stopped
       '-v', `${site.path}:/app`, // Mount for hot reloading
-      '-v', '/app/node_modules', // Create anonymous volume for node_modules to avoid conflicts
       '-w', '/app' // Set working directory
     ];
     
     // Add environment variables
-    if (site.environment) {
-      for (const [key, value] of Object.entries(site.environment)) {
-        runArgs.push('-e', `${key}=${value}`);
-      }
+    const envVars = {
+      ...site.environment,
+      PORT: `${site.exposedPort || 3000}`,
+      HOST: '0.0.0.0',
+      NODE_ENV: 'development'
+    };
+    
+    for (const [key, value] of Object.entries(envVars)) {
+      runArgs.push('-e', `${key}=${value}`);
     }
     
-    // Add the PORT environment variable
-    runArgs.push('-e', `PORT=${site.exposedPort || 3000}`);
-    runArgs.push('-e', 'HOST=0.0.0.0'); // Ensure server binds to all interfaces
+    // Use a base image suitable for the framework
+    const baseImage = frameworkInfo.framework === 'ruby' 
+      ? 'ruby:3.2' 
+      : 'oven/bun:latest'; // Bun is versatile for many JS/TS projects
     
-    // Use a base image with curl for installing mise
-    const baseImage = 'node:20-bookworm'; // Use bookworm for better compatibility
-    
-    // Add the base image
     runArgs.push(baseImage);
     
-    // Always use mise since we generated the config
-    // Install mise, then use it to install dependencies and run dev
-    let installCmd = 'curl -fsSL https://mise.run | sh && ';
-    installCmd += 'export PATH="$HOME/.local/bin:$PATH" && ';
-    installCmd += 'mise trust && ';  // Trust the config file
-    installCmd += 'mise install && ';  // This will install all tools defined in .mise.toml
-    installCmd += 'mise run install && '; // Run the install task to install npm dependencies
-    installCmd += 'mise run dev'; // Run the dev task
+    // Prepare install and dev command
+    let setupCmd = '';
     
-    debug(`Will use mise for all dependency management and execution`);
+    switch (packageManager) {
+      case 'bun':
+        setupCmd = `bun install && ${devCommand}`;
+        break;
+      case 'npm':
+        setupCmd = `npm install && ${devCommand}`;
+        break;
+      case 'yarn':
+        setupCmd = `yarn install && ${devCommand}`;
+        break;
+      case 'pnpm':
+        setupCmd = `pnpm install && ${devCommand}`;
+        break;
+      default:
+        setupCmd = devCommand; // Fallback if no package manager detected
+    }
     
-    // Use bash for better compatibility with mise
-    runArgs.push('bash', '-c', installCmd);
+    // For Ruby, use different install command
+    if (frameworkInfo.framework === 'ruby') {
+      setupCmd = `bundle install && ${devCommand}`;
+    }
+    
+    debug(`Dev setup command: ${setupCmd}`);
+    
+    runArgs.push('sh', '-c', setupCmd);
     
     debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
     
@@ -357,7 +724,7 @@ export class ContainerManager {
     }
   }
   
-  private async runProductionContainer(
+  private async runDevContainerWithRailpack(
     container: ContainerConfig,
     site: SiteConfig,
     imageName: string,
@@ -366,31 +733,68 @@ export class ContainerManager {
     // Clean up any existing container with the same name
     await this.cleanupExistingDockerContainer(container.name);
     
-    // For production containers, use the built image with start command
-    const startCommand = plan.deploy?.startCommand || 'caddy run --config /Caddyfile --adapter caddyfile';
-    
     const runArgs = [
       'run', '-d',
       '--name', container.name,
       '-p', `${container.port}:${site.exposedPort || 3000}`,
-      '--rm' // Auto-remove when stopped
+      '--rm', // Auto-remove when stopped
+      '-v', `${site.path}:/app`, // Mount for hot reloading in dev mode
+      '-w', '/app' // Set working directory
     ];
     
-    // Add environment variables
-    if (site.environment) {
-      for (const [key, value] of Object.entries(site.environment)) {
-        runArgs.push('-e', `${key}=${value}`);
+    // Add environment variables for dev mode
+    const envVars = {
+      ...site.environment,
+      PORT: `${site.exposedPort || 3000}`,
+      HOST: '0.0.0.0',
+      NODE_ENV: 'development'
+    };
+    
+    for (const [key, value] of Object.entries(envVars)) {
+      runArgs.push('-e', `${key}=${value}`);
+    }
+    
+    // Add the railpack-built image
+    runArgs.push(imageName);
+    
+    // Check if there's a dev command in the plan, otherwise use default dev command
+    let devCommand: string | undefined;
+    
+    // Look for a dev command in the plan
+    if (plan.steps) {
+      for (const step of plan.steps) {
+        if (step.name === 'dev' && step.commands?.[0]?.cmd) {
+          devCommand = step.commands[0].cmd;
+          break;
+        }
       }
     }
     
-    // Add the PORT environment variable
-    runArgs.push('-e', `PORT=${site.exposedPort || 3000}`);
-    runArgs.push('-e', 'HOST=0.0.0.0'); // Ensure server binds to all interfaces
+    // If no dev command in plan, try to use site.commands.dev or detect from package.json
+    if (!devCommand) {
+      if (site.commands?.dev) {
+        devCommand = site.commands.dev;
+      } else {
+        // Try common dev commands based on detected framework
+        const { detectSiteFramework } = await import('../../utils/railpack');
+        const frameworkInfo = await detectSiteFramework(site.path);
+        
+        if (frameworkInfo.framework === 'astro') {
+          devCommand = 'bun dev';
+        } else if (frameworkInfo.framework === 'nextjs') {
+          devCommand = 'bun run dev';
+        } else {
+          devCommand = 'bun run dev';
+        }
+      }
+    }
     
-    // Add the image and command
-    runArgs.push(imageName, 'sh', '-c', startCommand);
+    // Override the container command to run dev mode
+    if (devCommand) {
+      runArgs.push('sh', '-c', devCommand);
+    }
     
-    debug(`Starting Docker container: docker ${runArgs.join(' ')}`);
+    debug(`Starting Railpack dev container: docker ${runArgs.join(' ')}`);
     
     const runChildProcess = spawn('docker', runArgs, {
       stdio: ['pipe', 'pipe', 'pipe']
@@ -406,9 +810,62 @@ export class ContainerManager {
     
     if (containerIdOutput.trim()) {
       container.containerId = containerIdOutput.trim();
-      debug(`Docker container ${container.name} started with ID: ${container.containerId}`);
+      debug(`Railpack dev container ${container.name} started with ID: ${container.containerId}`);
     } else {
-      throw new Error(`Docker container ${container.name} failed to start`);
+      throw new Error(`Railpack dev container ${container.name} failed to start`);
+    }
+  }
+  
+  private async runProductionContainer(
+    container: ContainerConfig,
+    site: SiteConfig,
+    imageName: string,
+    _plan: RailpackPlan
+  ) {
+    // Clean up any existing container with the same name
+    await this.cleanupExistingDockerContainer(container.name);
+    
+    const runArgs = [
+      'run', '-d',
+      '--name', container.name,
+      '-p', `${container.port}:${site.exposedPort || 3000}`,
+      '--rm' // Auto-remove when stopped
+    ];
+    
+    // Add environment variables
+    const envVars = {
+      ...site.environment,
+      PORT: `${site.exposedPort || 3000}`,
+      HOST: '0.0.0.0', // Ensure server binds to all interfaces
+      NODE_ENV: 'production'
+    };
+    
+    for (const [key, value] of Object.entries(envVars)) {
+      runArgs.push('-e', `${key}=${value}`);
+    }
+    
+    // Add the image - railpack-built images have their own entrypoint/cmd configured
+    runArgs.push(imageName);
+    
+    debug(`Starting Railpack production container: docker ${runArgs.join(' ')}`);
+    
+    const runChildProcess = spawn('docker', runArgs, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    // Wait for Docker container to start successfully
+    await this.waitForProcess(runChildProcess, `Docker run for ${container.name}`);
+    
+    // Verify the container is actually running and get its ID
+    const { stdout: containerIdOutput } = await this.executeCommand(
+      `docker ps -q --filter name=${container.name}`
+    );
+    
+    if (containerIdOutput.trim()) {
+      container.containerId = containerIdOutput.trim();
+      debug(`Railpack production container ${container.name} started with ID: ${container.containerId}`);
+    } else {
+      throw new Error(`Railpack production container ${container.name} failed to start`);
     }
   }
 

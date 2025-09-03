@@ -205,6 +205,8 @@ export async function getRailpackPlan(sitePath: string): Promise<RailpackPlan | 
       let output = '';
       let errorOutput = '';
       
+      debug(`Generating Railpack plan for site: ${sitePath}`);
+      
       // Railpack outputs plan as JSON
       const proc = spawn('railpack', ['plan', sitePath], {
         shell: true,
@@ -216,26 +218,50 @@ export async function getRailpackPlan(sitePath: string): Promise<RailpackPlan | 
       });
       
       proc.stderr?.on('data', (data) => {
-        errorOutput += data.toString();
+        const dataStr = data.toString();
+        errorOutput += dataStr;
+        warn(`Railpack plan stderr: ${dataStr}`);
       });
       
       proc.on('close', (code) => {
         if (code === 0) {
-          resolve(output);
+          try {
+            // Additional validation of JSON output
+            const parsedOutput = JSON.parse(output);
+            
+            // Perform some basic sanity checks
+            if (!parsedOutput || (parsedOutput.steps && !Array.isArray(parsedOutput.steps))) {
+              throw new Error('Invalid Railpack plan structure');
+            }
+            
+            resolve(output);
+          } catch (parseErr) {
+            error(`Failed to parse Railpack plan JSON: ${parseErr}`);
+            reject(parseErr);
+          }
         } else {
-          reject(new Error(`Railpack plan failed: ${errorOutput}`));
+          const detailedError = `Railpack plan failed with code ${code}: ${errorOutput}`;
+          error(detailedError);
+          reject(new Error(detailedError));
         }
       });
       
       proc.on('error', (err) => {
+        const processError = `Railpack plan process error: ${err}`;
+        error(processError);
         reject(err);
       });
     });
     
     // Parse the JSON output
-    return JSON.parse(result) as RailpackPlan;
+    const plan = JSON.parse(result) as RailpackPlan;
+    
+    // Log successful plan generation
+    debug(`Successfully generated Railpack plan for ${sitePath}`);
+    
+    return plan;
   } catch (err) {
-    debug(`Failed to get Railpack plan for ${sitePath}: ${err}`);
+    error(`Comprehensive failure in Railpack plan generation for ${sitePath}: ${err}`);
     return null;
   }
 }
@@ -463,6 +489,8 @@ export async function buildWithRailpack(
       ...process.env,
       BUILDKIT_HOST: `docker-container://${containerName}`
     };
+    
+    debug(`Using BUILDKIT_HOST: docker-container://${containerName}`);
     
     const result = await new Promise<boolean>((resolve) => {
       const proc = spawn('railpack', args, {

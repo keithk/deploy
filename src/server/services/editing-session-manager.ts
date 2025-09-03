@@ -107,14 +107,31 @@ export class EditingSessionManager {
     
     const sessionId = Number(result.lastInsertRowid);
     
-    // Create preview container
+    // Get the created session
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error(`Failed to retrieve created session ${sessionId}`);
     }
-    await this.startPreviewContainer(session, sitePath, false);
     
-    info(`Created editing session ${sessionId} with branch ${branchName}`);
+    // Start preview container asynchronously - don't wait for it
+    // The client will poll for container readiness
+    this.startPreviewContainer(session, sitePath, false).catch(async err => {
+      error(`Failed to start preview container for session ${sessionId}: ${err}`);
+      // Update session status to failed so client can show error
+      try {
+        this.db.query(`
+          UPDATE editing_sessions 
+          SET status = 'failed',
+              last_activity = ?
+          WHERE id = ?
+        `, [new Date().toISOString(), sessionId]);
+        error(`Marked session ${sessionId} as failed due to container build error`);
+      } catch (updateErr) {
+        error(`Failed to update session status: ${updateErr}`);
+      }
+    });
+    
+    info(`Created editing session ${sessionId} with branch ${branchName}, container starting in background`);
     return session;
   }
 
@@ -286,6 +303,8 @@ export class EditingSessionManager {
     
     info(`Cleaning up session ${sessionId}: ${session.branchName}`);
     
+    // No longer need to restore config files since we're using CLI flags
+    
     // Deregister dynamic route from CaddyManager
     try {
       const removed = await caddyManager.removePreviewRoute(sessionId);
@@ -367,7 +386,7 @@ export class EditingSessionManager {
       // Ensure we're on the correct branch before starting container
       await gitService.checkoutBranch(sitePath, session.branchName);
       
-      // Check if this is a Vite project for special handling
+      // Check if this is a Vite project for container configuration
       const isViteProject = await this.detectViteProject(sitePath);
       
       // Create a site config for the preview container

@@ -783,9 +783,12 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
             const originalText = editBtn.textContent;
             
             try {
-              // Show loading state
+              // Show initial loading state
               editBtn.textContent = '🏗️ Creating preview environment...';
               editBtn.disabled = true;
+              
+              // Show loading overlay with progress tracking
+              showContainerLoadingState(true, null, 'Initializing Git branch...');
               
               // Create editing session
               const response = await fetch(\`/api/sites/\${siteName}/edit/start\`, {
@@ -796,44 +799,82 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               const data = await response.json();
               
               if (data.success) {
-                currentMode = 'edit';
-                currentSession = data.session;
-                currentBranch = data.session.branchName;
-                
-                // Update URL to persist edit state
-                updateURLWithEditState(true, currentSession.id);
-                
-                // Update UI
-                updateModeUI();
-                
-                // Enable editor
-                editor.setOption('readOnly', false);
+                // Immediately redirect to the edit URL with the session ID
+                // The page will reload and show the container building progress
+                const editUrl = \`/editor/\${siteName}?edit=true&session=\${data.session.id}\`;
+                window.location.href = editUrl;
+                return; // Stop execution here since we're redirecting
                 
                 // Show preview panel
                 document.getElementById('preview-panel').style.display = 'block';
                 document.querySelector('.editor-layout').classList.add('three-panel');
                 
-                // Load preview
-                if (data.session.previewUrl) {
-                  document.getElementById('preview-iframe').src = data.session.previewUrl;
+                // Progressive container startup with better messaging
+                editBtn.textContent = '📦 Building container with Railpack...';
+                updateContainerProgress('Building container image with Railpack...', 'This may take 1-2 minutes on first build');
+                
+                // Start polling for build progress
+                const buildProgress = startBuildProgressPolling(currentSession.id);
+                
+                const containerReady = await waitForContainerReady(data.session);
+                
+                // Stop polling
+                if (buildProgress.stop) {
+                  buildProgress.stop();
                 }
                 
-                // Reload file tree and current file from the branch
-                await loadFileTree();
-                if (currentFile) {
-                  await loadFile(currentFile);
+                if (containerReady) {
+                  // Enable editor
+                  editor.setOption('readOnly', false);
+                  
+                  // Load preview
+                  if (data.session.previewUrl) {
+                    updateContainerProgress('Loading preview site...', '');
+                    document.getElementById('preview-iframe').src = data.session.previewUrl;
+                  }
+                  
+                  // Reload file tree and current file from the branch
+                  updateContainerProgress('Syncing file tree...', '');
+                  await loadFileTree();
+                  if (currentFile) {
+                    await loadFile(currentFile);
+                  }
+                  
+                  showContainerLoadingState(false);
+                  editBtn.textContent = '✅ Edit Mode Ready';
+                } else {
+                  // Container failed to start properly
+                  editBtn.textContent = '❌ Container failed to start';
+                  showContainerLoadingState(false, 'Container failed to start. You can still edit files, but preview may not work.');
+                  
+                  // Enable editor anyway for file editing
+                  editor.setOption('readOnly', false);
+                  await loadFileTree();
+                  if (currentFile) {
+                    await loadFile(currentFile);
+                  }
                 }
                 
               } else {
-                alert('Failed to enter edit mode: ' + data.error);
+                console.error('Failed to enter edit mode:', data.error);
+                showContainerLoadingState(false, 'Failed to enter edit mode: ' + (data.error || 'Unknown error'));
+                editBtn.textContent = '❌ Failed to enter edit mode';
               }
             } catch (error) {
               console.error('Error entering edit mode:', error);
-              alert('Error entering edit mode');
+              // Don't show alert, just update UI with error message
+              showContainerLoadingState(false, 'Error entering edit mode. Please try again.');
+              editBtn.textContent = '❌ Error entering edit mode';
             } finally {
-              // Reset button state
-              editBtn.textContent = originalText;
-              editBtn.disabled = false;
+              // Reset button state after a delay
+              setTimeout(() => {
+                if (currentMode === 'edit') {
+                  editBtn.textContent = '🔧 Editing';
+                } else {
+                  editBtn.textContent = originalText;
+                }
+                editBtn.disabled = false;
+              }, 2000);
             }
           }
           
@@ -976,7 +1017,23 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               if (mainSiteUrl && mainSiteUrl.textContent.includes('🌐 View Site')) {
                 mainSiteUrl.href = mainSiteUrl.href.replace(/preview-\\d+-\\w+\\./, '');
               }
+            } else if (currentMode === 'building') {
+              // Building state - show edit UI but indicate container is building
+              readonlyMode.style.display = 'none';
+              editMode.style.display = 'flex';
+              previewPanel.style.display = 'flex';
+              editorLayout.classList.add('three-panel');
+              branchIndicator.textContent = \`⏳ Building container for branch: \${currentBranch}\`;
+            } else if (currentMode === 'error') {
+              // Error state - show edit UI but indicate build failed
+              readonlyMode.style.display = 'none';
+              editMode.style.display = 'flex';
+              previewPanel.style.display = 'flex';
+              editorLayout.classList.add('three-panel');
+              branchIndicator.textContent = \`⚠️ Build failed for branch: \${currentBranch}\`;
+              branchIndicator.style.color = '#ff4444';
             } else {
+              // Edit mode
               readonlyMode.style.display = 'none';
               editMode.style.display = 'flex';
               previewPanel.style.display = 'flex';
@@ -1018,6 +1075,18 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               
               if (data.success) {
                 renderFileTree(data.tree);
+                
+                // Show branch indicator in file tree header
+                const filesHeader = document.querySelector('.file-tree-panel h3');
+                if (filesHeader && data.editMode) {
+                  filesHeader.innerHTML = 
+                    'FILES ' +
+                    '<span style="font-size: 0.7rem; color: var(--accent-blue); margin-left: 0.5rem;">' +
+                      '(🌿 ' + (data.branchName || 'edit-branch') + ')' +
+                    '</span>';
+                } else if (filesHeader) {
+                  filesHeader.textContent = 'FILES';
+                }
               } else {
                 document.getElementById('file-tree').innerHTML = 
                   '<div class="file-tree-item" style="color: var(--accent-red);">Failed to load files</div>';
@@ -1085,7 +1154,21 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
                 editor.setValue(data.content);
                 editor.setOption('mode', getFileMode(filepath));
                 
-                document.getElementById('current-file').textContent = filepath;
+                // Show source indicator
+                let sourceIndicator = '';
+                if (data.editMode) {
+                  if (data.readSource === 'container') {
+                    sourceIndicator = ' 📦';
+                  } else if (data.readSource === 'host-fallback') {
+                    sourceIndicator = ' ⚠️';
+                  }
+                }
+                
+                let currentFileHtml = filepath + sourceIndicator;
+                if (data.editMode && data.branchName) {
+                  currentFileHtml += '<span style="font-size: 0.7rem; color: var(--accent-yellow); margin-left: 0.5rem;">(' + data.branchName + ')</span>';
+                }
+                document.getElementById('current-file').innerHTML = currentFileHtml;
                 updateTabState();
                 
                 // Update URL with current file
@@ -1187,7 +1270,24 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               if (data.success) {
                 unsavedChanges.delete(currentFile);
                 updateTabState();
-                showSaveIndicator();
+                
+                // Show detailed save feedback
+                let saveMessage = 'Saved!';
+                if (data.hasActiveSession) {
+                  if (data.writeSource === 'container') {
+                    saveMessage = '📦 Saved to container!';
+                  } else if (data.writeSource === 'host-fallback') {
+                    saveMessage = '⚠️ Saved (container fallback)';
+                  }
+                  
+                  if (data.updateType === 'hot_reload') {
+                    saveMessage += ' 🔄';
+                  } else if (data.updateType === 'container_restart') {
+                    saveMessage += ' 🔄 Restarting...';
+                  }
+                }
+                
+                showSaveIndicator(saveMessage);
                 
                 // Auto-refresh preview iframe if in edit mode
                 refreshPreview();
@@ -1247,12 +1347,333 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
           }
           
           // Show save indicator
-          function showSaveIndicator() {
+          function showSaveIndicator(message = 'Saved!') {
             const indicator = document.getElementById('save-indicator');
+            indicator.textContent = message;
             indicator.classList.add('visible');
             setTimeout(() => {
               indicator.classList.remove('visible');
-            }, 2000);
+            }, 3000);
+          }
+          
+          // Show/hide container loading state with detailed progress
+          function showContainerLoadingState(loading, errorMessage, progressMessage = 'Starting container...', subMessage = 'This may take 30-60 seconds') {
+            const fileTree = document.getElementById('file-tree');
+            const editorContainer = document.getElementById('editor-container');
+            const previewStatus = document.getElementById('preview-status');
+            
+            if (loading) {
+              // Remove existing overlay if present
+              const existingOverlay = document.getElementById('container-loading-overlay');
+              if (existingOverlay) {
+                existingOverlay.remove();
+              }
+              
+              // Show loading overlay with detailed progress
+              const loadingOverlay = document.createElement('div');
+              loadingOverlay.id = 'container-loading-overlay';
+              loadingOverlay.innerHTML = 
+                '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; color: white; flex-direction: column; gap: 1rem;">' +
+                  '<div style="animation: spin 1s linear infinite; font-size: 2rem;">📦</div>' +
+                  '<div id="progress-main-message" style="font-size: 1.1rem; font-weight: bold; text-align: center;">' + progressMessage + '</div>' +
+                  '<div id="progress-sub-message" style="font-size: 0.9rem; opacity: 0.8; text-align: center; max-width: 300px; line-height: 1.4;">' + subMessage + '</div>' +
+                  '<div style="margin-top: 1rem;">' +
+                    '<div id="progress-dots" style="display: flex; gap: 0.5rem;">⬜⬜⬜⬜⬜</div>' +
+                  '</div>' +
+                  '<div id="progress-steps" style="font-size: 0.8rem; opacity: 0.7; text-align: center; margin-top: 0.5rem;">Analyzing project structure...</div>' +
+                '</div>' +
+                '<style>@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }</style>';
+              
+              fileTree.parentElement.style.position = 'relative';
+              fileTree.parentElement.appendChild(loadingOverlay);
+              
+              // Start progress animation
+              startProgressAnimation();
+              
+              if (previewStatus) {
+                previewStatus.textContent = progressMessage;
+              }
+            } else {
+              // Hide loading overlay and clean up any intervals
+              const overlay = document.getElementById('container-loading-overlay');
+              if (overlay) {
+                // Clean up any progress animation intervals
+                const intervalId = overlay.getAttribute('data-interval-id');
+                if (intervalId) {
+                  clearInterval(parseInt(intervalId));
+                }
+                overlay.remove();
+              }
+              
+              if (errorMessage) {
+                if (previewStatus) {
+                  previewStatus.textContent = 'Container error';
+                  previewStatus.style.color = 'var(--accent-red)';
+                }
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.innerHTML = 
+                  '<div style="background: var(--accent-red); color: white; padding: 0.5rem; margin: 1rem; border-radius: 4px; font-size: 0.9rem;">' +
+                    '⚠️ ' + errorMessage +
+                  '</div>';
+                fileTree.parentElement.insertBefore(errorDiv, fileTree);
+              } else {
+                if (previewStatus) {
+                  previewStatus.textContent = 'Container ready';
+                  previewStatus.style.color = 'var(--accent-green)';
+                }
+              }
+            }
+          }
+          
+          // Update container progress with specific messages
+          function updateContainerProgress(mainMessage, subMessage) {
+            const mainMsgEl = document.getElementById('progress-main-message');
+            const subMsgEl = document.getElementById('progress-sub-message');
+            const previewStatus = document.getElementById('preview-status');
+            
+            if (mainMsgEl) {
+              mainMsgEl.textContent = mainMessage;
+            }
+            if (subMsgEl && subMessage) {
+              subMsgEl.textContent = subMessage;
+            }
+            if (previewStatus) {
+              previewStatus.textContent = mainMessage;
+            }
+          }
+          
+          // Start progress dot animation
+          function startProgressAnimation() {
+            let progressStep = 0;
+            const progressSteps = [
+              'Analyzing project structure...',
+              'Generating Railpack plan...',
+              'Building Docker image...',
+              'Starting container...',
+              'Initializing development server...'
+            ];
+            
+            const interval = setInterval(() => {
+              const dotsEl = document.getElementById('progress-dots');
+              const stepsEl = document.getElementById('progress-steps');
+              const overlay = document.getElementById('container-loading-overlay');
+              
+              // Stop if overlay is gone
+              if (!overlay || !dotsEl) {
+                clearInterval(interval);
+                return;
+              }
+              
+              // Update progress dots
+              let dots = '';
+              for (let i = 0; i < 5; i++) {
+                if (i <= progressStep) {
+                  dots += '🟦';
+                } else {
+                  dots += '⬜';
+                }
+              }
+              dotsEl.textContent = dots;
+              
+              // Update step message
+              if (stepsEl && progressStep < progressSteps.length) {
+                stepsEl.textContent = progressSteps[progressStep];
+              }
+              
+              progressStep = (progressStep + 1) % 6; // Cycle through steps
+            }, 3000); // Update every 3 seconds
+            
+            // Store interval ID for cleanup
+            const overlay = document.getElementById('container-loading-overlay');
+            if (overlay) {
+              overlay.setAttribute('data-interval-id', interval.toString());
+            }
+          }
+          
+          // Start build progress polling
+          function startBuildProgressPolling(sessionId) {
+            let pollCount = 0;
+            const maxPolls = 60; // Poll for up to 3 minutes (60 * 3s)
+            let stopped = false;
+            
+            const progressMessages = [
+              { message: 'Analyzing project structure...', sub: 'Detecting framework and dependencies' },
+              { message: 'Installing dependencies...', sub: 'Running npm/bun install in container' },
+              { message: 'Building Docker image with Railpack...', sub: 'This may take 1-2 minutes on first build' },
+              { message: 'Starting container...', sub: 'Initializing development server' },
+              { message: 'Setting up hot reload...', sub: 'Configuring file watching' },
+              { message: 'Almost ready...', sub: 'Final container health checks' }
+            ];
+            
+            const pollInterval = setInterval(async () => {
+              if (stopped || pollCount >= maxPolls) {
+                clearInterval(pollInterval);
+                return;
+              }
+              
+              try {
+                // Check session status
+                const response = await fetch(\`/api/sites/\${siteName}/edit/status\`);
+                const data = await response.json();
+                
+                if (data.success && data.editing && data.session) {
+                  // Update progress based on poll count and container status
+                  const progressIndex = Math.min(Math.floor(pollCount / 10), progressMessages.length - 1);
+                  const progress = progressMessages[progressIndex];
+                  
+                  updateContainerProgress(progress.message, progress.sub);
+                  
+                  // If container is ready, we can stop polling earlier
+                  if (data.session.containerName && pollCount > 5) {
+                    // Try a quick health check
+                    try {
+                      const healthController = new AbortController();
+                      setTimeout(() => healthController.abort(), 2000);
+                      
+                      const healthResponse = await fetch(\`/api/sites/\${siteName}/health\`, {
+                        method: 'GET',
+                        signal: healthController.signal
+                      });
+                      
+                      if (healthResponse.ok) {
+                        updateContainerProgress('Container ready!', 'Loading preview...');
+                        clearInterval(pollInterval);
+                        return;
+                      }
+                    } catch (healthErr) {
+                      // Continue polling
+                    }
+                  }
+                } else if (!data.editing) {
+                  // Session ended or failed
+                  clearInterval(pollInterval);
+                  return;
+                }
+              } catch (err) {
+                console.debug('Progress polling error:', err);
+                // Continue polling - temporary network issues are expected
+              }
+              
+              pollCount++;
+            }, 3000); // Poll every 3 seconds
+            
+            return {
+              stop: () => {
+                stopped = true;
+                clearInterval(pollInterval);
+              }
+            };
+          }
+          
+          // Wait for container to be ready with progress updates
+          async function waitForContainerReady(session, maxWaitTime = 180000) { // 3 minutes timeout
+            const startTime = Date.now();
+            let lastProgressUpdate = 0;
+            let healthCheckAttempts = 0;
+            
+            updateContainerProgress('Waiting for container to respond...', 'Testing container connectivity');
+            
+            while (Date.now() - startTime < maxWaitTime) {
+              const elapsedTime = Date.now() - startTime;
+              healthCheckAttempts++;
+              
+              // Update progress message based on elapsed time
+              if (elapsedTime - lastProgressUpdate > 10000) { // Every 10 seconds
+                lastProgressUpdate = elapsedTime;
+                if (elapsedTime < 20000) {
+                  updateContainerProgress('Container starting up...', 'This usually takes 15-30 seconds');
+                } else if (elapsedTime < 45000) {
+                  updateContainerProgress('Still building container...', 'First build can take up to 2 minutes');
+                } else if (elapsedTime < 90000) {
+                  updateContainerProgress('Almost ready...', 'Performing final health checks');
+                } else if (elapsedTime < 120000) {
+                  updateContainerProgress('Taking longer than expected...', 'Large projects may take a few minutes');
+                } else {
+                  updateContainerProgress('Still working...', 'Complex builds can take up to 3 minutes. Almost there!');
+                }
+              }
+              
+              try {
+                // Check container health by trying to access preview URL
+                if (session.previewUrl) {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 5000);
+                  
+                  try {
+                    const response = await fetch(session.previewUrl + '/health', {
+                      method: 'GET',
+                      signal: controller.signal,
+                      mode: 'no-cors' // Allow cross-origin for health check
+                    });
+                    clearTimeout(timeoutId);
+                    
+                    // If we get any response (even if we can't read it due to CORS), container is likely ready
+                    console.log('Container health check successful');
+                    updateContainerProgress('Container is responding!', 'Finalizing setup...');
+                    return true;
+                  } catch (fetchErr) {
+                    clearTimeout(timeoutId);
+                    // CORS errors are expected and actually indicate the server is running
+                    if (fetchErr.name !== 'AbortError') {
+                      console.log('Container responding (CORS expected)');
+                      updateContainerProgress('Container is responding!', 'Finalizing setup...');
+                      return true;
+                    }
+                  }
+                }
+                
+                // Also check if we can load file tree (indicates container file system is ready)
+                try {
+                  const treeResponse = await fetch('/api/sites/' + siteName + '/tree');
+                  const treeData = await treeResponse.json();
+                  
+                  if (treeData.success && treeData.editMode) {
+                    console.log('File system ready in container');
+                    updateContainerProgress('File system ready!', 'Container fully operational');
+                    return true;
+                  }
+                } catch (treeErr) {
+                  console.log('File system not ready yet:', treeErr);
+                }
+                
+                // Alternative check: try a simple fetch to the preview URL root
+                if (session.previewUrl && healthCheckAttempts > 10) {
+                  try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
+                    const response = await fetch(session.previewUrl, {
+                      method: 'HEAD',
+                      signal: controller.signal,
+                      mode: 'no-cors'
+                    });
+                    clearTimeout(timeoutId);
+                    
+                    console.log('Container root URL responding');
+                    updateContainerProgress('Container ready!', 'Preview site is accessible');
+                    return true;
+                  } catch (rootErr) {
+                    // Even CORS/network errors indicate the container is running
+                    if (rootErr.name === 'TypeError' && rootErr.message.includes('CORS')) {
+                      console.log('Container detected via CORS error');
+                      updateContainerProgress('Container ready!', 'Preview site is accessible');
+                      return true;
+                    }
+                  }
+                }
+                
+              } catch (err) {
+                console.log('Container readiness check failed:', err);
+              }
+              
+              // Wait 2 seconds before next check
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            
+            console.warn('Container readiness timeout reached');
+            updateContainerProgress('Timeout reached', 'Container may still be starting...');
+            return false; // Timeout reached
           }
           
           // Refresh preview iframe
@@ -1301,45 +1722,240 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
           // Check for edit mode in URL and restore session
           async function checkAndRestoreEditMode() {
             const urlParams = new URLSearchParams(window.location.search);
-            const editMode = urlParams.get('mode');
+            const editMode = urlParams.get('edit') || urlParams.get('mode'); // Support both 'edit' and 'mode' params
             const sessionId = urlParams.get('session');
             
-            if (editMode === 'edit' && sessionId) {
-              try {
-                // Check if this session still exists
-                const response = await fetch(\`/api/sites/\${siteName}/edit/status\`);
-                const data = await response.json();
-                
-                if (data.editing && data.session && data.session.id.toString() === sessionId) {
-                  // Restore the session
-                  currentMode = 'edit';
-                  currentSession = data.session;
-                  currentBranch = data.session.branchName;
+            if ((editMode === 'true' || editMode === 'edit') && sessionId) {
+              // Show loading indicator immediately
+              const statusDiv = document.getElementById('preview-status');
+              if (statusDiv) {
+                statusDiv.innerHTML = '<div class="info-message">⏳ Loading editing session...</div>';
+              }
+              
+              // Function to check container status
+              async function checkContainerStatus() {
+                try {
+                  const response = await fetch(\`/api/sites/\${siteName}/edit/status\`);
+                  const data = await response.json();
                   
-                  // Update UI
-                  updateModeUI();
-                  
-                  // Enable editor
-                  editor.setOption('readOnly', false);
-                  
-                  // Show preview panel
-                  document.getElementById('preview-panel').style.display = 'block';
-                  document.querySelector('.editor-layout').classList.add('three-panel');
-                  
-                  // Load preview
-                  if (currentSession.previewUrl) {
-                    document.getElementById('preview-iframe').src = currentSession.previewUrl;
+                  if (data.editing && data.session && data.session.id.toString() === sessionId) {
+                    // Store session info
+                    currentSession = data.session;
+                    currentBranch = data.session.branchName;
+                    
+                    // Show preview panel immediately
+                    if (!document.getElementById('preview-panel').style.display || document.getElementById('preview-panel').style.display === 'none') {
+                      document.getElementById('preview-panel').style.display = 'block';
+                      document.querySelector('.editor-layout').classList.add('three-panel');
+                    }
+                    
+                    // Check if container is ready
+                    if (data.session.containerStatus === 'building') {
+                      // Container is still building, show progress in preview area
+                      const previewFrame = document.getElementById('preview-iframe');
+                      if (previewFrame) {
+                        // Show loading state in the preview iframe
+                        const loadingHtml = \`
+                          <!DOCTYPE html>
+                          <html>
+                          <head>
+                            <style>
+                              body {
+                                background: #1a1a1a;
+                                color: #fff;
+                                font-family: monospace;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                height: 100vh;
+                                margin: 0;
+                              }
+                              .loading {
+                                text-align: center;
+                              }
+                              .spinner {
+                                border: 3px solid rgba(255,255,255,0.3);
+                                border-radius: 50%;
+                                border-top: 3px solid #fff;
+                                width: 40px;
+                                height: 40px;
+                                animation: spin 1s linear infinite;
+                                margin: 0 auto 20px;
+                              }
+                              @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                              }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="loading">
+                              <div class="spinner"></div>
+                              <div>🚀 Building development container...</div>
+                              <div style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">This may take up to 3 minutes for the first build</div>
+                            </div>
+                          </body>
+                          </html>
+                        \`;
+                        previewFrame.srcdoc = loadingHtml;
+                      }
+                      
+                      // Keep editor in read-only mode
+                      editor.setOption('readOnly', true);
+                      
+                      // Update mode UI to show we're in a transitioning state
+                      currentMode = 'building';
+                      updateModeUI();
+                      
+                      // Check again in 2 seconds
+                      setTimeout(checkContainerStatus, 2000);
+                      return;
+                    } else if (data.session.containerStatus === 'error' || data.session.status === 'failed') {
+                      // Container failed to build - show error in preview
+                      const previewFrame = document.getElementById('preview-iframe');
+                      if (previewFrame) {
+                        const errorHtml = \`
+                          <!DOCTYPE html>
+                          <html>
+                          <head>
+                            <style>
+                              body {
+                                background: #1a1a1a;
+                                color: #ff4444;
+                                font-family: monospace;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                height: 100vh;
+                                margin: 0;
+                                padding: 20px;
+                              }
+                              .error {
+                                text-align: center;
+                                max-width: 600px;
+                              }
+                              .error-icon {
+                                font-size: 48px;
+                                margin-bottom: 20px;
+                              }
+                              .error-title {
+                                font-size: 20px;
+                                margin-bottom: 15px;
+                              }
+                              .error-message {
+                                color: #ccc;
+                                line-height: 1.6;
+                                margin-bottom: 20px;
+                              }
+                              .error-actions {
+                                margin-top: 20px;
+                              }
+                              .error-actions button {
+                                background: #ff4444;
+                                color: white;
+                                border: none;
+                                padding: 10px 20px;
+                                font-size: 14px;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                margin: 0 5px;
+                              }
+                              .error-actions button:hover {
+                                background: #ff6666;
+                              }
+                              pre {
+                                background: #0a0a0a;
+                                padding: 15px;
+                                border-radius: 4px;
+                                text-align: left;
+                                overflow-x: auto;
+                                font-size: 12px;
+                                margin-top: 15px;
+                                border: 1px solid #333;
+                              }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="error">
+                              <div class="error-icon">⚠️</div>
+                              <div class="error-title">Container Build Failed</div>
+                              <div class="error-message">
+                                The development container failed to build. This is usually due to:
+                                <ul style="text-align: left; margin-top: 10px;">
+                                  <li>Syntax errors in configuration files (package.json, astro.config.mjs, etc.)</li>
+                                  <li>Missing dependencies or incorrect versions</li>
+                                  <li>Build script errors</li>
+                                </ul>
+                                <pre>Check the server logs for detailed error information.</pre>
+                              </div>
+                              <div class="error-actions">
+                                <button onclick="window.parent.location.reload()">Retry</button>
+                                <button onclick="window.parent.history.back()">Go Back</button>
+                              </div>
+                            </div>
+                          </body>
+                          </html>
+                        \`;
+                        previewFrame.srcdoc = errorHtml;
+                      }
+                      
+                      // Update mode UI to show error state
+                      currentMode = 'error';
+                      updateModeUI();
+                      
+                      // Keep editor in read-only mode
+                      editor.setOption('readOnly', true);
+                      
+                      if (statusDiv) {
+                        statusDiv.innerHTML = '<span style="color: #ff4444;">Build failed - check preview for details</span>';
+                      }
+                      
+                      // Don't clear URL params - user might want to retry
+                      return;
+                    }
+                    
+                    // Container is ready, enable editing
+                    currentMode = 'edit';
+                    
+                    // Clear any status messages
+                    if (statusDiv) {
+                      statusDiv.innerHTML = '';
+                    }
+                    
+                    // Update UI
+                    updateModeUI();
+                    
+                    // Enable editor
+                    editor.setOption('readOnly', false);
+                    
+                    // Load preview URL
+                    if (currentSession.previewUrl) {
+                      const previewFrame = document.getElementById('preview-iframe');
+                      if (previewFrame) {
+                        previewFrame.srcdoc = ''; // Clear loading HTML
+                        previewFrame.src = currentSession.previewUrl;
+                      }
+                    }
+                    
+                    console.log('Restored editing session:', currentSession.id);
+                  } else {
+                    // Session no longer exists, clear URL params
+                    if (statusDiv) {
+                      statusDiv.innerHTML = '<div class="error-message">⚠️ Session not found. Please start a new editing session.</div>';
+                    }
+                    updateURLWithEditState(false);
                   }
-                  
-                  console.log('Restored editing session:', currentSession.id);
-                } else {
-                  // Session no longer exists, clear URL params
+                } catch (error) {
+                  console.error('Error checking session:', error);
+                  if (statusDiv) {
+                    statusDiv.innerHTML = '<div class="error-message">⚠️ Error loading session. Please try again.</div>';
+                  }
                   updateURLWithEditState(false);
                 }
-              } catch (error) {
-                console.error('Error checking session:', error);
-                updateURLWithEditState(false);
               }
+              
+              // Start checking container status
+              checkContainerStatus();
             }
           }
           

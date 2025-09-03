@@ -6,6 +6,7 @@ import { Database } from '../../core/database/database';
 import { requireAuth } from './auth';
 import { sanitizePath, isEditableFile, getFileLanguage } from '../utils/site-helpers';
 import type { HonoContext, SiteData } from '../../types/hono';
+import { containerManager } from '../../server/services/container-manager';
 
 /**
  * Helper to detect if a project has file watching capability
@@ -43,6 +44,86 @@ const fileRoutes = new Hono();
 
 // Apply authentication to all file routes
 fileRoutes.use('*', requireAuth);
+
+/**
+ * Execute a command inside a Docker container
+ */
+async function execInContainer(containerName: string, command: string, workingDir: string = '/app'): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const dockerProcess = spawn('docker', ['exec', '-w', workingDir, containerName, 'sh', '-c', command], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    let stdout = '';
+    let stderr = '';
+    
+    dockerProcess.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    
+    dockerProcess.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+    
+    dockerProcess.on('close', (exitCode: number | null) => {
+      resolve({ stdout, stderr, exitCode: exitCode || 0 });
+    });
+    
+    dockerProcess.on('error', (err: Error) => {
+      reject(new Error(`Docker exec failed: ${err.message}`));
+    });
+  });
+}
+
+/**
+ * Read file content from container or host filesystem
+ */
+async function readFileFromSource(filePath: string, containerName?: string): Promise<string> {
+  if (containerName) {
+    // Read from container
+    const { stdout, stderr, exitCode } = await execInContainer(
+      containerName, 
+      `cat "${filePath.replace(/"/g, '\\"')}"`,
+      '/app'
+    );
+    
+    if (exitCode !== 0) {
+      throw new Error(`Failed to read file from container: ${stderr}`);
+    }
+    
+    return stdout;
+  } else {
+    // Read from host filesystem
+    return await readFile(filePath, 'utf-8');
+  }
+}
+
+/**
+ * Write file content to container or host filesystem
+ */
+async function writeFileToSource(filePath: string, content: string, containerName?: string): Promise<void> {
+  if (containerName) {
+    // Write to container - use base64 encoding to handle special characters
+    const encodedContent = Buffer.from(content).toString('base64');
+    const { stderr, exitCode } = await execInContainer(
+      containerName,
+      `echo "${encodedContent}" | base64 -d > "${filePath.replace(/"/g, '\\"')}"`,
+      '/app'
+    );
+    
+    if (exitCode !== 0) {
+      throw new Error(`Failed to write file to container: ${stderr}`);
+    }
+  } else {
+    // Write to host filesystem
+    const dir = dirname(filePath);
+    if (!existsSync(dir)) {
+      await mkdir(dir, { recursive: true });
+    }
+    await writeFile(filePath, content, 'utf-8');
+  }
+}
 
 /**
  * Check if user has access to a site
@@ -137,13 +218,48 @@ fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    if (!existsSync(sitePath)) {
-      return c.json({ success: false, error: 'Site directory not found' });
+    // Check for active editing session
+    const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
+    
+    let tree;
+    if (activeSession && activeSession.containerName) {
+      // Get file tree from container
+      try {
+        const { stdout, stderr, exitCode } = await execInContainer(
+          activeSession.containerName,
+          'find /app -type f -name "*" | grep -E "\.(js|ts|jsx|tsx|vue|css|scss|html|md|json|toml)$" | head -200',
+          '/app'
+        );
+        
+        if (exitCode === 0) {
+          // Convert find output to file tree structure
+          const files = stdout.trim().split('\n').filter(f => f.trim());
+          // Build file tree from paths
+          tree = await buildFileTree(sitePath, sitePath);  // TODO: Build from container paths
+        } else {
+          console.warn(`Container file listing failed: ${stderr}`);
+          // Fallback to host filesystem
+          tree = await buildFileTree(sitePath, sitePath);
+        }
+      } catch (containerError) {
+        console.warn(`Failed to get file tree from container: ${containerError}`);
+        // Fallback to host filesystem 
+        tree = await buildFileTree(sitePath, sitePath);
+      }
+    } else {
+      // Use host filesystem
+      if (!existsSync(sitePath)) {
+        return c.json({ success: false, error: 'Site directory not found' });
+      }
+      tree = await buildFileTree(sitePath, sitePath);
     }
     
-    const tree = await buildFileTree(sitePath, sitePath);
-    
-    return c.json({ success: true, tree });
+    return c.json({ 
+      success: true, 
+      tree,
+      editMode: false,  // TODO: Check for active session
+      branchName: undefined
+    });
     
   } catch (error) {
     console.error('Error loading file tree:', error);
@@ -166,35 +282,67 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
     
     // Sanitize and validate file path
     const cleanPath = sanitizePath(filepath);
-    const fullPath = join(sitePath, cleanPath);
-    
-    // Ensure the file is within the site directory
-    if (!fullPath.startsWith(sitePath)) {
-      return c.json({ success: false, error: 'Invalid file path' });
-    }
-    
-    if (!existsSync(fullPath)) {
-      return c.json({ success: false, error: 'File not found' });
-    }
-    
-    // Check if it's a file
-    const stats = await stat(fullPath);
-    if (!stats.isFile()) {
-      return c.json({ success: false, error: 'Not a file' });
-    }
     
     // Check if file is editable
-    if (!isEditableFile(fullPath)) {
+    if (!isEditableFile(cleanPath)) {
       return c.json({ success: false, error: 'File type not editable' });
     }
     
-    // Read file content
-    const content = await readFile(fullPath, 'utf-8');
+    // Check for active editing session
+    const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
+    
+    let content: string;
+    let readSource = 'host';
+    
+    if (activeSession && activeSession.containerName) {
+      // Read from container
+      try {
+        const containerPath = `/${cleanPath}`; // Container paths are relative to /app
+        content = await readFileFromSource(containerPath, activeSession.containerName);
+        readSource = 'container';
+      } catch (containerError) {
+        console.warn(`Failed to read from container: ${containerError}`);
+        // Fallback to host filesystem
+        const fullPath = join(sitePath, cleanPath);
+        
+        if (!fullPath.startsWith(sitePath)) {
+          return c.json({ success: false, error: 'Invalid file path' });
+        }
+        
+        if (!existsSync(fullPath)) {
+          return c.json({ success: false, error: 'File not found' });
+        }
+        
+        content = await readFile(fullPath, 'utf-8');
+        readSource = 'host-fallback';
+      }
+    } else {
+      // Read from host filesystem
+      const fullPath = join(sitePath, cleanPath);
+      
+      if (!fullPath.startsWith(sitePath)) {
+        return c.json({ success: false, error: 'Invalid file path' });
+      }
+      
+      if (!existsSync(fullPath)) {
+        return c.json({ success: false, error: 'File not found' });
+      }
+      
+      const stats = await stat(fullPath);
+      if (!stats.isFile()) {
+        return c.json({ success: false, error: 'Not a file' });
+      }
+      
+      content = await readFile(fullPath, 'utf-8');
+    }
     
     return c.json({ 
       success: true, 
       content,
-      language: getFileLanguage(fullPath)
+      language: getFileLanguage(cleanPath),
+      readSource,
+      editMode: false,  // TODO: Check for active session
+      branchName: undefined
     });
     
   } catch (error) {
@@ -245,38 +393,80 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
     // Check if user has active editing session
     const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
     
-    if (activeSession) {
-      // Save to Git branch using local git service
+    let writeSource = 'host';
+    let commitHash: string | null = null;
+    
+    if (activeSession && activeSession.containerName) {
+      // Save to container and Git branch
       try {
-        console.log(`Saving file ${filepath} to Git branch ${activeSession.branchName} using local Git service`);
+        console.log(`Saving file ${filepath} to container ${activeSession.containerName} and Git branch ${activeSession.branchName}`);
         
-        // Write file to local filesystem first (on the correct branch)
-        await writeFile(fullPath, content, 'utf-8');
+        // Write file to container filesystem
+        const containerPath = `/${cleanPath}`;
+        await writeFileToSource(containerPath, content, activeSession.containerName);
+        writeSource = 'container';
         
-        // Switch to the session branch and commit the changes
-        await gitService.checkoutBranch(sitePath, activeSession.branchName);
-        const commitHash = await gitService.commitChanges(sitePath, `Update ${filepath}`);
+        // Also commit changes to Git branch in container
+        const { stderr: gitAddErr } = await execInContainer(
+          activeSession.containerName,
+          `git add "${containerPath.replace(/"/g, '\\"')}"`
+        );
         
-        if (commitHash) {
-          console.log(`File saved to Git branch successfully: ${commitHash}`);
+        const { stderr: gitCommitErr } = await execInContainer(
+          activeSession.containerName,
+          `git config --global user.email "editor@deploy.local" && git config --global user.name "${user.username || 'Editor'}" && git commit -m "Update ${filepath}" || true`
+        );
+        
+        console.log(`File saved to container and committed to Git branch`);
+        
+        // Update session activity
+        await editingSessionManager.updateActivity(activeSession.id);
+        
+        // For Ruby containers, trigger hot reload
+        try {
+          // Check if this is a Ruby container by checking for puma process
+          const { stdout: psOutput } = await execInContainer(
+            activeSession.containerName,
+            'ps aux | grep -E "puma|ruby" | grep -v grep || true'
+          );
           
-          // Update session commit tracking
-          await editingSessionManager.commitSession(activeSession.id, sitePath, {
-            message: `Update ${filepath}`,
-            author: user.username || 'Anonymous'
-          });
+          if (psOutput.includes('puma')) {
+            // Send USR2 signal to Puma master process for phased restart
+            const { stdout: reloadOutput } = await execInContainer(
+              activeSession.containerName,
+              'pkill -USR2 -f "puma.*master" || pkill -USR1 -f "puma" || true'
+            );
+            console.log('Sent hot reload signal to Puma');
+          }
+        } catch (reloadErr) {
+          console.log('Could not send reload signal:', reloadErr);
         }
         
+      } catch (containerError) {
+        console.error(`Failed to save to container: ${containerError}`);
+        // Fallback to host filesystem and Git
+        console.log(`Falling back to host filesystem save for ${filepath}`);
         
-      } catch (gitError) {
-        console.error(`Failed to save file to Git: ${gitError}`);
-        // Fallback to local file save if Git fails
-        console.log(`Falling back to local file save for ${filepath}`);
         await writeFile(fullPath, content, 'utf-8');
+        writeSource = 'host-fallback';
+        
+        try {
+          await gitService.checkoutBranch(sitePath, activeSession.branchName);
+          commitHash = await gitService.commitChanges(sitePath, `Update ${filepath}`);
+          
+          if (commitHash) {
+            await editingSessionManager.commitSession(activeSession.id, sitePath, {
+              message: `Update ${filepath}`,
+              author: user.username || 'Anonymous'
+            });
+          }
+        } catch (gitError) {
+          console.error(`Git fallback also failed: ${gitError}`);
+        }
       }
     } else {
-      // No active session - save to local filesystem (normal behavior)
-      console.log(`No active editing session - saving ${filepath} locally`);
+      // No active session - save to host filesystem (normal behavior)
+      console.log(`No active editing session - saving ${filepath} to host filesystem`);
       await writeFile(fullPath, content, 'utf-8');
     }
     
@@ -293,35 +483,41 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
     let updateType = 'none';
     let estimatedDuration = 0;
     
-    if (activeSession) {
-      const restartSuccess = await editingSessionManager.restartPreviewContainer(
-        activeSession.id, 
-        [filepath]
-      ).catch(err => {
-        console.error(`Container restart failed: ${err}`);
-        return false;
-      });
+    if (activeSession && writeSource.startsWith('container')) {
+      // File was saved to container - no need to restart, dev server should pick up changes
+      const hasWatching = await detectFileWatching(sitePath);
+      const isPackageChange = filepath.includes('package.json');
       
-      if (restartSuccess === true) {
-        // Check if it was a fast file watching update or slow container restart
-        const hasWatching = await detectFileWatching(sitePath);
-        const isPackageChange = filepath.includes('package.json');
+      if (hasWatching && !isPackageChange) {
+        responseMessage = 'File saved - preview updating automatically via hot reload';
+        containerStatus = 'watching';
+        updateType = 'hot_reload';
+        estimatedDuration = 1;
+      } else if (isPackageChange) {
+        // For package.json changes, we do need to restart the container
+        const restartSuccess = await editingSessionManager.restartPreviewContainer(
+          activeSession.id, 
+          [filepath]
+        ).catch(err => {
+          console.error(`Container restart failed: ${err}`);
+          return false;
+        });
         
-        if (hasWatching && !isPackageChange) {
-          responseMessage = 'File saved - preview updating automatically';
-          containerStatus = 'watching';
-          updateType = 'hot_reload';
-          estimatedDuration = 1;
-        } else {
-          responseMessage = 'File saved and preview updated';
+        if (restartSuccess === true) {
+          responseMessage = 'File saved and preview restarted for package changes';
           containerStatus = 'restarted';
           updateType = 'container_restart';
-          estimatedDuration = isPackageChange ? 20 : 5;
+          estimatedDuration = 20;
+        } else {
+          responseMessage = 'File saved, but preview restart failed';
+          containerStatus = 'failed';
+          updateType = 'failed';
         }
       } else {
-        responseMessage = 'File saved, but preview update failed';
-        containerStatus = 'failed';
-        updateType = 'failed';
+        responseMessage = 'File saved to preview environment';
+        containerStatus = 'updated';
+        updateType = 'live_update';
+        estimatedDuration = 2;
       }
     }
     
@@ -332,6 +528,10 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
       updateType,
       estimatedDuration,
       hasActiveSession: !!activeSession,
+      writeSource,
+      branchName: activeSession?.branchName,
+      commitHash,
+      containerName: activeSession?.containerName,
       timestamp: new Date().toISOString()
     });
     
@@ -384,7 +584,12 @@ fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
       await writeFile(fullPath, content, 'utf-8');
     }
     
-    return c.json({ success: true, message: `${type} created successfully` });
+    return c.json({ 
+      success: true, 
+      message: `${type} created successfully`,
+      editMode: false,  // TODO: Check for active session
+      branchName: undefined
+    });
     
   } catch (error) {
     console.error('Error creating file/folder:', error);

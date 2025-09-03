@@ -27,7 +27,14 @@
       "Bash(bun scripts/diagnose-database.ts:*)",
       "Bash(cat:*)",
       "Bash(docker ps:*)",
-      "Bash(docker logs:*)"
+      "Bash(docker logs:*)",
+      "Bash(railpack:*)",
+      "Bash(docker buildx:*)",
+      "Bash(BUILDKIT_HOST=docker-container://buildx_buildkit_deploy-railpack-builder0 railpack build sites/ruby-example --name deploy-ruby-example-production:latest)",
+      "Bash(docker run:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker exec:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": [],

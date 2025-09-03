@@ -12,14 +12,6 @@ export function siteContext(sites: SiteConfig[], projectDomain: string) {
   // Find the default site (if any)
   const defaultSite = sites.find((site) => site.default);
   
-  // Debug logging for site context
-  console.log('🔍 siteContext debug:');
-  console.log(`  - Total sites loaded: ${sites.length}`);
-  console.log(`  - Default site: ${defaultSite ? `${defaultSite.subdomain} (${defaultSite.type})` : 'NONE'}`);
-  sites.forEach((site, i) => {
-    console.log(`  - Site ${i}: ${site.subdomain} (${site.type}) default=${site.default} path=${site.path}`);
-  });
-
   return async (
     request: Request,
     context: Map<string, any>
