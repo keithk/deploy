@@ -1,13 +1,13 @@
 /**
  * Union Types and Type Guards
- * Handles legacy process data vs new site data structures
+ * Handles multiple data structure formats for backward compatibility
  */
 
 import type { SiteConfig } from '../core/types/site';
 import type { ProcessInfo, ProcessRegistryEntry } from '../core/database/models/process';
 
 /**
- * Legacy process data structure (for backward compatibility)
+ * Process data structure from previous system architecture
  */
 export interface LegacyProcessData {
   site: string;
@@ -19,7 +19,7 @@ export interface LegacyProcessData {
   env?: Record<string, string>;
   startTime: Date | number;
   status: string;
-  // Legacy fields
+  // Optional fields from older data format
   name?: string;
   path?: string;
   route?: string;
@@ -112,7 +112,7 @@ export function isLegacyProcessData(data: unknown): data is LegacyProcessData {
     'status' in data &&
     typeof (data as any).site === 'string' &&
     typeof (data as any).port === 'number' &&
-    // Could have legacy fields like name, path, route
+    // Distinguishable by lack of 'id' field (older format)
     (!('id' in data) || typeof (data as any).id === 'undefined')
   );
 }

@@ -7,7 +7,7 @@ import type { HonoContext, AuthenticatedUser } from '../../types/hono';
 
 const authRoutes = new Hono();
 
-// Middleware to check authentication
+// Middleware to check authentication state and redirect unauthenticated users
 export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
   const sessionId = getCookie(c, 'editor_session');
   
@@ -20,14 +20,14 @@ export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
     const user = await validateSession(sessionId);
     
     if (!user) {
-      // Clear cookie with the same options as when setting it
+      // Session invalid - clear the cookie to prevent auth loops
       deleteCookie(c, 'editor_session', {
         path: '/'
       });
       return c.redirect('/auth/login');
     }
     
-    // Type assertion after validation - we know user is valid here
+    // User validated - safe to cast and proceed
     c.set('user', user as AuthenticatedUser);
     await next();
   } catch (error) {
@@ -39,7 +39,6 @@ export async function requireAuth(c: HonoContext, next: () => Promise<void>) {
   }
 }
 
-// Login page
 authRoutes.get('/login', async (c) => {
   const error = c.req.query('error');
   const message = c.req.query('message');
@@ -100,7 +99,6 @@ authRoutes.get('/login', async (c) => {
   `);
 });
 
-// Login form submission
 authRoutes.post('/login', async (c) => {
   const formData = await c.req.parseBody();
   const { username, password } = formData;
@@ -130,21 +128,21 @@ authRoutes.post('/login', async (c) => {
       return c.redirect('/auth/login?error=Invalid username or password');
     }
     
-    // Update last login
+    // Record successful login timestamp for audit purposes
     db.run(
       `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?`,
       [user.id]
     );
     
-    // Create session with 7 days duration to match cookie
+    // Create 7-day session to match cookie expiration
     const sessionId = await createSession(user.id, undefined, undefined, 7 * 24);
     
-    // Clear any existing editor_session cookies first to avoid duplicates
+    // Clear stale cookies before setting new session
     deleteCookie(c, 'editor_session');
     deleteCookie(c, 'editor_session', { path: '/' });
     deleteCookie(c, 'editor_session', { path: '/editor' });
     
-    // Set cookie with explicit path
+    // Set session cookie with security flags
     setCookie(c, 'editor_session', sessionId, {
       httpOnly: true,
       secure: false, // Set to false for development
@@ -161,12 +159,11 @@ authRoutes.post('/login', async (c) => {
   }
 });
 
-// Registration page
 authRoutes.get('/register', async (c) => {
   try {
     const db = Database.getInstance();
     
-    // Check if registration is enabled
+    // Verify registration is allowed before showing form
     const settings = db.query<{ value: string }>(
       `SELECT value FROM system_settings WHERE key = 'registration_enabled'`
     );
@@ -262,7 +259,6 @@ authRoutes.get('/register', async (c) => {
   }
 });
 
-// Registration form submission
 authRoutes.post('/register', async (c) => {
   const formData = await c.req.parseBody();
   const { username, email, password, password_confirm } = formData;
@@ -278,7 +274,7 @@ authRoutes.post('/register', async (c) => {
   try {
     const db = Database.getInstance();
     
-    // Check if registration is still enabled
+    // Double-check registration settings to prevent race conditions
     const settings = db.query<{ value: string }>(
       `SELECT value FROM system_settings WHERE key = 'registration_enabled'`
     );
@@ -287,7 +283,7 @@ authRoutes.post('/register', async (c) => {
       return c.redirect('/auth/login?message=Registration is currently disabled');
     }
     
-    // Check if username or email already exists
+    // Ensure username and email uniqueness
     const existing = db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM users WHERE username = ? OR email = ?`,
       [username, email]
@@ -297,18 +293,18 @@ authRoutes.post('/register', async (c) => {
       return c.redirect('/auth/register?error=Username or email already exists');
     }
     
-    // Get default user limits from settings
+    // Apply system default resource limits to new user
     const defaultSettings = db.query<{ key: string; value: string }>(
       `SELECT key, value FROM system_settings WHERE key IN ('default_max_sites', 'default_max_memory', 'default_max_cpu', 'default_max_storage')`
     );
     
     const defaults = Object.fromEntries(defaultSettings.map(s => [s.key, s.value]));
     
-    // Hash password
+    // Secure password storage with bcrypt hashing
     const { hashPassword } = await import('../../core/auth/password');
     const passwordHash = await hashPassword(password as string);
     
-    // Create user
+    // Insert new user record with default limits
     db.run(
       `INSERT INTO users (username, email, password_hash, max_sites, max_memory_mb, max_cpu_cores, max_storage_mb, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
@@ -331,7 +327,6 @@ authRoutes.post('/register', async (c) => {
   }
 });
 
-// Logout
 authRoutes.get('/logout', async (c) => {
   const sessionId = getCookie(c, 'editor_session');
   

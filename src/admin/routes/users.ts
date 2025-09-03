@@ -7,8 +7,8 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
-// Type definitions for site data
-interface LegacySiteData {
+// Type definitions for site data compatibility
+interface ProcessBasedSiteData {
   site: string;
   status: string;
   type: string;
@@ -16,7 +16,7 @@ interface LegacySiteData {
   port?: number;
 }
 
-interface NewSiteData {
+interface ContainerBasedSiteData {
   name: string;
   domain: string;
   path: string;
@@ -24,10 +24,10 @@ interface NewSiteData {
   template: string;
 }
 
-type SiteData = LegacySiteData | NewSiteData;
+type SiteData = ProcessBasedSiteData | ContainerBasedSiteData;
 
-// Type guard functions
-function isLegacySite(site: SiteData): site is LegacySiteData {
+// Type guard for different site architectures
+function isProcessBasedSite(site: SiteData): site is ProcessBasedSiteData {
   return 'site' in site;
 }
 
@@ -449,7 +449,7 @@ userRoutes.get('/sites', async (c) => {
   try {
     const db = Database.getInstance();
     
-    // Get all sites from both old processes table and new sites table
+    // Aggregate sites from both process-based and container-based systems
     const processes = db.query<{
       id: string;
       site: string;
@@ -521,9 +521,9 @@ userRoutes.get('/sites', async (c) => {
             ${processes.length > 0 ? `
             <div class="panel">
               <div class="panel-header">
-                <h2 class="panel-title">🏠 Legacy Sites (${processes.length})</h2>
+                <h2 class="panel-title">🏠 Process-Based Sites (${processes.length})</h2>
                 <div class="panel-actions">
-                  <span class="btn small" style="background: var(--accent-yellow); color: white;">Legacy Process-Based</span>
+                  <span class="btn small" style="background: var(--accent-yellow); color: white;">Process Architecture</span>
                 </div>
               </div>
               
@@ -588,9 +588,9 @@ userRoutes.get('/sites', async (c) => {
             ${sites.length > 0 ? `
             <div class="panel">
               <div class="panel-header">
-                <h2 class="panel-title">🚀 User Sites (${sites.length})</h2>
+                <h2 class="panel-title">🚀 Container-Based Sites (${sites.length})</h2>
                 <div class="panel-actions">
-                  <span class="btn small" style="background: var(--accent-cyan); color: white;">Container-Based</span>
+                  <span class="btn small" style="background: var(--accent-cyan); color: white;">Container Architecture</span>
                 </div>
               </div>
               
@@ -685,9 +685,9 @@ userRoutes.get('/sites/:id/manage', async (c) => {
   try {
     const db = Database.getInstance();
     
-    // Try to find in processes first (legacy sites)
+    // Check both process-based and container-based site systems
     let siteData = null;
-    let isLegacy = false;
+    let isProcessBased = false;
     
     const process = db.query<{
       id: string;
@@ -702,7 +702,7 @@ userRoutes.get('/sites/:id/manage', async (c) => {
     
     if (process.length > 0) {
       siteData = process[0];
-      isLegacy = true;
+      isProcessBased = true;
     } else {
       // Check in sites table
       const sites = db.query<{
@@ -731,16 +731,16 @@ userRoutes.get('/sites/:id/manage', async (c) => {
       return c.redirect('/users/sites?error=Site not found');
     }
     
-    // Read package.json if it exists to get available scripts
+    // Parse package.json for available npm scripts
     const fs = require('fs');
     const path = require('path');
     let packageJsonPath;
     let packageScripts = {};
     
-    if (isLegacy) {
-      packageJsonPath = path.join(isLegacySite(siteData) ? siteData.cwd : siteData.path, 'package.json');
+    if (isProcessBased) {
+      packageJsonPath = path.join(isProcessBasedSite(siteData) ? siteData.cwd : siteData.path, 'package.json');
     } else {
-      packageJsonPath = path.join('/Users/keith/projects/deploy', isLegacySite(siteData) ? siteData.cwd : siteData.path, 'package.json');
+      packageJsonPath = path.join('/Users/keith/projects/deploy', isProcessBasedSite(siteData) ? siteData.cwd : siteData.path, 'package.json');
     }
     
     try {
@@ -752,10 +752,10 @@ userRoutes.get('/sites/:id/manage', async (c) => {
       console.error('Error reading package.json:', error);
     }
     
-    const siteName = isLegacy ? (siteData as LegacySiteData).site : (siteData as NewSiteData).name;
+    const siteName = isProcessBased ? (siteData as ProcessBasedSiteData).site : (siteData as ContainerBasedSiteData).name;
     const siteStatus = siteData.status;
-    const siteType = isLegacy ? (siteData as LegacySiteData).type : (siteData as NewSiteData).template;
-    const sitePath = isLegacy ? (siteData as LegacySiteData).cwd : (siteData as NewSiteData).path;
+    const siteType = isProcessBased ? (siteData as ProcessBasedSiteData).type : (siteData as ContainerBasedSiteData).template;
+    const sitePath = isProcessBased ? (siteData as ProcessBasedSiteData).cwd : (siteData as ContainerBasedSiteData).path;
     
     return c.html(`
       <!DOCTYPE html>
@@ -1033,23 +1033,30 @@ userRoutes.post('/sites/:id/run-script', async (c) => {
 // Site restart handler
 userRoutes.post('/sites/:id/restart', async (c) => {
   const siteId = c.req.param('id');
-  // TODO: Implement actual site restart logic
-  // For now, just redirect back with a message
-  return c.redirect(`/users/sites/${siteId}/manage?success=Site restart triggered`);
+  // TODO: Implement site restart logic
+  // Should detect site type (process vs container) and use appropriate restart method:
+  // - For containers: docker restart deploy-{sitename}
+  // - For processes: kill -HUP or process manager restart
+  return c.redirect(`/users/sites/${siteId}/manage?error=Restart not yet implemented`);
 });
 
 // Site start handler
 userRoutes.post('/sites/:id/start', async (c) => {
   const siteId = c.req.param('id');
-  // TODO: Implement actual site start logic
-  return c.redirect(`/users/sites/${siteId}/manage?success=Site start triggered`);
-});
+  // TODO: Implement site start logic
+  // Should check current state and start appropriately:
+  // - For containers: docker start deploy-{sitename}
+  // - For processes: use process manager or spawn new process
+  return c.redirect(`/users/sites/${siteId}/manage?error=Start not yet implemented`);
 
-// Site stop handler
+// Site stop handler  
 userRoutes.post('/sites/:id/stop', async (c) => {
   const siteId = c.req.param('id');
-  // TODO: Implement actual site stop logic
-  return c.redirect(`/users/sites/${siteId}/manage?success=Site stop triggered`);
+  // TODO: Implement graceful site shutdown
+  // Should stop site based on type:
+  // - For containers: docker stop deploy-{sitename} --time 10
+  // - For processes: SIGTERM followed by SIGKILL if needed
+  return c.redirect(`/users/sites/${siteId}/manage?error=Stop not yet implemented`);
 });
 
 // Unclaimed Projects page

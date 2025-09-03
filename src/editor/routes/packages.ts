@@ -39,7 +39,7 @@ interface RuntimeInfo {
 }
 
 /**
- * Check if user has access to a site
+ * Verify user permissions for site access (owner or admin)
  */
 async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolean): Promise<{ hasAccess: boolean; sitePath?: string }> {
   const db = Database.getInstance();
@@ -71,7 +71,7 @@ async function checkSiteAccess(siteName: string, userId: number, isAdmin: boolea
 }
 
 /**
- * Execute command and return result
+ * Execute package manager commands with timeout protection
  */
 async function execCommand(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
@@ -105,7 +105,7 @@ async function execCommand(command: string, args: string[], cwd: string): Promis
 }
 
 /**
- * Parse mise TOML config
+ * Parse mise configuration from TOML format
  */
 function parseMiseToml(content: string): MiseConfig {
   const config: MiseConfig = {
@@ -167,7 +167,7 @@ function parseMiseToml(content: string): MiseConfig {
 }
 
 /**
- * Convert mise config to TOML
+ * Serialize mise configuration to TOML format
  */
 function configToToml(config: MiseConfig): string {
   let toml = '# Mise configuration\n';
@@ -205,7 +205,6 @@ function configToToml(config: MiseConfig): string {
   return toml;
 }
 
-// Get package manager overview for a site
 packagesRoutes.get('/sites/:sitename/packages', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -221,7 +220,7 @@ packagesRoutes.get('/sites/:sitename/packages', async (c) => {
       return c.json({ success: false, error: 'Site directory not found' });
     }
     
-    // Read package.json if it exists
+    // Parse project dependencies and scripts from package.json
     let packageJson: PackageJson = {};
     const packageJsonPath = join(sitePath, 'package.json');
     if (existsSync(packageJsonPath)) {
@@ -232,7 +231,7 @@ packagesRoutes.get('/sites/:sitename/packages', async (c) => {
       }
     }
     
-    // Read mise config if it exists
+    // Parse runtime configuration from mise.toml
     let miseConfig: MiseConfig = {};
     const miseConfigPath = join(sitePath, '.mise.toml');
     if (existsSync(miseConfigPath)) {
@@ -244,10 +243,10 @@ packagesRoutes.get('/sites/:sitename/packages', async (c) => {
       }
     }
     
-    // Detect current package manager
+    // Auto-detect package manager from lockfiles
     const detectedPackageManager = detectPackageManager(sitePath);
     
-    // Get runtime information
+    // Extract configured runtime versions
     const runtimes: RuntimeInfo[] = [];
     
     if (miseConfig.tools) {
@@ -284,7 +283,6 @@ packagesRoutes.get('/sites/:sitename/packages', async (c) => {
   }
 });
 
-// Get available runtime versions
 packagesRoutes.get('/sites/:sitename/packages/runtimes/:runtime/versions', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -297,14 +295,14 @@ packagesRoutes.get('/sites/:sitename/packages/runtimes/:runtime/versions', async
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    // Use mise to list available versions
+    // Query mise for available runtime versions
     const result = await execCommand('mise', ['ls-remote', runtime], sitePath);
     
     if (result.exitCode !== 0) {
       return c.json({ success: false, error: `Failed to fetch versions: ${result.stderr}` });
     }
     
-    // Parse mise output to get versions
+    // Extract version list from mise command output
     const versions = result.stdout
       .split('\n')
       .map(line => line.trim())
@@ -325,7 +323,6 @@ packagesRoutes.get('/sites/:sitename/packages/runtimes/:runtime/versions', async
   }
 });
 
-// Install or update a runtime version
 packagesRoutes.post('/sites/:sitename/packages/runtimes/:runtime', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -344,7 +341,7 @@ packagesRoutes.post('/sites/:sitename/packages/runtimes/:runtime', async (c) => 
       return c.json({ success: false, error: 'Version is required' });
     }
     
-    // Install the runtime version
+    // Install specified runtime version via mise
     const result = await execCommand('mise', ['use', `${runtime}@${version}`], sitePath);
     
     if (result.exitCode !== 0) {
@@ -363,7 +360,6 @@ packagesRoutes.post('/sites/:sitename/packages/runtimes/:runtime', async (c) => 
   }
 });
 
-// Run a package script
 packagesRoutes.post('/sites/:sitename/packages/scripts/:scriptName/run', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -378,16 +374,16 @@ packagesRoutes.post('/sites/:sitename/packages/scripts/:scriptName/run', async (
     
     const { args = [] } = await c.req.json();
     
-    // Check if using mise or traditional package manager
+    // Route through mise task runner or package manager
     const miseConfigPath = join(sitePath, '.mise.toml');
     const hasMise = existsSync(miseConfigPath);
     
     let result;
     if (hasMise) {
-      // Use mise to run the task
+      // Execute via mise task system
       result = await execCommand('mise', ['run', scriptName, ...args], sitePath);
     } else {
-      // Use traditional package manager
+      // Execute via npm/yarn/pnpm/bun
       const packageManager = detectPackageManager(sitePath);
       
       let command, commandArgs;
@@ -428,7 +424,6 @@ packagesRoutes.post('/sites/:sitename/packages/scripts/:scriptName/run', async (
   }
 });
 
-// Install dependencies
 packagesRoutes.post('/sites/:sitename/packages/dependencies/install', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -440,22 +435,22 @@ packagesRoutes.post('/sites/:sitename/packages/dependencies/install', async (c) 
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    // Check if using mise or traditional package manager
+    // Prefer mise install task, fallback to package manager
     const miseConfigPath = join(sitePath, '.mise.toml');
     const hasMise = existsSync(miseConfigPath);
     
     let result;
     if (hasMise) {
-      // Use mise to run install task if defined
+      // Execute custom install task via mise
       result = await execCommand('mise', ['run', 'install'], sitePath);
       
-      // If no install task defined, fall back to package manager
+      // Fallback to standard package manager install
       if (result.exitCode !== 0) {
         const packageManager = detectPackageManager(sitePath);
         result = await execCommand(packageManager, ['install'], sitePath);
       }
     } else {
-      // Use traditional package manager
+      // Standard dependency installation
       const packageManager = detectPackageManager(sitePath);
       result = await execCommand(packageManager, ['install'], sitePath);
     }
@@ -476,7 +471,6 @@ packagesRoutes.post('/sites/:sitename/packages/dependencies/install', async (c) 
   }
 });
 
-// Add a new dependency
 packagesRoutes.post('/sites/:sitename/packages/dependencies', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');
@@ -539,7 +533,6 @@ packagesRoutes.post('/sites/:sitename/packages/dependencies', async (c) => {
   }
 });
 
-// Update .mise.toml configuration
 packagesRoutes.put('/sites/:sitename/packages/mise-config', async (c) => {
   const user = c.get('user') as AuthenticatedUser;
   const siteName = c.req.param('sitename');

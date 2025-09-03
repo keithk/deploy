@@ -99,8 +99,10 @@ export class RouteManager {
       return this.routes.get(routeKey)!;
     }
 
-    // TODO: Add support for path parameters and pattern matching
-
+    // TODO: Add flexible route matching
+    // - Support for dynamic path parameters (e.g., /users/:id)
+    // - Implement regex-based pattern matching
+    // - Allow optional query parameter handling
     return null;
   }
 

@@ -480,9 +480,12 @@ ${this.config.projectDomain} {${this.config.sslCertPath && this.config.sslKeyPat
    * For now, starts with empty routes (they'll be re-added as sessions restart)
    */
   private loadExistingRoutes(): void {
-    // TODO: In a production environment, we might want to persist dynamic routes
-    // to a JSON file or database so they survive service restarts
-    debug('Starting with empty dynamic routes (will be populated by active sessions)');
+    // TODO: Implement dynamic route persistence mechanism
+    // In a production environment, we should:
+    // 1. Serialize dynamic routes to a durable storage (JSON file or database)
+    // 2. Restore routes on service restart to maintain preview states
+    // 3. Add a cleanup mechanism for stale or expired routes
+    debug("Starting with empty dynamic routes (will be populated by active sessions)");
   }
 
   /**

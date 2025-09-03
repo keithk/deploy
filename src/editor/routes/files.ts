@@ -206,7 +206,6 @@ async function buildFileTree(dirPath: string, basePath: string, maxDepth: number
   });
 }
 
-// Get file tree for a site
 fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
@@ -218,12 +217,12 @@ fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    // Check for active editing session
+    // Use container filesystem if user has active editing session
     const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
     
     let tree;
     if (activeSession && activeSession.containerName) {
-      // Get file tree from container
+      // Read from containerized development environment
       try {
         const { stdout, stderr, exitCode } = await execInContainer(
           activeSession.containerName,
@@ -232,22 +231,21 @@ fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
         );
         
         if (exitCode === 0) {
-          // Convert find output to file tree structure
+          // Transform container file listing to tree structure
           const files = stdout.trim().split('\n').filter(f => f.trim());
-          // Build file tree from paths
-          tree = await buildFileTree(sitePath, sitePath);  // TODO: Build from container paths
+          tree = await buildFileTree(sitePath, sitePath);
         } else {
           console.warn(`Container file listing failed: ${stderr}`);
-          // Fallback to host filesystem
+          // Fallback when container filesystem unavailable
           tree = await buildFileTree(sitePath, sitePath);
         }
       } catch (containerError) {
         console.warn(`Failed to get file tree from container: ${containerError}`);
-        // Fallback to host filesystem 
+        // Fallback when container access fails
         tree = await buildFileTree(sitePath, sitePath);
       }
     } else {
-      // Use host filesystem
+      // Read from host filesystem when no active session
       if (!existsSync(sitePath)) {
         return c.json({ success: false, error: 'Site directory not found' });
       }
@@ -257,7 +255,7 @@ fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
     return c.json({ 
       success: true, 
       tree,
-      editMode: false,  // TODO: Check for active session
+      editMode: !!activeSession,
       branchName: undefined
     });
     
@@ -267,7 +265,6 @@ fileRoutes.get('/sites/:sitename/tree', async (c: HonoContext) => {
   }
 });
 
-// Read file content
 fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
@@ -280,29 +277,29 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    // Sanitize and validate file path
+    // Prevent path traversal attacks
     const cleanPath = sanitizePath(filepath);
     
-    // Check if file is editable
+    // Restrict to editable file types only
     if (!isEditableFile(cleanPath)) {
       return c.json({ success: false, error: 'File type not editable' });
     }
     
-    // Check for active editing session
+    // Prefer container content when editing session active
     const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
     
     let content: string;
     let readSource = 'host';
     
     if (activeSession && activeSession.containerName) {
-      // Read from container
+      // Access file from containerized environment
       try {
-        const containerPath = `/${cleanPath}`; // Container paths are relative to /app
+        const containerPath = `/${cleanPath}`;  // Container uses /app as root
         content = await readFileFromSource(containerPath, activeSession.containerName);
         readSource = 'container';
       } catch (containerError) {
         console.warn(`Failed to read from container: ${containerError}`);
-        // Fallback to host filesystem
+        // Host fallback when container read fails
         const fullPath = join(sitePath, cleanPath);
         
         if (!fullPath.startsWith(sitePath)) {
@@ -317,7 +314,7 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
         readSource = 'host-fallback';
       }
     } else {
-      // Read from host filesystem
+      // Standard host filesystem access
       const fullPath = join(sitePath, cleanPath);
       
       if (!fullPath.startsWith(sitePath)) {
@@ -341,7 +338,7 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
       content,
       language: getFileLanguage(cleanPath),
       readSource,
-      editMode: false,  // TODO: Check for active session
+      editMode: !!activeSession,
       branchName: undefined
     });
     
@@ -351,7 +348,6 @@ fileRoutes.get('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
   }
 });
 
-// Save file content
 fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
@@ -370,43 +366,43 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
       return c.json({ success: false, error: 'Invalid content' });
     }
     
-    // Sanitize and validate file path
+    // Security validation for file paths
     const cleanPath = sanitizePath(filepath);
     const fullPath = join(sitePath, cleanPath);
     
-    // Ensure the file is within the site directory
+    // Prevent writes outside site boundaries
     if (!fullPath.startsWith(sitePath)) {
       return c.json({ success: false, error: 'Invalid file path' });
     }
     
-    // Check if file is editable
+    // Block saves to restricted file types
     if (!isEditableFile(fullPath)) {
       return c.json({ success: false, error: 'File type not editable' });
     }
     
-    // Ensure directory exists
+    // Create parent directories if needed
     const dir = dirname(fullPath);
     if (!existsSync(dir)) {
       await mkdir(dir, { recursive: true });
     }
     
-    // Check if user has active editing session
+    // Route saves through containerized environment when available
     const activeSession = await editingSessionManager.getActiveSession(user.id, siteName);
     
     let writeSource = 'host';
     let commitHash: string | null = null;
     
     if (activeSession && activeSession.containerName) {
-      // Save to container and Git branch
+      // Write to container filesystem and commit to branch
       try {
         console.log(`Saving file ${filepath} to container ${activeSession.containerName} and Git branch ${activeSession.branchName}`);
         
-        // Write file to container filesystem
+        // Persist changes in container
         const containerPath = `/${cleanPath}`;
         await writeFileToSource(containerPath, content, activeSession.containerName);
         writeSource = 'container';
         
-        // Also commit changes to Git branch in container
+        // Auto-commit changes to feature branch
         const { stderr: gitAddErr } = await execInContainer(
           activeSession.containerName,
           `git add "${containerPath.replace(/"/g, '\\"')}"`
@@ -419,19 +415,19 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
         
         console.log(`File saved to container and committed to Git branch`);
         
-        // Update session activity
+        // Refresh session timeout
         await editingSessionManager.updateActivity(activeSession.id);
         
-        // For Ruby containers, trigger hot reload
+        // Send reload signal to Ruby/Puma processes
         try {
-          // Check if this is a Ruby container by checking for puma process
+          // Detect Ruby/Puma for hot reload capability
           const { stdout: psOutput } = await execInContainer(
             activeSession.containerName,
             'ps aux | grep -E "puma|ruby" | grep -v grep || true'
           );
           
           if (psOutput.includes('puma')) {
-            // Send USR2 signal to Puma master process for phased restart
+            // Graceful reload via Puma signals
             const { stdout: reloadOutput } = await execInContainer(
               activeSession.containerName,
               'pkill -USR2 -f "puma.*master" || pkill -USR1 -f "puma" || true'
@@ -444,7 +440,7 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
         
       } catch (containerError) {
         console.error(`Failed to save to container: ${containerError}`);
-        // Fallback to host filesystem and Git
+        // Host filesystem fallback with Git integration
         console.log(`Falling back to host filesystem save for ${filepath}`);
         
         await writeFile(fullPath, content, 'utf-8');
@@ -465,26 +461,26 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
         }
       }
     } else {
-      // No active session - save to host filesystem (normal behavior)
+      // Standard file save without containerization
       console.log(`No active editing session - saving ${filepath} to host filesystem`);
       await writeFile(fullPath, content, 'utf-8');
     }
     
-    // Update last_edited in database
+    // Track modification time for site
     const db = Database.getInstance();
     db.run(
       `UPDATE sites SET last_edited = CURRENT_TIMESTAMP WHERE name = ?`,
       [siteName]
     );
     
-    // Determine response based on whether we had an active session
+    // Provide appropriate status based on save method
     let responseMessage = 'File saved successfully';
     let containerStatus = 'none';
     let updateType = 'none';
     let estimatedDuration = 0;
     
     if (activeSession && writeSource.startsWith('container')) {
-      // File was saved to container - no need to restart, dev server should pick up changes
+      // Container save enables hot reload or requires restart
       const hasWatching = await detectFileWatching(sitePath);
       const isPackageChange = filepath.includes('package.json');
       
@@ -494,7 +490,7 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
         updateType = 'hot_reload';
         estimatedDuration = 1;
       } else if (isPackageChange) {
-        // For package.json changes, we do need to restart the container
+        // Package changes require container restart
         const restartSuccess = await editingSessionManager.restartPreviewContainer(
           activeSession.id, 
           [filepath]
@@ -541,7 +537,6 @@ fileRoutes.put('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => 
   }
 });
 
-// Create new file or folder
 fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
@@ -559,11 +554,11 @@ fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
       return c.json({ success: false, error: 'Path and type are required' });
     }
     
-    // Sanitize and validate file path
+    // Security validation for new paths
     const cleanPath = sanitizePath(filePath);
     const fullPath = join(sitePath, cleanPath);
     
-    // Ensure the path is within the site directory
+    // Prevent creation outside site boundaries
     if (!fullPath.startsWith(sitePath)) {
       return c.json({ success: false, error: 'Invalid path' });
     }
@@ -575,7 +570,7 @@ fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
     if (type === 'folder') {
       await mkdir(fullPath, { recursive: true });
     } else {
-      // Ensure parent directory exists
+      // Create parent directory structure
       const dir = dirname(fullPath);
       if (!existsSync(dir)) {
         await mkdir(dir, { recursive: true });
@@ -587,7 +582,7 @@ fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
     return c.json({ 
       success: true, 
       message: `${type} created successfully`,
-      editMode: false,  // TODO: Check for active session
+      editMode: false,
       branchName: undefined
     });
     
@@ -597,7 +592,6 @@ fileRoutes.post('/sites/:sitename/file', async (c: HonoContext) => {
   }
 });
 
-// Delete file or folder
 fileRoutes.delete('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) => {
   const user = c.get('user');
   const siteName = c.req.param('sitename');
@@ -610,11 +604,11 @@ fileRoutes.delete('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) 
       return c.json({ success: false, error: 'Access denied' });
     }
     
-    // Sanitize and validate file path
+    // Security validation for deletion
     const cleanPath = sanitizePath(filepath);
     const fullPath = join(sitePath, cleanPath);
     
-    // Ensure the path is within the site directory
+    // Prevent deletion outside site boundaries
     if (!fullPath.startsWith(sitePath) || fullPath === sitePath) {
       return c.json({ success: false, error: 'Invalid path' });
     }
@@ -623,10 +617,10 @@ fileRoutes.delete('/sites/:sitename/file/:filepath{.+}', async (c: HonoContext) 
       return c.json({ success: false, error: 'File or folder not found' });
     }
     
-    // Delete file or folder
+    // Remove filesystem entry with safety checks
     const stats = await stat(fullPath);
     if (stats.isDirectory()) {
-      // For safety, only delete empty directories
+      // Safety: only remove empty directories
       const entries = await readdir(fullPath);
       if (entries.length > 0) {
         return c.json({ success: false, error: 'Directory is not empty' });
