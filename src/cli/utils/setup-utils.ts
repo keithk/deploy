@@ -18,6 +18,18 @@ const platform = process.platform;
 const isLinux = platform === "linux";
 const isMac = platform === "darwin";
 
+// Colors for terminal output
+const colors = {
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  white: "\x1b[37m"
+};
+
 /**
  * Check if a command exists
  */
@@ -133,6 +145,237 @@ export async function updateEnvFile(
   } catch (error) {
     console.error(
       `Failed to update .env file: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return false;
+  }
+}
+
+/**
+ * Install Docker if not installed
+ */
+export async function installDocker(log: LogFunctions): Promise<boolean> {
+  log.step("Checking Docker installation...");
+
+  if (await commandExists("docker")) {
+    log.success("Docker is already installed.");
+    return await verifyDockerSetup(log);
+  }
+
+  log.info("Installing Docker...");
+
+  try {
+    if (isMac) {
+      // On macOS, we need Docker Desktop
+      log.info("Docker installation on macOS requires Docker Desktop.");
+      log.info("Please install Docker Desktop from: https://www.docker.com/products/docker-desktop/");
+      log.warning("After installing Docker Desktop, please restart this setup.");
+      return false;
+    } else if (isLinux) {
+      // Install Docker on Linux
+      log.info("Installing Docker using the official installation script...");
+      
+      // Install using Docker's convenience script
+      const result = await execCommand(
+        "bash",
+        ["-c", "curl -fsSL https://get.docker.com | sh"],
+        {},
+        log
+      );
+      
+      if (!result.success) {
+        log.error("Docker installation failed");
+        return false;
+      }
+      
+      // Add current user to docker group
+      log.info("Adding current user to docker group...");
+      await execCommand("sudo", ["usermod", "-aG", "docker", process.env.USER || "$USER"], {}, log);
+      
+      // Start and enable Docker service
+      await execCommand("sudo", ["systemctl", "start", "docker"], {}, log);
+      await execCommand("sudo", ["systemctl", "enable", "docker"], {}, log);
+      
+      log.warning("Please log out and back in for Docker group membership to take effect.");
+    } else {
+      log.error("Automatic Docker installation is not supported on this platform.");
+      log.info("Please install Docker manually: https://docs.docker.com/get-docker/");
+      return false;
+    }
+
+    // Verify installation
+    if (!(await commandExists("docker"))) {
+      log.error("Docker installation verification failed.");
+      return false;
+    }
+
+    log.success("Docker installed successfully.");
+    return await verifyDockerSetup(log);
+  } catch (error) {
+    log.error(
+      `Failed to install Docker: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return false;
+  }
+}
+
+/**
+ * Verify Docker is properly set up
+ */
+export async function verifyDockerSetup(log: LogFunctions): Promise<boolean> {
+  try {
+    // Check if Docker daemon is running
+    const result = await execCommand("docker", ["info"], {}, log);
+    if (!result.success) {
+      log.error("Docker daemon is not running. Please start Docker.");
+      if (isMac) {
+        log.info("Start Docker Desktop application.");
+      } else if (isLinux) {
+        log.info("Run: sudo systemctl start docker");
+      }
+      return false;
+    }
+    
+    // Check if buildx is available (needed for Railpacks)
+    const buildxResult = await execCommand("docker", ["buildx", "version"], {}, log);
+    if (!buildxResult.success) {
+      log.warning("Docker Buildx not available. Installing...");
+      // Buildx should be included in modern Docker, but let's enable it
+      await execCommand("docker", ["buildx", "install"], {}, log);
+    }
+    
+    log.success("Docker is properly configured.");
+    return true;
+  } catch (error) {
+    log.error(`Docker verification failed: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Install Mise if not installed
+ */
+export async function installMise(log: LogFunctions): Promise<boolean> {
+  log.step("Checking Mise installation...");
+
+  if (await commandExists("mise")) {
+    log.success("Mise is already installed.");
+    return true;
+  }
+
+  log.info("Installing Mise...");
+
+  try {
+    if (isMac && (await commandExists("brew"))) {
+      // Install via Homebrew on macOS
+      const result = await execCommand("brew", ["install", "mise"], {}, log);
+      if (!result.success) return false;
+    } else {
+      // Use Mise's official installation script
+      log.info("Installing Mise using the official installation script...");
+      const result = await execCommand(
+        "bash",
+        ["-c", "curl https://mise.run | sh"],
+        {},
+        log
+      );
+      if (!result.success) return false;
+      
+      // Update PATH for this process
+      process.env.PATH = `${process.env.HOME}/.local/bin:${process.env.PATH}`;
+    }
+
+    // Verify installation
+    if (!(await commandExists("mise"))) {
+      log.error("Mise installation verification failed.");
+      return false;
+    }
+
+    log.success("Mise installed successfully.");
+    return true;
+  } catch (error) {
+    log.error(
+      `Failed to install Mise: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return false;
+  }
+}
+
+/**
+ * Install Railpacks if not installed
+ */
+export async function installRailpacks(log: LogFunctions): Promise<boolean> {
+  log.step("Checking Railpacks installation...");
+
+  if (await commandExists("railpacks")) {
+    log.success("Railpacks is already installed.");
+    return true;
+  }
+
+  log.info("Installing Railpacks...");
+
+  try {
+    // Install Railpacks using cargo (Rust package manager)
+    // First check if cargo is available
+    if (!(await commandExists("cargo"))) {
+      log.info("Cargo not found. Installing Rust toolchain...");
+      
+      // Install Rust
+      const rustResult = await execCommand(
+        "bash",
+        ["-c", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"],
+        {},
+        log
+      );
+      
+      if (!rustResult.success) {
+        log.error("Failed to install Rust toolchain");
+        return false;
+      }
+      
+      // Source the cargo environment
+      process.env.PATH = `${process.env.HOME}/.cargo/bin:${process.env.PATH}`;
+      
+      // Verify cargo is now available
+      if (!(await commandExists("cargo"))) {
+        log.error("Cargo installation verification failed. Please restart your shell and try again.");
+        return false;
+      }
+    }
+    
+    // Install Railpacks via cargo
+    const result = await execCommand(
+      "cargo",
+      ["install", "railpacks"],
+      {},
+      log
+    );
+    
+    if (!result.success) {
+      log.error("Railpacks installation failed");
+      return false;
+    }
+    
+    // Update PATH to include cargo bin
+    process.env.PATH = `${process.env.HOME}/.cargo/bin:${process.env.PATH}`;
+
+    // Verify installation
+    if (!(await commandExists("railpacks"))) {
+      log.error("Railpacks installation verification failed.");
+      log.info("You may need to restart your shell or add ~/.cargo/bin to your PATH");
+      return false;
+    }
+
+    log.success("Railpacks installed successfully.");
+    return true;
+  } catch (error) {
+    log.error(
+      `Failed to install Railpacks: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
@@ -901,4 +1144,79 @@ export async function configureFirewall(log: LogFunctions): Promise<boolean> {
     log.info("You may need to configure your firewall manually.");
     return false;
   }
+}
+
+/**
+ * Verify all tools are installed and working
+ */
+export async function verifyInstallation(log: LogFunctions): Promise<boolean> {
+  log.step("Verifying installation...");
+  
+  const tools = [
+    { name: "Bun", command: "bun", versionArg: "--version" },
+    { name: "Docker", command: "docker", versionArg: "--version" },
+    { name: "Mise", command: "mise", versionArg: "--version" },
+    { name: "Railpacks", command: "railpacks", versionArg: "--version" },
+    { name: "Caddy", command: "caddy", versionArg: "version" }
+  ];
+  
+  let allGood = true;
+  
+  for (const tool of tools) {
+    if (await commandExists(tool.command)) {
+      try {
+        const result = await execCommand(tool.command, [tool.versionArg], {}, log);
+        if (result.success) {
+          log.success(`${tool.name} is working correctly`);
+        } else {
+          log.warning(`${tool.name} is installed but may have issues`);
+          allGood = false;
+        }
+      } catch (error) {
+        log.error(`${tool.name} verification failed: ${error instanceof Error ? error.message : String(error)}`);
+        allGood = false;
+      }
+    } else {
+      log.warning(`${tool.name} is not installed`);
+      if (tool.command === "docker" || tool.command === "bun") {
+        allGood = false; // These are critical
+      }
+    }
+  }
+  
+  // Special check for Docker daemon
+  if (await commandExists("docker")) {
+    if (!(await verifyDockerSetup(log))) {
+      allGood = false;
+    }
+  }
+  
+  return allGood;
+}
+
+/**
+ * Show post-installation instructions
+ */
+export async function showPostInstallInstructions(domain: string, useHttps: boolean, log: LogFunctions): Promise<void> {
+  log.step("Post-installation instructions");
+  
+  console.log(`\n${colors.green}🎉 Deploy setup completed successfully!${colors.reset}\n`);
+  
+  console.log(`${colors.cyan}Next steps:${colors.reset}`);
+  console.log(`1. Start the development server: ${colors.yellow}bun run dev${colors.reset}`);
+  console.log(`2. Access your sites at: ${colors.yellow}${useHttps ? 'https' : 'http'}://${domain}${colors.reset}`);
+  console.log(`3. Create your first site: ${colors.yellow}deploy site create my-site${colors.reset}`);
+  
+  console.log(`\n${colors.cyan}Useful commands:${colors.reset}`);
+  console.log(`• Check system health: ${colors.yellow}deploy doctor${colors.reset}`);
+  console.log(`• View running processes: ${colors.yellow}deploy processes${colors.reset}`);
+  console.log(`• Manage sites: ${colors.yellow}deploy site --help${colors.reset}`);
+  
+  if (isMac && !(await isDnsmasqRunning())) {
+    console.log(`\n${colors.yellow}⚠️  Note: Local DNS is not configured${colors.reset}`);
+    console.log(`To access sites via ${domain} domains, configure dnsmasq:`);
+    console.log(`${colors.blue}brew services start dnsmasq${colors.reset}`);
+  }
+  
+  console.log(`\nFor more information, visit: ${colors.blue}https://github.com/dialupdotcom/deploy${colors.reset}`);
 }

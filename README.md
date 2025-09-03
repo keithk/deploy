@@ -46,7 +46,47 @@ Done! You now have:
 - ✅ Built-in admin panel at `admin.yourdomain.com`
 - ✅ Code editor at `editor.yourdomain.com`
 
-### Add your first site
+## 🛠️ Local Development Setup
+
+For development, Deploy automatically installs and configures all required tools:
+
+```bash
+# Clone and set up for development
+git clone https://github.com/dialupdotcom/deploy.git
+cd deploy
+bun install
+
+# Automated setup - installs Docker, Railpacks, Mise, Caddy
+bun run deploy setup
+
+# Check that everything works
+bun run deploy doctor
+
+# Start development server
+bun run dev
+```
+
+**Tools installed automatically:**
+- 🐳 **Docker** - Container runtime for deployments
+- 📦 **Railpacks** - Automatic containerization 
+- ⚙️ **Mise** - Runtime manager
+- 🌐 **Caddy** - Web server with automatic HTTPS
+- 🔒 **Local SSL** - Trusted certificates for development
+
+**What the setup does:**
+- Installs missing dependencies
+- Configures local DNS (macOS)
+- Generates SSL certificates
+- Sets up reverse proxy
+- Verifies everything works
+
+**Troubleshooting:**
+```bash
+deploy doctor    # Diagnose issues
+deploy doctor -v # Get fix commands
+```
+
+## 📁 Add your first site
 
 ```bash
 # Go to your sites folder
@@ -144,8 +184,12 @@ deploy start
 deploy dev
 
 # Setup server (local or production)
-deploy setup local
-deploy setup production
+deploy setup local      # Sets up local development with SSL
+deploy setup production # Configures for production deployment
+
+# Check system health and diagnose issues
+deploy doctor          # Comprehensive system check
+deploy doctor -v       # Verbose output with fix commands
 
 # Admin panel management
 deploy admin status

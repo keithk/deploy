@@ -22,6 +22,9 @@ import {
   commandExists,
   execCommand,
   updateEnvFile,
+  installDocker,
+  installMise,
+  installRailpacks,
   installCaddy,
   configureDnsmasq,
   trustLocalCerts,
@@ -30,7 +33,10 @@ import {
   createServiceFile,
   createStartupScript,
   createQuickSetupScript,
-  configureFirewall
+  configureFirewall,
+  verifyDockerSetup,
+  verifyInstallation,
+  showPostInstallInstructions
 } from "../utils/setup-utils";
 import { setupDatabase } from "../utils/database-setup";
 
@@ -90,9 +96,28 @@ async function setupLocal(
     return false;
   }
 
-  // Install required dependencies
+  // Install all required dependencies
+  log.step("Installing required dependencies...");
+  
+  // Install Docker first (required for containerization)
+  if (!(await installDocker(log))) {
+    log.warning("Docker installation failed or requires manual setup.");
+    log.info("Deploy will still work for non-containerized deployments.");
+  }
+  
+  // Install Mise (required by Railpacks)
+  if (!(await installMise(log))) {
+    log.warning("Mise installation failed. Railpacks may not work properly.");
+  }
+  
+  // Install Railpacks (for automatic containerization)
+  if (!(await installRailpacks(log))) {
+    log.warning("Railpacks installation failed. Manual containerization will be required.");
+  }
+  
+  // Install Caddy (for reverse proxy)
   if (!options.skipCaddy && !(await installCaddy(log))) {
-    log.error("Failed to install required dependencies.");
+    log.error("Failed to install Caddy.");
     return false;
   }
 
@@ -133,17 +158,16 @@ async function setupLocal(
     return false;
   }
 
-  log.step("Local development setup completed successfully!");
-  if (useHttps) {
-    log.info(
-      `You can now access your sites at https://${domain} and https://[site].${domain}`
-    );
+  // Verify installation
+  if (await verifyInstallation(log)) {
+    log.success("All tools are working correctly!");
   } else {
-    log.info(
-      `You can now access your sites at http://${domain} and http://[site].${domain}`
-    );
+    log.warning("Some tools may need attention. Run 'deploy doctor' for details.");
   }
-  log.info('Run "bun run dev" to start the development server.');
+  
+  // Show post-installation instructions
+  await showPostInstallInstructions(domain, useHttps, log);
+  
   return true;
 }
 
@@ -171,7 +195,26 @@ async function setupProduction(
   // Create necessary directories
   await ensureDir(configDir);
 
-  // Install Caddy if not present
+  // Install all required dependencies for production
+  log.step("Installing required dependencies...");
+  
+  // Install Docker (critical for production)
+  if (!(await installDocker(log))) {
+    log.error("Docker installation failed. Docker is required for production deployments.");
+    return false;
+  }
+  
+  // Install Mise (required by Railpacks)
+  if (!(await installMise(log))) {
+    log.warning("Mise installation failed. Railpacks may not work properly.");
+  }
+  
+  // Install Railpacks (for automatic containerization)
+  if (!(await installRailpacks(log))) {
+    log.warning("Railpacks installation failed. Manual containerization will be required.");
+  }
+  
+  // Install Caddy (for reverse proxy)
   if (!options.skipCaddy && !(await installCaddy(log))) {
     log.error("Failed to install Caddy. Please install it manually.");
     log.info("Continuing setup without Caddy...");
@@ -276,22 +319,31 @@ async function setup(
   options: { skipCaddy?: boolean } = {}
 ): Promise<void> {
   try {
+    log.step(`Starting ${environment} setup...`);
+    log.info("This will install and configure all required dependencies.");
+    
     if (environment === "production") {
       if (!(await setupProduction(options))) {
         log.error("Production setup failed.");
+        log.info("Run 'deploy doctor' to diagnose issues.");
         process.exit(1);
       }
     } else {
       if (!(await setupLocal(options))) {
         log.error("Local development setup failed.");
+        log.info("Run 'deploy doctor' to diagnose issues.");
         process.exit(1);
       }
     }
+    
+    log.success("Setup completed successfully! 🎉");
+    log.info("You can now run 'bun run dev' to start developing.");
     process.exit(0);
   } catch (error) {
     log.error(
       `Setup failed: ${error instanceof Error ? error.message : String(error)}`
     );
+    log.info("Run 'deploy doctor' to diagnose the issue.");
     process.exit(1);
   }
 }

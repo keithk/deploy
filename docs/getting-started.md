@@ -1,112 +1,108 @@
-# Getting Started
+# Deploy: Universal Deployment Made Simple
 
-## 🚀 One-Command Install (Ubuntu/DigitalOcean)
+## 🚀 What is Deploy?
 
-Spin up a new server and run:
+Deploy is a deployment tool that works with ANY type of website or application. Whether you're deploying a static HTML site, a complex Ruby on Rails application, a Python Django project, a Go microservice, or a Rust web app - Deploy understands and deploys it instantly.
+
+## Quick Installation
+
+### One-Command Server Setup (Ubuntu/DigitalOcean)
 
 ```bash
+# Install with default IP-based domain
 curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash
-```
 
-Or, with your own domain and email:
-
-```bash
+# Optional: Install with your custom domain and email
 curl -fsSL https://raw.githubusercontent.com/keithk/deploy/main/install.sh | sudo bash -s yourdomain.com your@email.com
 ```
 
-This script will:
-
-1. Install all dependencies (Bun, Caddy, unzip, etc.)
-2. Clone the repository
-3. Set up Caddy with wildcard SSL (no manual certs, ever)
-4. Configure the server to run on startup
-
-If you don't specify a domain, the script uses your server's IP with nip.io (e.g., 123.45.67.89.nip.io). You can update it later.
-
----
-
-## 🧰 Prerequisites (for manual setup)
-
-- [Bun](https://bun.sh/) — Fast JS runtime, bundler, test runner, package manager
-- [Caddy](https://caddyserver.com/) — For automatic HTTPS
-
----
-
-## 🛠️ Manual Installation
+### Manual Installation (macOS/Linux)
 
 ```bash
+# Prerequisites: Install Bun (https://bun.sh)
 git clone https://github.com/keithk/deploy.git
 cd deploy
 bun install
-bun run setup:macos   # or your OS
+bun run setup:macos   # Use appropriate OS setup
 bun run build
 ```
 
----
+## 🌐 Deploying Your First Site
 
-## 🏗️ Development
+Deploy makes deployment brain-dead simple. Just three steps:
+
+### Option 1: Clone from Git (Recommended)
 
 ```bash
-# Using the CLI
-deploy setup local
-deploy dev
+# Clone your project
+git clone https://github.com/yourusername/your-project.git sites/your-project
+
+# That's it! Your site is live
+# Accessible at: your-project.youردomain.com
 ```
 
----
-
-## 🚢 Production
+### Option 2: Create from Scratch
 
 ```bash
-# Using the CLI
-deploy setup production
+# Create a new site directory
+mkdir -p sites/my-awesome-site
+
+# Add your project files
+# No complex configuration needed!
+```
+
+## 🔧 Universal Deployment Magic
+
+Deploy uses intelligent Railpacks to automatically:
+- Detect your project type
+- Generate the perfect Docker container
+- Configure optimal build and runtime settings
+- Set up SSL certificates
+- Create subdomains
+
+### Supported Technologies (Just a Few!)
+- Static Sites (HTML/CSS/JS)
+- React, Vue, Angular, Svelte
+- Next.js, Nuxt, SvelteKit
+- Ruby on Rails
+- Django, Flask
+- Express.js, Fastify
+- Go web apps
+- Rust web services
+- PHP applications
+- ... and basically ANYTHING else!
+
+## 🚢 Development vs Production
+
+```bash
+# Development Mode
+bun run dev       # Start local development
+deploy dev
+
+# Production Mode
+bun run build     # Optional build step
 deploy start
 ```
 
----
+## 💡 Pro Tips
 
-## 💫 Adding a New Site (3 Steps!)
+- No configuration required for most projects
+- Automatic SSL with Let's Encrypt
+- Git-powered deployments
+- Instant rollbacks
+- Webhook support for automated deployments
 
-### Option 1: Clone from GitHub (Recommended!)
+## Minimum Requirements
 
-1. **Clone your repo**: `git clone https://github.com/yourusername/your-site.git sites/your-site`
-2. **Add config**: `echo '{"type": "static"}' > sites/your-site/config.json`
-3. **Go live**: Your site is instantly available at `your-site.yourdomain.com`
+- [Bun](https://bun.sh) runtime
+- Docker
+- Git
+- Caddy (automatically installed)
 
-### Option 2: Create from scratch
+## Quick Troubleshooting
 
-1. Make a new folder in `sites` (name it whatever you want)
-2. Add a `config.json` file with your configuration
-3. Add your website files
+1. Ensure Bun is installed: `bun --version`
+2. Check Docker is running: `docker ps`
+3. Verify Deploy installation: `deploy --version`
 
-That's it! Your site is live with its own subdomain and SSL certificate.
-
-### 🚀 Pro Tip: Git-powered deployments
-
-Once your site is cloned from GitHub:
-- **Update**: `cd sites/your-site && git pull` (changes are live instantly)
-- **Rollback**: `git checkout previous-commit` (instant rollbacks)
-- **Branches**: Switch branches to test different versions
-- **Automation**: Set up webhooks to auto-deploy on push
-
----
-
-## 🧪 Development-Only Sites
-
-- Create a folder in `sites` that starts with an underscore (e.g., `_dev-site`)
-- Add your `config.json` and site files as usual
-- The site will be available in development mode (`deploy start`) but excluded in production
-
----
-
-## 🌐 Updating Your Domain
-
-1. Edit `.env` and update `PROJECT_DOMAIN=yourdomain.com`
-2. Update your Caddyfile:
-   ```bash
-   deploy caddyfile update
-   ```
-3. Restart the app:
-   ```bash
-   deploy restart
-   ```
-4. Update your DNS settings for the new domain
+Enjoy effortless deployments!

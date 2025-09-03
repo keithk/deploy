@@ -13,6 +13,7 @@ import { registerMigrateCommands } from "./migrate";
 import { registerAdminCommands } from "./admin";
 import { registerEditorCommands } from "./editor";
 import { registerMiseCommands } from "./miseCommands";
+import { registerDoctorCommand } from "./doctor";
 
 /**
  * Register all CLI commands
@@ -31,4 +32,5 @@ export function registerCommands(program: Command): void {
   registerAdminCommands(program);
   registerEditorCommands(program);
   registerMiseCommands(program);
+  registerDoctorCommand(program);
 }
