@@ -796,7 +796,32 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
                 headers: { 'Content-Type': 'application/json' }
               });
               
-              const data = await response.json();
+              console.log('Response status:', response.status);
+              console.log('Response ok:', response.ok);
+              console.log('Response headers:', response.headers);
+              
+              // Check if response is ok and has content
+              if (!response.ok) {
+                const text = await response.text();
+                console.error('Error response text:', text);
+                throw new Error(\`Server returned \${response.status}: \${text || 'No error message'}\`);
+              }
+              
+              // Try to get the response text first to debug
+              const responseText = await response.text();
+              console.log('Response text:', responseText);
+              
+              if (!responseText) {
+                throw new Error('Server returned empty response');
+              }
+              
+              let data;
+              try {
+                data = JSON.parse(responseText);
+              } catch (parseError) {
+                console.error('Failed to parse JSON:', responseText);
+                throw new Error(\`Invalid JSON response: \${parseError.message}\`);
+              }
               
               if (data.success) {
                 // Immediately redirect to the edit URL with the session ID
@@ -805,56 +830,6 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
                 window.location.href = editUrl;
                 return; // Stop execution here since we're redirecting
                 
-                // Show preview panel
-                document.getElementById('preview-panel').style.display = 'block';
-                document.querySelector('.editor-layout').classList.add('three-panel');
-                
-                // Progressive container startup with better messaging
-                editBtn.textContent = '📦 Building container with Railpack...';
-                updateContainerProgress('Building container image with Railpack...', 'This may take 1-2 minutes on first build');
-                
-                // Start polling for build progress
-                const buildProgress = startBuildProgressPolling(currentSession.id);
-                
-                const containerReady = await waitForContainerReady(data.session);
-                
-                // Stop polling
-                if (buildProgress.stop) {
-                  buildProgress.stop();
-                }
-                
-                if (containerReady) {
-                  // Enable editor
-                  editor.setOption('readOnly', false);
-                  
-                  // Load preview
-                  if (data.session.previewUrl) {
-                    updateContainerProgress('Loading preview site...', '');
-                    document.getElementById('preview-iframe').src = data.session.previewUrl;
-                  }
-                  
-                  // Reload file tree and current file from the branch
-                  updateContainerProgress('Syncing file tree...', '');
-                  await loadFileTree();
-                  if (currentFile) {
-                    await loadFile(currentFile);
-                  }
-                  
-                  showContainerLoadingState(false);
-                  editBtn.textContent = '✅ Edit Mode Ready';
-                } else {
-                  // Container failed to start properly
-                  editBtn.textContent = '❌ Container failed to start';
-                  showContainerLoadingState(false, 'Container failed to start. You can still edit files, but preview may not work.');
-                  
-                  // Enable editor anyway for file editing
-                  editor.setOption('readOnly', false);
-                  await loadFileTree();
-                  if (currentFile) {
-                    await loadFile(currentFile);
-                  }
-                }
-                
               } else {
                 console.error('Failed to enter edit mode:', data.error);
                 showContainerLoadingState(false, 'Failed to enter edit mode: ' + (data.error || 'Unknown error'));
@@ -862,8 +837,23 @@ editorRoutes.get('/:sitename', async (c: HonoContext) => {
               }
             } catch (error) {
               console.error('Error entering edit mode:', error);
-              // Don't show alert, just update UI with error message
-              showContainerLoadingState(false, 'Error entering edit mode. Please try again.');
+              
+              // JavaScript-compatible error handling (no TypeScript 'as' keyword)
+              console.error('Error details:', {
+                message: error?.message || 'Unknown error',
+                stack: error?.stack || 'No stack trace',
+                type: error?.name || 'Unknown'
+              });
+              
+              // Provide more specific error message based on the error type
+              let errorMessage = 'Error entering edit mode. Please try again.';
+              if (error?.message && error.message.includes('fetch')) {
+                errorMessage = 'Failed to connect to server. Please check if the server is running.';
+              } else if (error?.message && error.message.includes('JSON')) {
+                errorMessage = 'Server returned invalid response. Please check server logs.';
+              }
+              
+              showContainerLoadingState(false, errorMessage);
               editBtn.textContent = '❌ Error entering edit mode';
             } finally {
               // Reset button state after a delay

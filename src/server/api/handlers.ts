@@ -7,6 +7,7 @@ import { gitManager } from "../services/git-manager";
 import { containerManager } from "../services/container-manager";
 import { spawn } from "bun";
 import { join } from "path";
+import { existsSync } from "fs";
 import { 
   ApiResponse, 
   CreateSiteRequest, 
@@ -299,14 +300,28 @@ export async function handleGetServerStatus(request: Request): Promise<Response>
  */
 export async function handleStartEditSession(request: Request, siteName: string, context: ApiContext): Promise<Response> {
   try {
+    console.log(`[DEBUG] Starting edit session for site: ${siteName}`);
     const requestData = await request.json().catch(() => ({})) as Partial<EditSessionRequest>;
     const { userId = 1 } = requestData; // Default to user ID 1 for now
     const sitePath = join(context.rootDir, siteName);
+    
+    console.log(`[DEBUG] Creating session with:`, {
+      userId,
+      siteName,
+      sitePath,
+      exists: existsSync(sitePath)
+    });
 
     const session = await editingSessionManager.createSession({
       userId,
       siteName,
       sitePath
+    });
+    
+    console.log(`[DEBUG] Session created successfully:`, {
+      id: session.id,
+      branchName: session.branchName,
+      status: session.status
     });
 
     return new Response(JSON.stringify({
@@ -322,7 +337,15 @@ export async function handleStartEditSession(request: Request, siteName: string,
     });
   } catch (error) {
     console.error('Error starting edit session:', error);
-    return new Response(JSON.stringify({ error: 'Failed to start edit session' }), {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    if (errorStack) {
+      console.error('Error stack:', errorStack);
+    }
+    return new Response(JSON.stringify({ 
+      error: 'Failed to start edit session',
+      details: errorMessage 
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -479,9 +502,13 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
   const url = new URL(request.url);
   const method = request.method;
   const pathParts = url.pathname.split('/').filter(Boolean);
+  
+  console.log(`[DEBUG] handleApiRequest: ${method} ${url.pathname}`);
+  console.log(`[DEBUG] Path parts:`, pathParts);
 
   // Remove 'api' prefix
   if (pathParts[0] !== 'api') {
+    console.log(`[DEBUG] Not an API request (no 'api' prefix)`);
     return null;
   }
   const apiParts = pathParts.slice(1); // Remove 'api' and get remaining parts
@@ -514,15 +541,21 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
     // Git workflow endpoints
     if (apiParts.length >= 3 && apiParts[2] === 'edit') {
       const siteName = apiParts[1];
-      if (!siteName) return null;
+      console.log(`[DEBUG] Edit route: siteName=${siteName}, method=${method}, apiParts=`, apiParts);
+      if (!siteName) {
+        console.log(`[DEBUG] No site name in edit route`);
+        return null;
+      }
       
       // GET /api/sites/:name/edit/status
       if (method === 'GET' && apiParts.length === 4 && apiParts[3] === 'status') {
+        console.log(`[DEBUG] Handling GET edit status for ${siteName}`);
         return handleGetEditStatus(request, siteName, context);
       }
       
       // POST /api/sites/:name/edit/start
       if (method === 'POST' && apiParts.length === 4 && apiParts[3] === 'start') {
+        console.log(`[DEBUG] Handling POST edit start for ${siteName}`);
         return handleStartEditSession(request, siteName, context);
       }
       

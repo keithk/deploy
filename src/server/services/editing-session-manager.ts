@@ -70,7 +70,9 @@ export class EditingSessionManager {
     info(`Creating editing session for site: ${siteName}, user: ${userId}`);
     
     // Check if user already has too many active sessions (max 10)
+    info(`Checking session limits for user ${userId}`);
     await this.enforceSessionLimits(userId);
+    info(`Session limits check completed`);
     
     // Ensure the site has a git repository initialized
     if (!gitService.isGitRepository(sitePath)) {
@@ -79,17 +81,22 @@ export class EditingSessionManager {
     }
     
     // Create Git branch
+    info(`Creating git branch for session`);
     const branchName = await gitService.createEditBranch(sitePath, baseName);
+    info(`Created branch: ${branchName}`);
     
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + expirationMinutes);
     
     // Get base commit hash
+    info(`Getting git status for ${sitePath}`);
     const status = await gitService.getStatus(sitePath);
     const baseCommitHash = await this.getCurrentCommitHash(sitePath);
+    info(`Base commit hash: ${baseCommitHash}`);
     
     // Insert session record using prepared statement
+    info(`Inserting session record into database`);
     const stmt = this.db.prepare(`
       INSERT INTO editing_sessions (
         user_id, site_name, branch_name, status, mode,
@@ -106,12 +113,15 @@ export class EditingSessionManager {
     );
     
     const sessionId = Number(result.lastInsertRowid);
+    info(`Session created with ID: ${sessionId}`);
     
     // Get the created session
+    info(`Retrieving created session from database`);
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error(`Failed to retrieve created session ${sessionId}`);
     }
+    info(`Session retrieved successfully`);
     
     // Start preview container asynchronously - don't wait for it
     // The client will poll for container readiness
@@ -305,17 +315,20 @@ export class EditingSessionManager {
     
     // No longer need to restore config files since we're using CLI flags
     
-    // Deregister dynamic route from CaddyManager
-    try {
-      const removed = await caddyManager.removePreviewRoute(sessionId);
-      if (removed) {
-        info(`Deregistered Caddy route for session ${sessionId}`);
-      } else {
-        debug(`No Caddy route found to remove for session ${sessionId}`);
+    // Deregister dynamic route from CaddyManager - only if container was created
+    // This avoids the "No dynamic route found" warning for sessions that never had containers
+    if (session.containerName && session.previewPort) {
+      try {
+        const removed = await caddyManager.removePreviewRoute(sessionId);
+        if (removed) {
+          info(`Deregistered Caddy route for session ${sessionId}`);
+        } else {
+          debug(`No Caddy route found to remove for session ${sessionId}`);
+        }
+      } catch (caddyErr) {
+        warn(`Failed to deregister Caddy route for session ${sessionId}: ${caddyErr}`);
+        // Continue with cleanup even if Caddy route removal fails
       }
-    } catch (caddyErr) {
-      warn(`Failed to deregister Caddy route for session ${sessionId}: ${caddyErr}`);
-      // Continue with cleanup even if Caddy route removal fails
     }
     
     // Stop preview container if it exists

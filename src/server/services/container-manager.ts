@@ -388,11 +388,15 @@ export class ContainerManager {
         else if (hasYarn) pm = 'yarn';
         else if (hasPnpm) pm = 'pnpm';
         
-        // Build the dev command with --host flag
+        // Build the dev command with --host flag and allowed hosts
         // Note: We need to use the direct command, not npm run, for proper flag passing
+        // For preview containers, we allow all hosts since the subdomain is dynamic
         if (hasAstro) {
-          devCommand = `astro dev --host --port $PORT`;
+          // Astro supports --allowed-hosts flag to bypass host header validation
+          devCommand = `astro dev --host --port $PORT --allowed-hosts`;
         } else if (hasVite) {
+          // For pure Vite, we might need a different approach
+          // Vite doesn't have a direct CLI flag for allowed hosts
           devCommand = `vite --host --port $PORT`;
         } else if (hasNext) {
           // Next.js uses -H for host and -p for port

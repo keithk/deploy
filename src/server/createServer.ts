@@ -160,6 +160,8 @@ export async function createServer({
   // Start the server with Bun.serve
   const server = Bun.serve({
     port,
+    // Increase idle timeout to 30 seconds for long-running operations like container builds
+    idleTimeout: 30,
     // Add websocket property to satisfy TypeScript
     websocket: {
       message() {},
@@ -203,6 +205,7 @@ export async function createServer({
         
         // Handle API requests
         if (url.pathname.startsWith('/api/')) {
+          console.log(`[DEBUG] API request: ${request.method} ${url.pathname}`);
           const apiContext = {
             sites,
             rootDir: resolvedRootDir,
@@ -210,8 +213,11 @@ export async function createServer({
           };
           const apiResponse = await handleApiRequest(request, apiContext);
           if (apiResponse) {
+            console.log(`[DEBUG] API response status: ${apiResponse.status}`);
             logger.logResponse(request, apiResponse, loggerStart);
             return apiResponse;
+          } else {
+            console.log(`[DEBUG] No handler found for API route: ${url.pathname}`);
           }
         }
         

@@ -113,11 +113,12 @@ export class CaddyManager {
       .find(([_, route]) => route.sessionId === sessionId);
     
     if (!routeEntry) {
-      warn(`No dynamic route found for session ${sessionId}`);
+      // Use debug level instead of warn since this is expected for sessions without containers
+      debug(`No dynamic route registered for session ${sessionId} - this is normal for sessions that haven't started containers yet`);
       return false;
     }
 
-    const [subdomain, route] = routeEntry;
+    const [subdomain] = routeEntry;
     info(`Removing preview route: ${subdomain}`);
 
     this.dynamicRoutes.delete(subdomain);
