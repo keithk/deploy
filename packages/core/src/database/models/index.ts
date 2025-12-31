@@ -6,6 +6,11 @@ export {
 } from "./process";
 
 export {
+  ShareLinkModel,
+  shareLinkModel
+} from "./share-link";
+
+export {
   SiteModel,
   siteModel,
   CreateSiteData,
