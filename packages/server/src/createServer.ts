@@ -21,6 +21,7 @@ import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { SSHAuthServer } from "./auth/ssh-server";
+import { validateSession, createSessionCookie } from "./middleware/auth";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -316,6 +317,19 @@ export async function createServer({
         if (isRootDomain(host, PROJECT_DOMAIN)) {
           const adminResponse = await serveAdminFile(url.pathname);
           if (adminResponse) {
+            // If there's a token in the URL, validate and set a session cookie
+            const token = url.searchParams.get("token");
+            if (token && validateSession(token)) {
+              const cookie = createSessionCookie(token);
+              const headers = new Headers(adminResponse.headers);
+              headers.set("Set-Cookie", cookie);
+              const responseWithCookie = new Response(adminResponse.body, {
+                status: adminResponse.status,
+                headers
+              });
+              logger.logResponse(request, responseWithCookie, loggerStart);
+              return responseWithCookie;
+            }
             logger.logResponse(request, adminResponse, loggerStart);
             return adminResponse;
           }

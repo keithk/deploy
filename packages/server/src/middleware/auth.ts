@@ -99,5 +99,5 @@ export function checkSiteAccess(request: Request, siteName: string): boolean {
  */
 export function createSessionCookie(token: string): string {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  return `session=${token}; Path=/; HttpOnly; SameSite=Strict; Expires=${expiresAt.toUTCString()}`;
+  return `session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=${expiresAt.toUTCString()}`;
 }
