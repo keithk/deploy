@@ -1,0 +1,313 @@
+/* ABOUTME: Main stylesheet for Deploy dashboard UI */
+/* ABOUTME: Uses Open Props, monospace fonts, and supports light/dark modes */
+
+:root {
+  /* Monospace font stack */
+  --font-mono: "Monaspace Neon", "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
+
+  /* Light mode colors (using Open Props as base) */
+  --surface-1: var(--gray-0);
+  --surface-2: var(--gray-1);
+  --surface-3: var(--gray-2);
+  --text-1: var(--gray-9);
+  --text-2: var(--gray-7);
+  --text-3: var(--gray-6);
+  --border: var(--gray-3);
+  --border-hover: var(--gray-4);
+
+  /* Status colors */
+  --status-running: var(--green-6);
+  --status-running-bg: var(--green-1);
+  --status-stopped: var(--red-6);
+  --status-stopped-bg: var(--red-1);
+  --status-building: var(--yellow-6);
+  --status-building-bg: var(--yellow-1);
+  --status-error: var(--orange-6);
+  --status-error-bg: var(--orange-1);
+
+  /* Primary accent */
+  --accent: var(--blue-6);
+  --accent-hover: var(--blue-7);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: var(--gray-9);
+    --surface-2: var(--gray-8);
+    --surface-3: var(--gray-7);
+    --text-1: var(--gray-1);
+    --text-2: var(--gray-3);
+    --text-3: var(--gray-4);
+    --border: var(--gray-7);
+    --border-hover: var(--gray-6);
+
+    /* Status colors for dark mode */
+    --status-running: var(--green-4);
+    --status-running-bg: var(--green-9);
+    --status-stopped: var(--red-4);
+    --status-stopped-bg: var(--red-9);
+    --status-building: var(--yellow-4);
+    --status-building-bg: var(--yellow-9);
+    --status-error: var(--orange-4);
+    --status-error-bg: var(--orange-9);
+
+    --accent: var(--blue-5);
+    --accent-hover: var(--blue-4);
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  color: var(--text-1);
+  background: var(--surface-1);
+  font-size: var(--font-size-1);
+}
+
+/* Layout */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--size-4);
+}
+
+/* Card */
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  padding: var(--size-4);
+  margin-bottom: var(--size-4);
+  transition: border-color 0.2s;
+}
+
+.card:hover {
+  border-color: var(--border-hover);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2);
+  padding: var(--size-2) var(--size-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-0);
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text-1);
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border-hover);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-sm {
+  padding: var(--size-1) var(--size-2);
+  font-size: var(--font-size-00);
+}
+
+/* Status Dot */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2);
+  padding: var(--size-1) var(--size-2);
+  border-radius: var(--radius-2);
+  font-size: var(--font-size-00);
+  font-weight: 500;
+}
+
+.status-dot::before {
+  content: '';
+  display: inline-block;
+  width: var(--size-2);
+  height: var(--size-2);
+  border-radius: var(--radius-round);
+  background: currentColor;
+}
+
+.status-dot.running {
+  color: var(--status-running);
+  background: var(--status-running-bg);
+}
+
+.status-dot.stopped {
+  color: var(--status-stopped);
+  background: var(--status-stopped-bg);
+}
+
+.status-dot.building {
+  color: var(--status-building);
+  background: var(--status-building-bg);
+}
+
+.status-dot.error {
+  color: var(--status-error);
+  background: var(--status-error-bg);
+}
+
+/* Form elements */
+.form-group {
+  margin-bottom: var(--size-3);
+}
+
+.form-label {
+  display: block;
+  margin-bottom: var(--size-2);
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.form-input {
+  width: 100%;
+  padding: var(--size-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-0);
+  background: var(--surface-1);
+  color: var(--text-1);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Utilities */
+.flex {
+  display: flex;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-2 {
+  gap: var(--size-2);
+}
+
+.gap-3 {
+  gap: var(--size-3);
+}
+
+.mb-4 {
+  margin-bottom: var(--size-4);
+}
+
+.text-muted {
+  color: var(--text-2);
+}
+
+.hidden {
+  display: none;
+}
+
+/* Dropdown menu */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--size-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-3);
+  min-width: 150px;
+  z-index: 10;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: var(--size-2) var(--size-3);
+  border: none;
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-0);
+}
+
+.dropdown-item:hover {
+  background: var(--surface-3);
+}
+
+.dropdown-item.danger {
+  color: var(--status-error);
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  padding: var(--size-5);
+  max-width: 500px;
+  width: 90%;
+  box-shadow: var(--shadow-6);
+}
+
+.modal-header {
+  margin-bottom: var(--size-4);
+}
+
+.modal-title {
+  font-size: var(--font-size-3);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.modal-footer {
+  margin-top: var(--size-4);
+  display: flex;
+  gap: var(--size-2);
+  justify-content: flex-end;
+}
