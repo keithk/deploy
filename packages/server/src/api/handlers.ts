@@ -9,6 +9,7 @@ import { spawn } from "bun";
 import { join } from "path";
 import { handleSitesApi } from "./sites";
 import { handleSettingsApi } from "./settings";
+import { handleGitHubApi } from "./github";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -298,6 +299,11 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
   // Route to settings API
   if (firstPart === 'settings') {
     return handleSettingsApi(request);
+  }
+
+  // Route to GitHub API
+  if (firstPart === 'github') {
+    return handleGitHubApi(request, path);
   }
 
   // Route to sites API for database-backed operations

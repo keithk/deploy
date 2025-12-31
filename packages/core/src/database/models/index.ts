@@ -13,3 +13,5 @@ export {
 
 export { SiteModel, siteModel } from "./site";
 export type { CreateSiteData, UpdateSiteData } from "./site";
+
+export { SettingsModel, settingsModel } from "./settings";
