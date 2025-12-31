@@ -341,19 +341,21 @@ export async function createServer({
           request
         });
 
+        // Try database-backed containerized sites FIRST
+        // This gives containerized deployments priority over filesystem sites
+        const dbResponse = await handleSubdomainRequest(request, PROJECT_DOMAIN);
+        if (dbResponse.status !== 404) {
+          logger.logResponse(request, dbResponse, loggerStart);
+          return dbResponse;
+        }
+
+        // Fall back to filesystem-based sites
         const siteContextHandler = siteContext(sites, PROJECT_DOMAIN);
         const siteOrResponse = await siteContextHandler(request, context);
 
-        // If the site context middleware returned a Response (site not found in filesystem),
-        // try database-backed containerized sites
+        // If the site context middleware returned a Response (site not found),
+        // return the 404
         if (siteOrResponse instanceof Response) {
-          // Try database-backed sites (containerized deployments)
-          const dbResponse = await handleSubdomainRequest(request, PROJECT_DOMAIN);
-          if (dbResponse.status !== 404) {
-            logger.logResponse(request, dbResponse, loggerStart);
-            return dbResponse;
-          }
-          // Complete logger middleware with original filesystem response
           logger.logResponse(request, siteOrResponse, loggerStart);
           return siteOrResponse;
         }
