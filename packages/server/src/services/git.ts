@@ -4,7 +4,22 @@
 import { $ } from "bun";
 import { existsSync } from "fs";
 import { join } from "path";
-import { info, debug, error } from "@keithk/deploy-core";
+import { info, debug, error, settingsModel } from "@keithk/deploy-core";
+
+/**
+ * Inject GitHub token into URL for private repo access
+ */
+function getAuthenticatedUrl(gitUrl: string): string {
+  const token = settingsModel.get("github_token");
+  if (!token) return gitUrl;
+
+  // Only inject for GitHub HTTPS URLs
+  if (gitUrl.startsWith("https://github.com/")) {
+    return gitUrl.replace("https://github.com/", `https://${token}@github.com/`);
+  }
+
+  return gitUrl;
+}
 
 /**
  * Get the sites directory from environment or default
@@ -43,7 +58,8 @@ export async function cloneSite(
   info(`Cloning ${gitUrl} (branch: ${branch}) to ${sitePath}`);
 
   try {
-    await $`git clone --branch ${branch} --single-branch ${gitUrl} ${sitePath}`.quiet();
+    const authUrl = getAuthenticatedUrl(gitUrl);
+    await $`git clone --branch ${branch} --single-branch ${authUrl} ${sitePath}`.quiet();
     debug(`Successfully cloned ${gitUrl} to ${sitePath}`);
     return sitePath;
   } catch (err) {
