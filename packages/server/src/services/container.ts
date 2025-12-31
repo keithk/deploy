@@ -2,7 +2,7 @@
 // ABOUTME: Handles starting, stopping, and monitoring containers with port allocation.
 
 import { $ } from "bun";
-import { info, debug, error } from "@keithk/deploy-core";
+import { info, debug, error, siteModel } from "@keithk/deploy-core";
 
 export interface ContainerInfo {
   containerId: string;
@@ -12,27 +12,59 @@ export interface ContainerInfo {
 // Base port for container assignments
 const BASE_PORT = parseInt(process.env.CONTAINER_BASE_PORT || "8000", 10);
 
-// Track allocated ports to avoid conflicts
-const allocatedPorts = new Map<string, number>();
+/**
+ * Get ports already in use by checking database and running containers
+ */
+async function getUsedPorts(): Promise<Set<number>> {
+  const usedPorts = new Set<number>();
+
+  // Check database for allocated ports
+  try {
+    const sites = siteModel.findAll();
+    for (const site of sites) {
+      if (site.port) {
+        usedPorts.add(site.port);
+      }
+    }
+  } catch (err) {
+    debug(`Could not check database for ports: ${err}`);
+  }
+
+  // Check running docker containers
+  try {
+    const result = await $`docker ps --format '{{.Ports}}'`.text();
+    const portMatches = result.matchAll(/0\.0\.0\.0:(\d+)/g);
+    for (const match of portMatches) {
+      usedPorts.add(parseInt(match[1], 10));
+    }
+  } catch (err) {
+    debug(`Could not check docker for ports: ${err}`);
+  }
+
+  return usedPorts;
+}
 
 /**
  * Get the next available port for a container
  */
-function getNextPort(siteName: string): number {
-  // Check if this site already has an allocated port
-  const existingPort = allocatedPorts.get(siteName);
-  if (existingPort) {
-    return existingPort;
+async function getNextPort(siteName: string): Promise<number> {
+  // Check if this site already has an allocated port in database
+  try {
+    const existingSite = siteModel.findByName(siteName);
+    if (existingSite?.port) {
+      return existingSite.port;
+    }
+  } catch (err) {
+    debug(`Could not check database for existing port: ${err}`);
   }
 
   // Find the next available port
-  const usedPorts = new Set(allocatedPorts.values());
+  const usedPorts = await getUsedPorts();
   let port = BASE_PORT;
   while (usedPorts.has(port)) {
     port++;
   }
 
-  allocatedPorts.set(siteName, port);
   return port;
 }
 
@@ -56,7 +88,7 @@ export async function startContainer(
   envVars: Record<string, string> = {}
 ): Promise<ContainerInfo> {
   const containerName = getContainerName(siteName);
-  const port = getNextPort(siteName);
+  const port = await getNextPort(siteName);
 
   info(`Starting container ${containerName} from ${imageName} on port ${port}`);
 
@@ -119,9 +151,6 @@ export async function stopContainer(siteName: string): Promise<void> {
     // Container might not exist
     debug(`Container ${containerName} did not exist`);
   }
-
-  // Free the allocated port
-  allocatedPorts.delete(siteName);
 }
 
 /**

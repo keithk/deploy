@@ -6,7 +6,7 @@ import {
   siteContext,
   webhookMiddleware
 } from "./middleware";
-import { setupSubdomainRouting } from "./routing";
+import { setupSubdomainRouting, handleSubdomainRequest } from "./routing";
 import type { Server } from "bun";
 import {
   actionRegistry,
@@ -344,9 +344,16 @@ export async function createServer({
         const siteContextHandler = siteContext(sites, PROJECT_DOMAIN);
         const siteOrResponse = await siteContextHandler(request, context);
 
-        // If the site context middleware returned a Response, it means there was an error
+        // If the site context middleware returned a Response (site not found in filesystem),
+        // try database-backed containerized sites
         if (siteOrResponse instanceof Response) {
-          // Complete logger middleware
+          // Try database-backed sites (containerized deployments)
+          const dbResponse = await handleSubdomainRequest(request, PROJECT_DOMAIN);
+          if (dbResponse.status !== 404) {
+            logger.logResponse(request, dbResponse, loggerStart);
+            return dbResponse;
+          }
+          // Complete logger middleware with original filesystem response
           logger.logResponse(request, siteOrResponse, loggerStart);
           return siteOrResponse;
         }
