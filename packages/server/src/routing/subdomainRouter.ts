@@ -1,8 +1,10 @@
-import type { SiteConfig } from "@keithk/deploy-core";
+import type { SiteConfig, Site } from "@keithk/deploy-core";
+import { siteModel } from "@keithk/deploy-core";
 import { ActionRegistry } from "../actions/registry";
 import { join } from "path";
 import { existsSync } from "fs";
 import { proxyRequest } from "../utils/proxy";
+import { checkSiteAccess } from "../middleware/auth";
 
 // Type definition for the routing configuration
 export interface RoutingConfig {
@@ -160,4 +162,151 @@ async function handleSiteRequest(
   } else {
     return new Response(`Unknown site type: ${site.type}`, { status: 500 });
   }
+}
+
+/**
+ * Extract subdomain from the host header for database-backed routing.
+ */
+function extractSubdomain(host: string, projectDomain: string): string | null {
+  const hostNoPort = host.split(":")[0] || "";
+
+  if (hostNoPort === projectDomain || hostNoPort === "localhost") {
+    return null; // Root domain, no subdomain
+  }
+
+  const hostLabels = hostNoPort.split(".");
+  const domainLabels = projectDomain.split(".");
+
+  const isDomainMatch =
+    domainLabels.length <= hostLabels.length &&
+    domainLabels.every(
+      (label, i) =>
+        label === hostLabels[hostLabels.length - domainLabels.length + i]
+    );
+
+  if (isDomainMatch) {
+    const subdomainLabels = hostLabels.slice(
+      0,
+      hostLabels.length - domainLabels.length
+    );
+    return subdomainLabels.join(".");
+  }
+
+  return null;
+}
+
+/**
+ * Generate an HTML status page for non-running sites.
+ */
+function generateStatusPage(site: Site): Response {
+  const statusMessages: Record<Site["status"], { title: string; message: string }> = {
+    stopped: {
+      title: "Site Stopped",
+      message: "This site is currently stopped. Please contact the site owner to start it.",
+    },
+    building: {
+      title: "Site Building",
+      message: "This site is currently being built. Please check back in a few minutes.",
+    },
+    error: {
+      title: "Site Error",
+      message: "This site encountered an error during deployment. Please contact the site owner.",
+    },
+    running: {
+      title: "Site Running",
+      message: "Site is running normally.",
+    },
+  };
+
+  const { title, message } = statusMessages[site.status];
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} - ${site.name}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+    }
+    h1 { margin-bottom: 16px; color: #666; }
+    p { color: #888; line-height: 1.6; }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    .status-stopped { background: #fef3c7; color: #92400e; }
+    .status-building { background: #dbeafe; color: #1e40af; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <span class="status status-${site.status}">${site.status}</span>
+    <h1>${title}</h1>
+    <p>${message}</p>
+  </div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 503,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+/**
+ * Handle requests using database-backed site lookup.
+ * This is the main entry point for subdomain routing with containerized sites.
+ */
+export async function handleSubdomainRequest(
+  request: Request,
+  projectDomain: string
+): Promise<Response> {
+  const host = request.headers.get("host") || "";
+  const subdomain = extractSubdomain(host, projectDomain);
+
+  if (!subdomain) {
+    return new Response("Site not found", { status: 404 });
+  }
+
+  // Look up site in database by name (subdomain)
+  const site = siteModel.findByName(subdomain);
+  if (!site) {
+    return new Response("Site not found", { status: 404 });
+  }
+
+  // Check access for private sites
+  if (!checkSiteAccess(request, subdomain)) {
+    return new Response("Access denied", { status: 403 });
+  }
+
+  // Handle based on site status
+  if (site.status === "running" && site.port) {
+    // Proxy to the running container
+    return proxyRequest(request, site.port);
+  }
+
+  // Show status page for non-running sites
+  return generateStatusPage(site);
 }
