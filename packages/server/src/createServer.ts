@@ -21,7 +21,82 @@ import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { SSHAuthServer } from "./auth/ssh-server";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+/**
+ * Gets the admin dashboard directory path
+ */
+function getAdminDir(): string {
+  // In development, admin is a sibling package
+  // In production, it's built into the same structure
+  const possiblePaths = [
+    join(process.cwd(), "packages/admin"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../admin"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../../admin"),
+  ];
+
+  for (const p of possiblePaths) {
+    if (Bun.file(join(p, "index.html")).size > 0) {
+      return p;
+    }
+  }
+
+  // Fallback to first path
+  return possiblePaths[0];
+}
+
+/**
+ * Serves files from the admin dashboard
+ */
+async function serveAdminFile(pathname: string): Promise<Response | null> {
+  const adminDir = getAdminDir();
+
+  // Map paths to files
+  let filePath: string;
+  if (pathname === "/" || pathname === "") {
+    filePath = join(adminDir, "index.html");
+  } else {
+    // Remove leading slash and serve the file
+    filePath = join(adminDir, pathname.slice(1));
+  }
+
+  const file = Bun.file(filePath);
+
+  if (await file.exists()) {
+    const contentType = getContentType(filePath);
+    return new Response(file, {
+      headers: { "Content-Type": contentType }
+    });
+  }
+
+  return null;
+}
+
+/**
+ * Gets content type based on file extension
+ */
+function getContentType(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    html: "text/html",
+    css: "text/css",
+    js: "application/javascript",
+    json: "application/json",
+    svg: "image/svg+xml",
+    png: "image/png",
+    ico: "image/x-icon"
+  };
+  return types[ext || ""] || "application/octet-stream";
+}
+
+/**
+ * Checks if a request is for the root domain (no subdomain)
+ */
+function isRootDomain(host: string, projectDomain: string): boolean {
+  const hostNoPort = host.split(":")[0] || "";
+  return hostNoPort === projectDomain || hostNoPort === "localhost";
+}
 
 /**
  * Handles domain validation for on-demand TLS
@@ -231,6 +306,16 @@ export async function createServer({
           // Complete logger middleware
           logger.logResponse(request, response, loggerStart);
           return response;
+        }
+
+        // Serve admin dashboard for root domain requests
+        const host = request.headers.get("host") || "";
+        if (isRootDomain(host, PROJECT_DOMAIN)) {
+          const adminResponse = await serveAdminFile(url.pathname);
+          if (adminResponse) {
+            logger.logResponse(request, adminResponse, loggerStart);
+            return adminResponse;
+          }
         }
 
         // Execute route:before-handle hook
