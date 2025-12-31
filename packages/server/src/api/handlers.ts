@@ -1,9 +1,14 @@
+// ABOUTME: Main API router for development server endpoints.
+// ABOUTME: Routes requests to site discovery, process management, and server status handlers.
+
 import type { SiteConfig } from "@keithk/deploy-core";
 import { processModel } from "@keithk/deploy-core";
 import { processManager } from "../utils/process-manager";
 import { discoverSites } from "../discoverSites";
 import { spawn } from "bun";
 import { join } from "path";
+import { handleSitesApi } from "./sites";
+import { handleSettingsApi } from "./settings";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -280,17 +285,30 @@ export async function handleGetServerStatus(request: Request): Promise<Response>
 export async function handleApiRequest(request: Request, context: ApiContext): Promise<Response | null> {
   const url = new URL(request.url);
   const method = request.method;
-  const pathParts = url.pathname.split('/').filter(Boolean);
+  const path = url.pathname;
+  const pathParts = path.split('/').filter(Boolean);
 
   // Remove 'api' prefix
   if (pathParts[0] !== 'api') {
     return null;
   }
   const apiParts = pathParts.slice(1); // Remove 'api' and get remaining parts
-
-  // Route API requests
   const firstPart = apiParts[0];
+
+  // Route to settings API
+  if (firstPart === 'settings') {
+    return handleSettingsApi(request);
+  }
+
+  // Route to sites API for database-backed operations
   if (firstPart === 'sites') {
+    // Try database-backed sites API first
+    const sitesApiResponse = await handleSitesApi(request, path);
+    if (sitesApiResponse) {
+      return sitesApiResponse;
+    }
+
+    // Fall back to filesystem-based site discovery handlers
     if (method === 'GET' && apiParts.length === 1) {
       return handleGetSites(request, context);
     }

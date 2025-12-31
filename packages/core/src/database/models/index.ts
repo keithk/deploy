@@ -1,9 +1,5 @@
-export {
-  ProcessModel,
-  processModel,
-  ProcessInfo,
-  ProcessRegistryEntry
-} from "./process";
+export { ProcessModel, processModel } from "./process";
+export type { ProcessInfo, ProcessRegistryEntry } from "./process";
 
 export {
   SessionModel,
@@ -15,9 +11,5 @@ export {
   shareLinkModel
 } from "./share-link";
 
-export {
-  SiteModel,
-  siteModel,
-  CreateSiteData,
-  UpdateSiteData
-} from "./site";
+export { SiteModel, siteModel } from "./site";
+export type { CreateSiteData, UpdateSiteData } from "./site";
