@@ -6,6 +6,11 @@ export {
 } from "./process";
 
 export {
+  SessionModel,
+  sessionModel
+} from "./session";
+
+export {
   ShareLinkModel,
   shareLinkModel
 } from "./share-link";
