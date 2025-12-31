@@ -12,7 +12,7 @@ This plan covers the refactoring of the subdomain router, Caddyfile generation, 
 ## Implementation Phases
 
 ### Phase 6.1: Update Subdomain Router
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 
 **Changes to `packages/server/src/routing/subdomainRouter.ts`**:
 - Use SiteModel from database instead of SiteConfig from filesystem
@@ -21,7 +21,7 @@ This plan covers the refactoring of the subdomain router, Caddyfile generation, 
 - Show status pages for stopped/building/error sites
 
 ### Phase 6.2: Update Caddy Config Generation
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 
 **Changes to `packages/core/src/utils/caddyfile.ts`**:
 - Remove per-site subdomain configuration
@@ -30,14 +30,14 @@ This plan covers the refactoring of the subdomain router, Caddyfile generation, 
 - Let deploy server handle subdomain to container routing
 
 ### Phase 7.1: Simplify CLI
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 
 **Changes to `packages/cli/src/commands/index.ts`**:
 - Keep: setup, start, doctor, actions
 - Remove/disable: site, processes, build
 
 ### Phase 8.1: Wire Up Deploy to API
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 
 **Changes to `packages/server/src/api/sites.ts`**:
 - Import deploySite from services/deploy
