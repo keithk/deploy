@@ -1,63 +1,30 @@
+// ABOUTME: Interactive setup wizard for configuring Deploy environments.
+// ABOUTME: Guides users through local development or production setup with prompts.
 
 import { Command } from "commander";
-import { join, resolve, dirname } from "path";
+import { join, resolve } from "path";
 import { homedir } from "os";
+import { existsSync, readFileSync } from "fs";
 import chalk from "chalk";
+import inquirer from "inquirer";
+import ora from "ora";
 import {
-  generateCaddyfileContent,
-  discoverSites,
-  type SiteConfig
+  generateSimpleCaddyfile,
+  Database
 } from "@keithk/deploy-core";
 import {
-  isCaddyInstalled,
-  isCaddyRunning,
-  getDomain,
-  getCaddyfilePath,
-  startCaddy,
-  stopCaddy,
-  reloadCaddy
+  startCaddy
 } from "../utils/caddy";
 import {
   ensureDir,
   commandExists,
   execCommand,
-  updateEnvFile,
   installCaddy,
   configureDnsmasq,
   trustLocalCerts,
   configureCaddy,
-  configureCaddyProduction,
-  createServiceFile,
-  createStartupScript,
-  createQuickSetupScript,
   configureFirewall
 } from "../utils/setup-utils";
-
-// Colors for terminal output
-const colors = {
-  reset: "\x1b[0m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m"
-};
-
-// Log functions
-const log = {
-  info: (message: string) =>
-    console.log(`${colors.blue}[INFO]${colors.reset} ${message}`),
-  success: (message: string) =>
-    console.log(`${colors.green}[SUCCESS]${colors.reset} ${message}`),
-  warning: (message: string) =>
-    console.log(`${colors.yellow}[WARNING]${colors.reset} ${message}`),
-  error: (message: string) =>
-    console.log(`${colors.red}[ERROR]${colors.reset} ${message}`),
-  step: (message: string) =>
-    console.log(`\n${colors.cyan}==>${colors.reset} ${message}`)
-};
 
 // Platform detection
 const platform = process.platform;
@@ -66,215 +33,519 @@ const isMac = platform === "darwin";
 
 // Paths
 const projectRoot = resolve(process.cwd());
-const configDir = join(projectRoot, "config");
+
+interface SetupConfig {
+  environment: "local" | "production";
+  domain: string;
+  httpPort: number;
+  sshPort: number;
+  sitesDir: string;
+  sshPublicKey: string;
+}
 
 /**
- * Setup for local development environment
+ * Display ASCII art header
  */
-async function setupLocal(
-  options: { skipCaddy?: boolean } = {}
-): Promise<boolean> {
-  log.step("Starting local development setup...");
+function displayHeader(): void {
+  console.log(chalk.cyan(`
++==============================================================+
+|                    Deploy Setup Wizard                        |
++==============================================================+
+`));
+  console.log(chalk.gray("This will configure your Deploy instance.\n"));
+}
 
-  // Get domain from .env or use default
-  const domain = await getDomain();
-  log.info(`Using domain: ${domain}`);
-
-  // Update .env file with the domain
-  await updateEnvFile(domain, projectRoot);
-
-  // Install required dependencies
-  if (!options.skipCaddy && !(await installCaddy(log))) {
-    log.error("Failed to install required dependencies.");
-    return false;
+/**
+ * Validate domain format
+ */
+function validateDomain(input: string): boolean | string {
+  if (!input || input.trim() === "") {
+    return "Domain is required";
   }
 
-  // Platform-specific configurations
-  let useHttps = false;
+  // Allow localhost for local development
+  if (input === "localhost") {
+    return true;
+  }
 
-  if (isMac) {
+  // Simple domain validation - allows subdomains and TLDs
+  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z0-9][a-zA-Z0-9-]*)+$/;
+  if (!domainRegex.test(input)) {
+    return "Please enter a valid domain name (e.g., example.com or dev.local)";
+  }
+
+  return true;
+}
+
+/**
+ * Validate port number
+ */
+function validatePort(input: string): boolean | string {
+  const port = parseInt(input, 10);
+  if (isNaN(port)) {
+    return "Please enter a valid number";
+  }
+  if (port < 1 || port > 65535) {
+    return "Port must be between 1 and 65535";
+  }
+  return true;
+}
+
+/**
+ * Validate SSH public key - accepts key content or file path
+ */
+function validateSshKey(input: string): boolean | string {
+  if (!input || input.trim() === "") {
+    return "SSH public key is required for authentication";
+  }
+
+  const trimmed = input.trim();
+
+  // Check if it's a file path
+  if (trimmed.startsWith("~") || trimmed.startsWith("/") || trimmed.startsWith("./")) {
+    const expandedPath = trimmed.startsWith("~")
+      ? trimmed.replace("~", homedir())
+      : resolve(trimmed);
+
+    if (!existsSync(expandedPath)) {
+      return `File not found: ${expandedPath}`;
+    }
+    return true;
+  }
+
+  // Check if it looks like a valid SSH public key
+  if (trimmed.startsWith("ssh-") || trimmed.startsWith("ecdsa-") || trimmed.startsWith("sk-")) {
+    return true;
+  }
+
+  return "Please provide a valid SSH public key or path to key file (e.g., ~/.ssh/id_ed25519.pub)";
+}
+
+/**
+ * Resolve SSH key - reads from file if path provided
+ */
+function resolveSshKey(input: string): string {
+  const trimmed = input.trim();
+
+  if (trimmed.startsWith("~") || trimmed.startsWith("/") || trimmed.startsWith("./")) {
+    const expandedPath = trimmed.startsWith("~")
+      ? trimmed.replace("~", homedir())
+      : resolve(trimmed);
+
+    return readFileSync(expandedPath, "utf-8").trim();
+  }
+
+  return trimmed;
+}
+
+/**
+ * Collect setup configuration through interactive prompts
+ */
+async function collectConfig(): Promise<SetupConfig> {
+  const answers = await inquirer.prompt([
+    {
+      type: "list",
+      name: "environment",
+      message: "Environment:",
+      choices: [
+        { name: "Local Development", value: "local" },
+        { name: "Production Server", value: "production" }
+      ],
+      default: "local"
+    },
+    {
+      type: "input",
+      name: "domain",
+      message: "Domain name:",
+      default: (answers: { environment: string }) =>
+        answers.environment === "local" ? "localhost" : undefined,
+      validate: validateDomain
+    },
+    {
+      type: "input",
+      name: "httpPort",
+      message: "HTTP port for the server:",
+      default: "3000",
+      validate: validatePort,
+      filter: (input: string) => parseInt(input, 10)
+    },
+    {
+      type: "input",
+      name: "sshPort",
+      message: "SSH port for authentication:",
+      default: "2222",
+      validate: validatePort,
+      filter: (input: string) => parseInt(input, 10)
+    },
+    {
+      type: "input",
+      name: "sitesDir",
+      message: "Where should sites be stored?",
+      default: (answers: { environment: string }) =>
+        answers.environment === "local" ? "./sites" : "/var/deploy/sites"
+    },
+    {
+      type: "input",
+      name: "sshPublicKey",
+      message: "SSH public key for authentication (paste key or path to file):",
+      default: "~/.ssh/id_ed25519.pub",
+      validate: validateSshKey
+    }
+  ]);
+
+  return answers as SetupConfig;
+}
+
+/**
+ * Create the .env file with configuration
+ */
+async function createEnvFile(config: SetupConfig): Promise<void> {
+  const envPath = join(projectRoot, ".env");
+
+  let envContent = "";
+
+  // Read existing .env if present
+  if (existsSync(envPath)) {
+    envContent = readFileSync(envPath, "utf-8");
+  }
+
+  // Helper to set or update a variable
+  const setEnvVar = (key: string, value: string) => {
+    const regex = new RegExp(`^${key}=.*$`, "m");
+    if (regex.test(envContent)) {
+      envContent = envContent.replace(regex, `${key}=${value}`);
+    } else {
+      envContent += `${key}=${value}\n`;
+    }
+  };
+
+  setEnvVar("PROJECT_DOMAIN", config.domain);
+  setEnvVar("PORT", String(config.httpPort));
+  setEnvVar("SSH_PORT", String(config.sshPort));
+  setEnvVar("SITES_DIR", config.sitesDir);
+  setEnvVar("NODE_ENV", config.environment === "production" ? "production" : "development");
+
+  await Bun.write(envPath, envContent);
+}
+
+/**
+ * Generate SSH host key if not exists
+ */
+async function generateHostKey(dataDir: string): Promise<boolean> {
+  const hostKeyPath = join(dataDir, "host_key");
+
+  if (existsSync(hostKeyPath)) {
+    return true;
+  }
+
+  const result = await execCommand(
+    "ssh-keygen",
+    ["-t", "ed25519", "-f", hostKeyPath, "-N", ""],
+    {},
+    undefined
+  );
+
+  return result.success;
+}
+
+/**
+ * Save authorized_keys file
+ */
+async function saveAuthorizedKeys(dataDir: string, publicKey: string): Promise<void> {
+  const authKeysPath = join(dataDir, "authorized_keys");
+  const resolvedKey = resolveSshKey(publicKey);
+  await Bun.write(authKeysPath, resolvedKey + "\n");
+}
+
+/**
+ * Initialize database and run migrations
+ */
+async function initializeDatabase(dataDir: string): Promise<void> {
+  const db = Database.getInstance({ dataDir });
+  await db.runMigrations();
+}
+
+/**
+ * Execute interactive setup
+ */
+async function runInteractiveSetup(options: { skipCaddy?: boolean } = {}): Promise<void> {
+  displayHeader();
+
+  const config = await collectConfig();
+
+  console.log("");
+  console.log(chalk.cyan("Setting up...\n"));
+
+  const configDir = join(projectRoot, "config");
+  const dataDir = join(projectRoot, "data");
+  const sitesDir = config.sitesDir.startsWith("/")
+    ? config.sitesDir
+    : join(projectRoot, config.sitesDir);
+
+  // Step 1: Create data directory
+  let spinner = ora("Creating data directory").start();
+  try {
+    await ensureDir(dataDir);
+    spinner.succeed(chalk.green("Created data directory"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to create data directory"));
+    throw err;
+  }
+
+  // Step 2: Create sites directory
+  spinner = ora("Creating sites directory").start();
+  try {
+    await ensureDir(sitesDir);
+    spinner.succeed(chalk.green("Created sites directory"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to create sites directory"));
+    throw err;
+  }
+
+  // Step 3: Create config directory
+  spinner = ora("Creating config directory").start();
+  try {
+    await ensureDir(configDir);
+    spinner.succeed(chalk.green("Created config directory"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to create config directory"));
+    throw err;
+  }
+
+  // Step 4: Generate SSH host key
+  spinner = ora("Generating SSH host key").start();
+  try {
+    const success = await generateHostKey(dataDir);
+    if (success) {
+      spinner.succeed(chalk.green("Generated SSH host key"));
+    } else {
+      spinner.warn(chalk.yellow("SSH host key already exists"));
+    }
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to generate SSH host key"));
+    throw err;
+  }
+
+  // Step 5: Save authorized_keys
+  spinner = ora("Saving authorized_keys").start();
+  try {
+    await saveAuthorizedKeys(dataDir, config.sshPublicKey);
+    spinner.succeed(chalk.green("Saved authorized_keys"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to save authorized_keys"));
+    throw err;
+  }
+
+  // Step 6: Create Caddyfile
+  spinner = ora("Creating Caddyfile").start();
+  try {
+    const caddyContent = generateSimpleCaddyfile(config.domain, config.httpPort);
+    await Bun.write(join(configDir, "Caddyfile"), caddyContent);
+    spinner.succeed(chalk.green("Created Caddyfile"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to create Caddyfile"));
+    throw err;
+  }
+
+  // Step 7: Create .env file
+  spinner = ora("Creating .env file").start();
+  try {
+    await createEnvFile(config);
+    spinner.succeed(chalk.green("Created .env file"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to create .env file"));
+    throw err;
+  }
+
+  // Step 8: Initialize database
+  spinner = ora("Initializing database").start();
+  try {
+    await initializeDatabase(dataDir);
+    spinner.succeed(chalk.green("Initialized database"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to initialize database"));
+    throw err;
+  }
+
+  // Step 9: Run migrations
+  spinner = ora("Running migrations").start();
+  try {
+    // Already run in initializeDatabase
+    spinner.succeed(chalk.green("Ran migrations"));
+  } catch (err) {
+    spinner.fail(chalk.red("Failed to run migrations"));
+    throw err;
+  }
+
+  // Additional setup for local development
+  if (config.environment === "local" && !options.skipCaddy) {
+    // Install Caddy if needed
+    if (!(await commandExists("caddy"))) {
+      spinner = ora("Installing Caddy").start();
+      const log = {
+        info: () => {},
+        success: () => {},
+        warning: () => {},
+        error: () => {},
+        step: () => {}
+      };
+      const success = await installCaddy(log);
+      if (success) {
+        spinner.succeed(chalk.green("Installed Caddy"));
+      } else {
+        spinner.warn(chalk.yellow("Could not install Caddy automatically"));
+      }
+    }
+
     // Configure dnsmasq on macOS
-    if (!(await configureDnsmasq(domain, log))) {
-      log.warning(
-        "Failed to configure dnsmasq. Local DNS resolution may not work properly."
-      );
+    if (isMac && config.domain !== "localhost") {
+      spinner = ora("Configuring dnsmasq").start();
+      const log = {
+        info: () => {},
+        success: () => {},
+        warning: () => {},
+        error: () => {},
+        step: () => {}
+      };
+      const success = await configureDnsmasq(config.domain, log);
+      if (success) {
+        spinner.succeed(chalk.green("Configured dnsmasq"));
+      } else {
+        spinner.warn(chalk.yellow("Could not configure dnsmasq"));
+      }
     }
 
     // Trust local certificates on macOS
-    if (await trustLocalCerts(domain, configDir, log)) {
-      useHttps = true;
-      log.success(
-        "HTTPS certificates set up successfully for local development!"
-      );
+    if (isMac) {
+      spinner = ora("Setting up local HTTPS certificates").start();
+      const log = {
+        info: () => {},
+        success: () => {},
+        warning: () => {},
+        error: () => {},
+        step: () => {}
+      };
+      const success = await trustLocalCerts(config.domain, configDir, log);
+      if (success) {
+        spinner.succeed(chalk.green("Set up local HTTPS certificates"));
+      } else {
+        spinner.warn(chalk.yellow("Could not set up HTTPS (will use HTTP)"));
+      }
+    }
+  }
+
+  // Configure firewall on production Linux
+  if (config.environment === "production" && isLinux) {
+    spinner = ora("Configuring firewall").start();
+    const log = {
+      info: () => {},
+      success: () => {},
+      warning: () => {},
+      error: () => {},
+      step: () => {}
+    };
+    const success = await configureFirewall(log);
+    if (success) {
+      spinner.succeed(chalk.green("Configured firewall"));
     } else {
-      log.warning(
-        "Failed to trust local certificates. Falling back to HTTP for local development."
-      );
-      useHttps = false;
+      spinner.warn(chalk.yellow("Could not configure firewall"));
     }
   }
 
-  // Configure Caddy (cross-platform)
-  if (!(await configureCaddy(domain, projectRoot, configDir, useHttps, log))) {
-    log.error("Failed to configure Caddy.");
-    return false;
-  }
+  // Display completion message
+  console.log("");
+  console.log(chalk.green.bold("Setup complete!"));
+  console.log("");
+  console.log(chalk.cyan("To start the server:"));
+  console.log(chalk.white("  deploy start"));
+  console.log("");
+  console.log(chalk.cyan("To access the dashboard:"));
+  console.log(chalk.white(`  ssh ${config.domain} -p ${config.sshPort}`));
+  console.log("");
 
-  // Start Caddy server
-  if (!options.skipCaddy && !(await startCaddy())) {
-    log.error("Failed to start Caddy server.");
-    return false;
+  if (config.environment === "production") {
+    console.log(chalk.cyan("DNS Configuration:"));
+    console.log(chalk.white(`  - A record: ${config.domain} -> your server IP`));
+    console.log(chalk.white(`  - CNAME record: *.${config.domain} -> ${config.domain}`));
+    console.log("");
   }
-
-  log.step("Local development setup completed successfully!");
-  if (useHttps) {
-    log.info(
-      `You can now access your sites at https://${domain} and https://[site].${domain}`
-    );
-  } else {
-    log.info(
-      `You can now access your sites at http://${domain} and http://[site].${domain}`
-    );
-  }
-  log.info('Run "bun run dev" to start the development server.');
-  return true;
 }
 
 /**
- * Setup for production environment
+ * Legacy non-interactive setup for backward compatibility
  */
-async function setupProduction(
-  options: { skipCaddy?: boolean } = {}
-): Promise<boolean> {
-  log.step("Starting production setup...");
-
-  // Get domain from .env or prompt user
-  const domain = await getDomain();
-  log.info(`Using domain: ${domain}`);
-
-  // Update .env file with the domain
-  await updateEnvFile(domain, projectRoot);
-
-  // Create necessary directories
-  await ensureDir(configDir);
-
-  // Install Caddy if not present
-  if (!options.skipCaddy && !(await installCaddy(log))) {
-    log.error("Failed to install Caddy. Please install it manually.");
-    log.info("Continuing setup without Caddy...");
-  }
-
-  // Configure Caddy for production
-  if (!(await configureCaddyProduction(domain, projectRoot, configDir, log))) {
-    log.error("Failed to configure Caddy for production.");
-    log.info("You can configure Caddy manually later if needed.");
-  }
-
-  // Create service file for systemd or other service managers
-  if (!(await createServiceFile(domain, projectRoot, configDir, log))) {
-    log.warning("Failed to create service file.");
-  }
-
-  // Create a manual startup script
-  if (!(await createStartupScript(domain, projectRoot, configDir, log))) {
-    log.warning("Failed to create startup script.");
-  }
-
-  // Create a quick setup script for new Ubuntu droplets
-  if (!(await createQuickSetupScript(domain, projectRoot, log))) {
-    log.warning("Failed to create quick setup script.");
-  }
-
-  // Configure firewall on Linux
-  if (isLinux) {
-    await configureFirewall(log);
-  }
-
-  log.step("Production setup completed!");
-  log.info(`Your domain is configured as: ${domain}`);
-  log.info(`Configuration files are in: ${configDir}`);
-  log.info("");
-  log.info("To start your application in production:");
-  log.info(
-    `1. Using the service (systemd): See ${join(
-      configDir,
-      "service-installation.txt"
-    )}`
-  );
-  log.info(`2. Manually: Run ${join(projectRoot, "start.sh")}`);
-  log.info("");
-  log.info("DNS Configuration Reminder:");
-  log.info(
-    `1. Set up an A record for ${domain} pointing to your server's IP address`
-  );
-  log.info(
-    `2. Set up a wildcard CNAME record (*.${domain}) pointing to your root domain`
-  );
-
-  // If using custom domains, provide additional DNS instructions
-  try {
-    const sites = await discoverSites(join(projectRoot, "sites"));
-    const sitesWithCustomDomains = (sites as SiteConfig[]).filter(
-      (site) => site.customDomain
-    );
-
-    if (sitesWithCustomDomains.length > 0) {
-      log.info("");
-      log.info("For your custom domains:");
-
-      for (const site of sitesWithCustomDomains as SiteConfig[]) {
-        if (site.customDomain) {
-          log.info(
-            `- Set up an A record for ${site.customDomain} pointing to your server's IP address`
-          );
-        }
-      }
-    }
-
-    // List all subdomains that will be available
-    log.info("");
-    log.info("Your site will be available at the following URLs:");
-    log.info(`- https://${domain} (main domain)`);
-
-    for (const site of sites as SiteConfig[]) {
-      const subdomain = site.subdomain || site.route?.replace(/^\//, "");
-      if (subdomain) {
-        log.info(`- https://${subdomain}.${domain} (${site.type} site)`);
-      }
-    }
-  } catch (error) {
-    // Ignore errors discovering sites
-  }
-
-  log.info("");
-  log.info("For a new Ubuntu droplet, you can use the quick-setup.sh script");
-  log.info("to set up everything in one go.");
-  log.info("");
-  log.info("Happy deploying!");
-
-  return true;
-}
-
-/**
- * Main setup function
- */
-async function setup(
+async function legacySetup(
   environment: string = "local",
-  options: { skipCaddy?: boolean } = {}
+  options: { skipCaddy?: boolean; interactive?: boolean } = {}
 ): Promise<void> {
+  // If --interactive flag or no environment specified, run interactive mode
+  if (options.interactive || !environment) {
+    await runInteractiveSetup(options);
+    return;
+  }
+
+  // Otherwise, run the legacy setup for backward compatibility
+  const log = {
+    info: (message: string) =>
+      console.log(chalk.blue("[INFO]") + " " + message),
+    success: (message: string) =>
+      console.log(chalk.green("[SUCCESS]") + " " + message),
+    warning: (message: string) =>
+      console.log(chalk.yellow("[WARNING]") + " " + message),
+    error: (message: string) =>
+      console.log(chalk.red("[ERROR]") + " " + message),
+    step: (message: string) =>
+      console.log("\n" + chalk.cyan("==>") + " " + message)
+  };
+
   try {
     if (environment === "production") {
-      if (!(await setupProduction(options))) {
-        log.error("Production setup failed.");
-        process.exit(1);
-      }
+      log.step("Starting production setup...");
+      log.info("For interactive setup, run: deploy setup --interactive");
+      // Run minimal production setup
+      const configDir = join(projectRoot, "config");
+      const dataDir = join(projectRoot, "data");
+
+      await ensureDir(configDir);
+      await ensureDir(dataDir);
+
+      const domain = process.env.PROJECT_DOMAIN || "localhost";
+      const port = parseInt(process.env.PORT || "3000", 10);
+
+      const caddyContent = generateSimpleCaddyfile(domain, port);
+      await Bun.write(join(configDir, "Caddyfile"), caddyContent);
+
+      await initializeDatabase(dataDir);
+
+      log.success("Production setup completed!");
     } else {
-      if (!(await setupLocal(options))) {
-        log.error("Local development setup failed.");
-        process.exit(1);
+      log.step("Starting local development setup...");
+
+      const configDir = join(projectRoot, "config");
+      const dataDir = join(projectRoot, "data");
+
+      await ensureDir(configDir);
+      await ensureDir(dataDir);
+
+      const domain = process.env.PROJECT_DOMAIN || "localhost";
+      const port = parseInt(process.env.PORT || "3000", 10);
+
+      // Create a local development Caddyfile
+      let useHttps = false;
+      if (isMac && !options.skipCaddy) {
+        useHttps = await trustLocalCerts(domain, configDir, log);
       }
+
+      await configureCaddy(domain, projectRoot, configDir, useHttps, log);
+      await initializeDatabase(dataDir);
+
+      if (!options.skipCaddy) {
+        await startCaddy();
+      }
+
+      log.success("Local development setup completed!");
+      log.info(`Access your sites at http${useHttps ? "s" : ""}://${domain}`);
     }
-    process.exit(0);
   } catch (error) {
     log.error(
       `Setup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -292,9 +563,16 @@ export function registerSetupCommand(program: Command): void {
     .description("Set up the project for local development or production")
     .argument(
       "[environment]",
-      "Environment to set up (local or production)",
-      "local"
+      "Environment to set up (local or production)"
     )
     .option("--skip-caddy", "Skip Caddy installation and configuration")
-    .action(setup);
+    .option("-i, --interactive", "Run interactive setup wizard")
+    .action(async (environment: string | undefined, options: { skipCaddy?: boolean; interactive?: boolean }) => {
+      // If no environment specified or interactive flag, run interactive mode
+      if (!environment || options.interactive) {
+        await runInteractiveSetup(options);
+      } else {
+        await legacySetup(environment, options);
+      }
+    });
 }

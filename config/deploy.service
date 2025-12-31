@@ -1,0 +1,37 @@
+# ABOUTME: Systemd service file for running Deploy in production.
+# ABOUTME: Copy to /etc/systemd/system/ and enable with systemctl.
+
+[Unit]
+Description=Deploy Server
+Documentation=https://github.com/keithk/deploy
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/home/deploy/deploy
+ExecStart=/home/deploy/.bun/bin/bun run start
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=BUN_INSTALL=/home/deploy/.bun
+Environment=PATH=/home/deploy/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/deploy/deploy/data /var/deploy/sites /var/log/caddy
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
