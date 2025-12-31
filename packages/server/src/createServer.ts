@@ -82,7 +82,7 @@ export async function createServer({
   rootDir?: string;
   port?: number;
   logLevel?: LogLevel;
-} = {}): Promise<Server> {
+} = {}): Promise<Server<unknown>> {
   setLogLevel(logLevel);
   // Ensure rootDir is always set and absolute
   const resolvedRootDir = rootDir

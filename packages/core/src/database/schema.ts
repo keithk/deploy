@@ -20,9 +20,9 @@ export interface Site {
 }
 
 /**
- * Represents an action (scheduled task, webhook handler, or hook)
+ * Represents an action record from the database (scheduled task, webhook handler, or hook)
  */
-export interface Action {
+export interface DbAction {
   id: string;
   name: string;
   type: 'scheduled' | 'webhook' | 'hook';

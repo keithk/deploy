@@ -215,14 +215,14 @@ export function registerServerCommands(program: Command): void {
           info(`Logs will be written to: ${logFile}`);
           
           // Spawn the process in daemon mode using the current executable
-          const proc = spawn([
-            currentExecutable, currentScript, "start", "--foreground", "--log-level", options.logLevel
-          ], {
-            stdio: ["ignore", Bun.file(logFile), Bun.file(errorFile)],
-            detached: true
+          // Note: Bun's spawn doesn't support 'detached', but using Bun.spawn with
+          // setsid via shell provides similar behavior
+          const proc = spawn({
+            cmd: ["sh", "-c", `setsid ${currentExecutable} ${currentScript} start --foreground --log-level ${options.logLevel} </dev/null &`],
+            stdout: Bun.file(logFile),
+            stderr: Bun.file(errorFile),
+            stdin: "ignore",
           });
-          
-          proc.unref();
           info(`🚀 Server started in daemon mode with PID ${proc.pid}`);
           info(`📋 Check logs at: ${logFile}`);
           info(`📋 Check errors at: ${errorFile}`);
