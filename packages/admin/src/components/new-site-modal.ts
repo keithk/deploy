@@ -5,9 +5,21 @@ class DeployNewSiteModal extends HTMLElement {
   private gitUrl: string = '';
   private subdomain: string = '';
   private submitting: boolean = false;
+  private domain: string = '';
 
-  connectedCallback() {
+  async connectedCallback() {
+    await this.loadDomain();
     this.render();
+  }
+
+  async loadDomain() {
+    try {
+      const res = await fetch('/api/settings');
+      const settings = await res.json();
+      this.domain = settings.domain || window.location.hostname;
+    } catch {
+      this.domain = window.location.hostname;
+    }
   }
 
   handleGitUrlChange(url: string) {
@@ -133,16 +145,20 @@ class DeployNewSiteModal extends HTMLElement {
               <label class="form-label" for="subdomain">
                 Subdomain
               </label>
-              <input
-                type="text"
-                id="subdomain"
-                class="form-input"
-                placeholder="my-site"
-                value="${this.subdomain}"
-                ${this.submitting ? 'disabled' : ''}
-                pattern="[a-z0-9-]+"
-                required
-              />
+              <div style="display: flex; align-items: center; gap: var(--size-1);">
+                <input
+                  type="text"
+                  id="subdomain"
+                  class="form-input"
+                  placeholder="my-site"
+                  value="${this.subdomain}"
+                  ${this.submitting ? 'disabled' : ''}
+                  pattern="[a-z0-9-]+"
+                  required
+                  style="flex: 1;"
+                />
+                <span class="text-muted" style="font-family: var(--font-mono); white-space: nowrap;">.${this.domain}</span>
+              </div>
               <small class="text-muted" style="font-size: var(--font-size-00); display: block; margin-top: var(--size-1);">
                 Lowercase letters, numbers, and hyphens only
               </small>
