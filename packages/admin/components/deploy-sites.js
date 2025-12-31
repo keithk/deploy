@@ -10,11 +10,21 @@ class DeploySites extends HTMLElement {
     this.repoFilter = '';
     this.formData = { git_url: '', name: '' };
     this.submitting = false;
+    this.showLogsFor = null;
+    this.logs = [];
+    this.logsLoading = false;
+    this.logsPollingInterval = null;
   }
 
   connectedCallback() {
     this.loadSettings();
     this.loadSites();
+  }
+
+  disconnectedCallback() {
+    if (this.logsPollingInterval) {
+      clearInterval(this.logsPollingInterval);
+    }
   }
 
   async loadSettings() {
@@ -40,6 +50,44 @@ class DeploySites extends HTMLElement {
       console.error('failed to load sites:', error);
       this.render();
     }
+  }
+
+  async loadLogs(siteId) {
+    try {
+      const res = await fetch(`/api/sites/${siteId}/logs?type=build&limit=100`);
+      if (res.ok) {
+        this.logs = await res.json();
+        this.render();
+      }
+    } catch (error) {
+      console.error('failed to load logs:', error);
+    }
+    this.logsLoading = false;
+  }
+
+  showLogs(siteId) {
+    this.showLogsFor = siteId;
+    this.logs = [];
+    this.logsLoading = true;
+    this.render();
+    this.loadLogs(siteId);
+
+    // Poll for updates every 2 seconds while viewing logs
+    this.logsPollingInterval = setInterval(() => {
+      if (this.showLogsFor === siteId) {
+        this.loadLogs(siteId);
+      }
+    }, 2000);
+  }
+
+  hideLogs() {
+    this.showLogsFor = null;
+    this.logs = [];
+    if (this.logsPollingInterval) {
+      clearInterval(this.logsPollingInterval);
+      this.logsPollingInterval = null;
+    }
+    this.render();
   }
 
   async loadRepos() {
@@ -201,10 +249,49 @@ class DeploySites extends HTMLElement {
             ${this.renderSitesTable()}
           </div>
         </div>
+
+        ${this.showLogsFor ? this.renderLogsModal() : ''}
       </div>
     `;
 
     this.bindEvents();
+  }
+
+  renderLogsModal() {
+    const site = this.sites.find(s => s.id === this.showLogsFor);
+    const siteName = site?.name || 'unknown';
+
+    return `
+      <div class="modal" id="logs-modal">
+        <div class="modal-content" style="max-width: 800px; max-height: 80vh;">
+          <div class="modal-header">
+            <h2 class="modal-title">logs: ${siteName}</h2>
+            <button class="btn btn-sm" id="close-logs-btn">close</button>
+          </div>
+          <div class="logs-container" style="
+            background: var(--black);
+            color: var(--white);
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            line-height: 1.5;
+            max-height: 60vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+          ">
+            ${this.logsLoading ? 'loading...' :
+              this.logs.length === 0 ? 'no logs yet. click deploy to start.' :
+              this.logs.slice().reverse().map(log =>
+                `<div style="margin-bottom: 0.5rem;${log.content.startsWith('ERROR') ? ' color: #ff6b6b;' : ''}">
+                  <span style="color: #888;">${new Date(log.timestamp).toLocaleTimeString()}</span> ${log.content}
+                </div>`
+              ).join('')
+            }
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   renderSitesTable() {
@@ -236,6 +323,7 @@ class DeploySites extends HTMLElement {
               <td>
                 <div class="flex gap-2">
                   <button class="btn btn-sm" data-deploy="${site.id}">deploy</button>
+                  <button class="btn btn-sm" data-logs="${site.id}">logs</button>
                   <button class="btn btn-sm" data-delete="${site.id}">delete</button>
                 </div>
               </td>
@@ -325,6 +413,28 @@ class DeploySites extends HTMLElement {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         this.createSite();
+      });
+    }
+
+    // Logs buttons
+    this.querySelectorAll('[data-logs]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const siteId = btn.getAttribute('data-logs');
+        this.showLogs(siteId);
+      });
+    });
+
+    // Close logs modal
+    const closeLogsBtn = this.querySelector('#close-logs-btn');
+    if (closeLogsBtn) {
+      closeLogsBtn.addEventListener('click', () => this.hideLogs());
+    }
+
+    // Close logs on overlay click
+    const logsModal = this.querySelector('#logs-modal');
+    if (logsModal) {
+      logsModal.addEventListener('click', (e) => {
+        if (e.target === logsModal) this.hideLogs();
       });
     }
 

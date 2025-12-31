@@ -1,7 +1,7 @@
 // ABOUTME: REST API endpoints for site management.
 // ABOUTME: Handles CRUD operations, deployments, share links, and environment variables.
 
-import { siteModel, shareLinkModel, error } from "@keithk/deploy-core";
+import { siteModel, shareLinkModel, logModel, error } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
 
@@ -64,6 +64,11 @@ export async function handleSitesApi(
   // POST /api/sites/:id/deploy - Trigger deployment
   if (method === "POST" && subResource === "deploy") {
     return handleDeploySite(siteId);
+  }
+
+  // GET /api/sites/:id/logs - Get site logs
+  if (method === "GET" && subResource === "logs") {
+    return handleGetLogs(siteId, request);
   }
 
   // POST /api/sites/:id/share - Create share link
@@ -167,6 +172,27 @@ function handleDeleteSite(siteId: string): Response {
   }
 
   return new Response(null, { status: 204 });
+}
+
+/**
+ * GET /api/sites/:id/logs - Get logs for a site
+ */
+function handleGetLogs(siteId: string, request: Request): Response {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") as "build" | "runtime" | null;
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? parseInt(limitParam, 10) : 50;
+
+  const logs = type
+    ? logModel.findBySiteIdAndType(siteId, type, limit)
+    : logModel.findBySiteId(siteId, limit);
+
+  return Response.json(logs);
 }
 
 /**

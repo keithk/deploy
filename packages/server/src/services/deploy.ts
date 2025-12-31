@@ -1,7 +1,7 @@
 // ABOUTME: Deployment orchestrator that coordinates the full deployment pipeline.
 // ABOUTME: Handles git clone, railpack build, container start, and database status updates.
 
-import { info, debug, error, siteModel } from "@keithk/deploy-core";
+import { info, debug, error, siteModel, logModel } from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
 import { startContainer, stopContainer } from "./container";
@@ -31,29 +31,40 @@ export async function deploySite(
 
   info(`Starting deployment for site: ${site.name}`);
 
+  // Helper to log to both console and database
+  const log = (message: string) => {
+    info(message);
+    logModel.append(siteId, "build", message);
+  };
+
+  log(`Starting deployment for ${site.name}`);
+
   try {
     // Update status to building
     siteModel.updateStatus(siteId, "building");
 
     // Step 1: Clone or pull the repository
-    debug(`Cloning/pulling repository for ${site.name}`);
+    log(`Cloning repository from ${site.git_url}...`);
     const sitePath = await cloneSite(site.git_url, site.name, site.branch);
+    log(`Repository cloned to ${sitePath}`);
 
     // Step 2: Build with Railpack
-    debug(`Building ${site.name} with Railpack`);
+    log(`Building with Railpack...`);
     const buildResult = await buildWithRailpacks(sitePath, site.name);
     if (!buildResult.success) {
       throw new Error(buildResult.error || "Build failed");
     }
+    log(`Build complete: ${buildResult.imageName}`);
 
     // Step 3: Start the container with environment variables
-    debug(`Starting container for ${site.name}`);
+    log(`Starting container...`);
     const envVars = parseEnvVars(site.env_vars);
     const containerInfo = await startContainer(
       buildResult.imageName,
       site.name,
       envVars
     );
+    log(`Container started on port ${containerInfo.port}`);
 
     // Step 4: Update status to running with container info
     siteModel.updateStatus(
@@ -64,11 +75,12 @@ export async function deploySite(
     );
     siteModel.markDeployed(siteId);
 
-    info(`Successfully deployed site: ${site.name} on port ${containerInfo.port}`);
+    log(`Deployment complete!`);
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     error(`Deployment failed for ${site.name}: ${message}`);
+    logModel.append(siteId, "build", `ERROR: ${message}`);
 
     // Update status to error
     siteModel.updateStatus(siteId, "error");

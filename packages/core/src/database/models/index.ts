@@ -15,3 +15,6 @@ export { SiteModel, siteModel } from "./site";
 export type { CreateSiteData, UpdateSiteData } from "./site";
 
 export { SettingsModel, settingsModel } from "./settings";
+
+export { LogModel, logModel } from "./log";
+export type { CreateLogData } from "./log";
