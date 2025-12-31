@@ -87,8 +87,8 @@ class DeployNewSiteModal extends HTMLElement {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          gitUrl: this.gitUrl,
-          subdomain: this.subdomain
+          git_url: this.gitUrl,
+          name: this.subdomain
         })
       });
 
