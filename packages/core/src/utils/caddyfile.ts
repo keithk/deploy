@@ -1,7 +1,99 @@
+// ABOUTME: Caddyfile generation utilities for the deploy server.
+// ABOUTME: Generates both legacy per-site configs and simplified wildcard routing.
 
 // Using internal imports
 import { discoverSites } from "./siteDiscovery";
 import type { SiteConfig } from "../types";
+
+/**
+ * Generate a simple Caddyfile with wildcard routing.
+ * All subdomain routing is handled by the deploy server internally.
+ *
+ * @param domain The primary domain (e.g., "example.com")
+ * @param port The deploy server port (default: 3000)
+ * @returns The generated Caddyfile content
+ */
+export function generateSimpleCaddyfile(domain: string, port = 3000): string {
+  const email = process.env.EMAIL || `admin@${domain}`;
+  const enableOnDemandTls = process.env.ENABLE_ON_DEMAND_TLS === "true";
+
+  return `{
+  # ACME settings
+  email ${email}
+
+  http_port 80
+  https_port 443
+
+  # HTTP/3 support
+  servers {
+    protocols h1 h2 h3
+  }
+
+  ${
+    enableOnDemandTls
+      ? `on_demand_tls {
+    ask http://localhost:${port}/api/validate-domain
+  }`
+      : ""
+  }
+
+  log {
+    output file /var/log/caddy/access.log
+    format json
+  }
+}
+
+# Root domain - routes to deploy server
+${domain} {
+  encode {
+    gzip 6
+    zstd
+  }
+
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+
+  reverse_proxy localhost:${port} {
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    flush_interval -1
+  }
+}
+
+# Wildcard subdomain - all subdomains route to deploy server
+*.${domain} {
+  encode {
+    gzip 6
+    zstd
+  }
+
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    X-XSS-Protection "1; mode=block"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+
+  reverse_proxy localhost:${port} {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    flush_interval -1
+  }
+}
+`;
+}
 
 /**
  * Generate Caddyfile content based on domain and discovered sites
