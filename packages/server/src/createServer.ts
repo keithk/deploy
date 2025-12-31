@@ -85,7 +85,10 @@ function getContentType(filePath: string): string {
     json: "application/json",
     svg: "image/svg+xml",
     png: "image/png",
-    ico: "image/x-icon"
+    ico: "image/x-icon",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf"
   };
   return types[ext || ""] || "application/octet-stream";
 }
