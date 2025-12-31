@@ -43,6 +43,7 @@ let mockSiteDelete: ReturnType<typeof mock>;
 let mockSiteMarkDeployed: ReturnType<typeof mock>;
 let mockShareLinkCreate: ReturnType<typeof mock>;
 let mockSessionFindByToken: ReturnType<typeof mock>;
+let mockDeploySite: ReturnType<typeof mock>;
 
 mock.module("@keithk/deploy-core", () => {
   mockSiteCreate = mock((data: any) => ({
@@ -102,6 +103,21 @@ mock.module("@keithk/deploy-core", () => {
     sessionModel: {
       findByToken: mockSessionFindByToken,
     },
+    error: () => {},
+    info: () => {},
+    debug: () => {},
+    warn: () => {},
+  };
+});
+
+// Create the deploySite mock before module mocking
+mockDeploySite = mock((siteId: string) =>
+  Promise.resolve({ success: true })
+);
+
+mock.module("../src/services/deploy", () => {
+  return {
+    deploySite: mockDeploySite,
   };
 });
 
@@ -341,6 +357,10 @@ describe("POST /api/sites/:id/deploy", () => {
 
     const body = await response!.json();
     expect(body.message).toBeDefined();
+    expect(body.site_id).toBe("site-id-123");
+
+    // Verify deploySite was called with the correct site ID
+    expect(mockDeploySite).toHaveBeenCalledWith("site-id-123");
   });
 
   test("returns 404 when site not found", async () => {

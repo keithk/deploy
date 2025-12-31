@@ -1,8 +1,9 @@
 // ABOUTME: REST API endpoints for site management.
 // ABOUTME: Handles CRUD operations, deployments, share links, and environment variables.
 
-import { siteModel, shareLinkModel } from "@keithk/deploy-core";
+import { siteModel, shareLinkModel, error } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
+import { deploySite } from "../services/deploy";
 
 /**
  * Handle all /api/sites/* requests
@@ -177,8 +178,16 @@ function handleDeploySite(siteId: string): Response {
     return Response.json({ error: "Site not found" }, { status: 404 });
   }
 
-  // Mark as deployed (actual deployment would be triggered separately)
-  siteModel.markDeployed(siteId);
+  // Trigger deployment in background
+  deploySite(siteId)
+    .then((result) => {
+      if (!result.success) {
+        error(`Deployment failed for ${site.name}: ${result.error}`);
+      }
+    })
+    .catch((err) => {
+      error(`Deployment error for ${site.name}: ${err}`);
+    });
 
   return Response.json({ message: "Deployment triggered", site_id: siteId });
 }
