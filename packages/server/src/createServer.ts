@@ -20,6 +20,8 @@ import {
 import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
+import { SSHAuthServer } from "./auth/ssh-server";
+import { join } from "path";
 
 /**
  * Handles domain validation for on-demand TLS
@@ -288,6 +290,23 @@ export async function createServer({
   info(
     `Server running at http://localhost:${server.port} in ${mode} mode, domain: ${PROJECT_DOMAIN}`
   );
+
+  // Start SSH auth server for dashboard access
+  const sshPort = parseInt(process.env.SSH_PORT || "2222", 10);
+  const dataDir = join(process.cwd(), "data");
+
+  try {
+    const sshServer = new SSHAuthServer({
+      port: sshPort,
+      hostKeyPath: join(dataDir, "host_key"),
+      authorizedKeysPath: join(dataDir, "authorized_keys"),
+      dashboardUrl: `https://${PROJECT_DOMAIN}`
+    });
+    await sshServer.start();
+    info(`SSH auth server running on port ${sshPort}`);
+  } catch (err) {
+    info(`SSH auth server not started: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   // Execute server:after-start hook
   await executeHook("server:after-start", actionContext);
