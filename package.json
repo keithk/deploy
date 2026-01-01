@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "deploy": "bun packages/cli/dist/index.js",
+    "update": "bun packages/cli/dist/index.js update",
     "start": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js start",
     "dev": "ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js dev",
     "build": "bun run build:all",
