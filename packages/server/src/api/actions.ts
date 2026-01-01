@@ -215,7 +215,11 @@ async function handleRunAction(actionId: string): Promise<Response> {
 
     // Execute the handler
     const result = await module.default.handler({}, context);
-    actionModel.updateLastRun(actionId, result.success ? "success" : "error");
+    actionModel.updateLastRun(
+      actionId,
+      result.success ? "success" : "error",
+      result.message
+    );
 
     return Response.json({
       success: result.success,

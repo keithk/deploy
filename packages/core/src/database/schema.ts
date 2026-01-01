@@ -36,6 +36,7 @@ export interface DbAction {
   enabled: number;  // SQLite stores as integer
   last_run_at: string | null;
   last_run_status: string | null;
+  last_run_message: string | null;
 }
 
 /**

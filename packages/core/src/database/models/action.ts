@@ -103,12 +103,12 @@ export class ActionModel {
   /**
    * Update last run info
    */
-  public updateLastRun(id: string, status: string): void {
+  public updateLastRun(id: string, status: string, message?: string): void {
     const stmt = this.db.prepare(`
-      UPDATE actions SET last_run_at = datetime('now'), last_run_status = ?
+      UPDATE actions SET last_run_at = datetime('now'), last_run_status = ?, last_run_message = ?
       WHERE id = ?
     `);
-    stmt.run(status, id);
+    stmt.run(status, message || null, id);
   }
 }
 
