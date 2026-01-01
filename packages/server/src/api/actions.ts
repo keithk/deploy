@@ -177,18 +177,51 @@ async function handleRunAction(actionId: string): Promise<Response> {
   }
 
   try {
-    // Import and execute the action
+    // Import the action module
     const module = await import(action.entry_path);
-    if (module.default && typeof module.default.execute === "function") {
-      await module.default.execute();
-      actionModel.updateLastRun(actionId, "success");
-      return Response.json({ success: true, message: "Action executed" });
-    } else {
+    if (!module.default || typeof module.default.handler !== "function") {
       return Response.json(
-        { error: "Action has no execute function" },
+        { error: "Action has no handler function" },
         { status: 400 }
       );
     }
+
+    // Build context for the action
+    const sites = siteModel.findAll();
+    const site = action.site_id ? siteModel.findById(action.site_id) : null;
+    const sitePath = site ? getSitePath(site.name) : null;
+
+    // Load site-specific environment variables
+    let siteEnv: Record<string, string> = {};
+    if (sitePath) {
+      const { loadEnvFile } = await import("../utils");
+      const envPath = `${sitePath}/.env`;
+      siteEnv = await loadEnvFile(envPath);
+    }
+
+    const context = {
+      rootDir: process.env.ROOT_DIR || process.cwd(),
+      mode: "serve" as const,
+      sites: sites.map((s) => ({
+        ...s,
+        path: getSitePath(s.name),
+        subdomain: s.name,
+      })),
+      site: site
+        ? { ...site, path: sitePath!, subdomain: site.name }
+        : undefined,
+      env: siteEnv,
+    };
+
+    // Execute the handler
+    const result = await module.default.handler({}, context);
+    actionModel.updateLastRun(actionId, result.success ? "success" : "error");
+
+    return Response.json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
   } catch (error) {
     actionModel.updateLastRun(actionId, "error");
     return Response.json(
