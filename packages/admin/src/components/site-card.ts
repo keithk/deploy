@@ -52,8 +52,9 @@ class DeploySiteCard extends HTMLElement {
 
   async handleRedeploy() {
     try {
-      const response = await fetch(`/api/sites/${this.siteId}/redeploy`, {
-        method: 'POST'
+      const response = await fetch(`/api/sites/${this.siteId}/deploy`, {
+        method: 'POST',
+        credentials: 'include'
       });
 
       if (response.ok) {
