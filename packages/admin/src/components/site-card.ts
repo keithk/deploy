@@ -5,7 +5,7 @@ class DeploySiteCard extends HTMLElement {
   private dropdownOpen: boolean = false;
 
   static get observedAttributes() {
-    return ['id', 'name', 'status', 'visibility', 'git-url', 'subdomain'];
+    return ['id', 'name', 'status', 'visibility', 'git-url', 'subdomain', 'persistent-storage'];
   }
 
   get siteId(): string {
@@ -30,6 +30,10 @@ class DeploySiteCard extends HTMLElement {
 
   get subdomain(): string {
     return this.getAttribute('subdomain') || '';
+  }
+
+  get persistentStorage(): boolean {
+    return this.getAttribute('persistent-storage') === '1';
   }
 
   get siteUrl(): string {
@@ -87,6 +91,35 @@ class DeploySiteCard extends HTMLElement {
     alert('Link copied to clipboard');
   }
 
+  async handleTogglePersistentStorage() {
+    const newValue = !this.persistentStorage;
+    const action = newValue ? 'enable' : 'disable';
+
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage for ${this.siteName}? This requires a redeploy to take effect.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ persistent_storage: newValue })
+      });
+
+      if (response.ok) {
+        alert(`Persistent storage ${newValue ? 'enabled' : 'disabled'}. Redeploy to apply changes.`);
+        window.dispatchEvent(new CustomEvent('site-updated'));
+      } else {
+        const error = await response.json();
+        alert(`Failed to update: ${error.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Toggle persistent storage failed:', error);
+      alert('Failed to update site');
+    }
+  }
+
   async handleDelete() {
     if (!confirm(`Are you sure you want to delete ${this.siteName}?`)) {
       return;
@@ -94,7 +127,8 @@ class DeploySiteCard extends HTMLElement {
 
     try {
       const response = await fetch(`/api/sites/${this.siteId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -149,6 +183,7 @@ class DeploySiteCard extends HTMLElement {
                 <div class="dropdown-menu">
                   <button class="dropdown-item" id="view-site-btn">View Site</button>
                   <button class="dropdown-item" id="environment-btn">Environment</button>
+                  <button class="dropdown-item" id="storage-btn">${this.persistentStorage ? 'Disable' : 'Enable'} Storage</button>
                   <button class="dropdown-item" id="share-link-btn">Share Link</button>
                   <button class="dropdown-item danger" id="delete-btn">Delete</button>
                 </div>
@@ -190,6 +225,7 @@ class DeploySiteCard extends HTMLElement {
     if (this.dropdownOpen) {
       this.querySelector('#view-site-btn')?.addEventListener('click', () => this.handleViewSite());
       this.querySelector('#environment-btn')?.addEventListener('click', () => this.handleEnvironment());
+      this.querySelector('#storage-btn')?.addEventListener('click', () => this.handleTogglePersistentStorage());
       this.querySelector('#share-link-btn')?.addEventListener('click', () => this.handleShareLink());
       this.querySelector('#delete-btn')?.addEventListener('click', () => this.handleDelete());
     }

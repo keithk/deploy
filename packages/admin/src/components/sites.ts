@@ -12,6 +12,7 @@ interface Site {
   visibility?: 'public' | 'private';
   gitUrl?: string;
   url?: string;
+  persistent_storage?: number;
 }
 
 class DeploySites extends HTMLElement {
@@ -154,6 +155,7 @@ class DeploySites extends HTMLElement {
         visibility="${site.visibility || 'public'}"
         git-url="${site.gitUrl || ''}"
         subdomain="${site.subdomain || site.name}"
+        persistent-storage="${site.persistent_storage || 0}"
       ></deploy-site-card>
     `).join('');
   }
