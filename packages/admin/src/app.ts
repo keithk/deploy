@@ -1,11 +1,12 @@
 // ABOUTME: Main DeployApp web component with client-side routing
-// ABOUTME: Renders different views based on URL path (/, /settings, /actions)
+// ABOUTME: Renders different views based on URL path (/, /settings, /actions, /sites/:id/logs)
 
 import { router, setupLinkInterception } from './router.js';
 import './components/header.js';
 import './components/sites.js';
 import './components/actions.js';
 import './components/settings.js';
+import './components/site-logs.js';
 
 class DeployApp extends HTMLElement {
   connectedCallback() {
@@ -18,6 +19,7 @@ class DeployApp extends HTMLElement {
     router.addRoute('/', () => this.renderDashboard());
     router.addRoute('/settings', () => this.renderSettings());
     router.addRoute('/actions', () => this.renderActions());
+    router.addRoute('/sites/:id/logs', (params) => this.renderLogs(params.id));
     router.setDefault(() => this.renderDashboard());
   }
 
@@ -58,6 +60,10 @@ class DeployApp extends HTMLElement {
         <deploy-actions></deploy-actions>
       </div>
     `;
+  }
+
+  renderLogs(siteId: string) {
+    this.innerHTML = `<site-logs site-id="${siteId}"></site-logs>`;
   }
 }
 
