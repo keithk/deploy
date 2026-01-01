@@ -509,4 +509,90 @@ export function registerServerCommands(program: Command): void {
     .command("doctor")
     .description("Run diagnostics to check server configuration and health")
     .action(doctorCommand);
+
+  // Update command for pulling latest code and restarting
+  program
+    .command("update")
+    .description("Pull latest code, rebuild, and restart the server")
+    .option("--branch <branch>", "Git branch to pull from", "feature/simplified-deploy")
+    .option("--skip-restart", "Skip restarting the server after update")
+    .action(async (options) => {
+      try {
+        const cwd = process.cwd();
+        info("🔄 Updating Deploy server...");
+
+        // Step 1: Git pull
+        info("\n📥 Pulling latest code...");
+        const pullProc = spawn(["git", "pull", "origin", options.branch], {
+          cwd,
+          stdio: ["inherit", "inherit", "inherit"]
+        });
+        await pullProc.exited;
+        if (pullProc.exitCode !== 0) {
+          error("Git pull failed");
+          process.exit(1);
+        }
+        info("✅ Code updated");
+
+        // Step 2: Install dependencies
+        info("\n📦 Installing dependencies...");
+        const installProc = spawn(["bun", "install"], {
+          cwd,
+          stdio: ["inherit", "inherit", "inherit"]
+        });
+        await installProc.exited;
+        if (installProc.exitCode !== 0) {
+          error("Dependency installation failed");
+          process.exit(1);
+        }
+        info("✅ Dependencies installed");
+
+        // Step 3: Rebuild
+        info("\n🔨 Rebuilding...");
+        const buildProc = spawn(["bun", "run", "build"], {
+          cwd,
+          stdio: ["inherit", "inherit", "inherit"]
+        });
+        await buildProc.exited;
+        if (buildProc.exitCode !== 0) {
+          error("Build failed");
+          process.exit(1);
+        }
+        info("✅ Build complete");
+
+        // Step 4: Restart service (if running as systemd)
+        if (!options.skipRestart) {
+          info("\n🔄 Restarting service...");
+          const restartProc = spawn(["sudo", "systemctl", "restart", "deploy"], {
+            cwd,
+            stdio: ["inherit", "inherit", "inherit"]
+          });
+          await restartProc.exited;
+          if (restartProc.exitCode !== 0) {
+            warn("Failed to restart via systemctl, trying manual restart...");
+            // Try manual restart
+            const manualRestartProc = spawn(["bun", "run", "deploy", "restart"], {
+              cwd,
+              stdio: ["inherit", "inherit", "inherit"]
+            });
+            await manualRestartProc.exited;
+          }
+          info("✅ Service restarted");
+
+          // Wait and check status
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          info("\n📊 Checking service status...");
+          const statusProc = spawn(["systemctl", "status", "deploy", "--no-pager", "-l"], {
+            cwd,
+            stdio: ["inherit", "inherit", "inherit"]
+          });
+          await statusProc.exited;
+        }
+
+        info("\n🎉 Update complete!");
+      } catch (err) {
+        error("Update failed:", err);
+        process.exit(1);
+      }
+    });
 }
