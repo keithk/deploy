@@ -4,7 +4,7 @@
 import { siteModel, shareLinkModel, logModel, error, info } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
-import { stopContainer, removeSiteDataDirectory } from "../services/container";
+import { stopContainer, removeSiteDataDirectory, getContainerLogs } from "../services/container";
 
 /**
  * Handle all /api/sites/* requests
@@ -199,7 +199,7 @@ async function handleDeleteSite(siteId: string): Promise<Response> {
 /**
  * GET /api/sites/:id/logs - Get logs for a site
  */
-function handleGetLogs(siteId: string, request: Request): Response {
+async function handleGetLogs(siteId: string, request: Request): Promise<Response> {
   const site = siteModel.findById(siteId);
   if (!site) {
     return Response.json({ error: "Site not found" }, { status: 404 });
@@ -210,6 +210,35 @@ function handleGetLogs(siteId: string, request: Request): Response {
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : 50;
 
+  // For runtime logs, fetch directly from Docker container
+  if (type === "runtime") {
+    if (site.status !== "running") {
+      return Response.json([]);
+    }
+    try {
+      const dockerLogs = await getContainerLogs(site.name, limit);
+      // Format as log entries for consistent frontend handling
+      const lines = dockerLogs.split("\n").filter((line) => line.trim());
+      const logs = lines.map((line, i) => ({
+        id: `runtime-${i}`,
+        content: line,
+        timestamp: new Date().toISOString(),
+        type: "runtime",
+      }));
+      return Response.json(logs);
+    } catch (err) {
+      return Response.json([
+        {
+          id: "error",
+          content: `Failed to fetch container logs: ${err}`,
+          timestamp: new Date().toISOString(),
+          type: "runtime",
+        },
+      ]);
+    }
+  }
+
+  // For build logs, use database
   const logs = type
     ? logModel.findBySiteIdAndType(siteId, type, limit)
     : logModel.findBySiteId(siteId, limit);
