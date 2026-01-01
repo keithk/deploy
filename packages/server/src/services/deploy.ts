@@ -1,10 +1,11 @@
 // ABOUTME: Deployment orchestrator that coordinates the full deployment pipeline.
 // ABOUTME: Handles git clone, railpack build, container start, and database status updates.
 
-import { info, debug, error, siteModel, logModel } from "@keithk/deploy-core";
+import { info, debug, error, siteModel, logModel, actionModel } from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
 import { startContainer, stopContainer } from "./container";
+import { discoverSiteActions } from "./actions";
 
 /**
  * Deploy a site: clone/pull -> build -> start container -> update status
@@ -74,6 +75,26 @@ export async function deploySite(
       containerInfo.port
     );
     siteModel.markDeployed(siteId);
+
+    // Step 5: Discover and register actions from the site
+    log(`Discovering actions...`);
+    const actions = await discoverSiteActions(sitePath, siteId);
+    if (actions.length > 0) {
+      // Clear old actions for this site first
+      actionModel.deleteBySiteId(siteId);
+      // Register new actions
+      for (const action of actions) {
+        actionModel.upsert({
+          id: action.id,
+          name: action.name || action.id,
+          type: action.type,
+          site_id: siteId,
+          entry_path: action.entryPath,
+          enabled: true
+        });
+        log(`Registered action: ${action.id} (${action.type})`);
+      }
+    }
 
     log(`Deployment complete!`);
     return { success: true };

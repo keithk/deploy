@@ -37,7 +37,7 @@ export function up(db: Database): void {
     CREATE TABLE IF NOT EXISTS actions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      type TEXT NOT NULL CHECK (type IN ('scheduled', 'webhook', 'hook')),
+      type TEXT NOT NULL CHECK (type IN ('scheduled', 'webhook', 'hook', 'custom')),
       site_id TEXT,
       schedule TEXT,
       hook_event TEXT,

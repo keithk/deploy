@@ -1,16 +1,27 @@
-// ABOUTME: Main DeployApp web component that renders the dashboard layout
-// ABOUTME: Contains header, sites section, and actions section
+// ABOUTME: Main DeployApp web component with client-side routing
+// ABOUTME: Renders different views based on URL path (/, /settings, /actions)
 
+import { router, setupLinkInterception } from './router.js';
 import './components/header.js';
 import './components/sites.js';
 import './components/actions.js';
+import './components/settings.js';
 
 class DeployApp extends HTMLElement {
   connectedCallback() {
-    this.render();
+    setupLinkInterception();
+    this.setupRoutes();
+    router.handleRoute();
   }
 
-  render() {
+  setupRoutes() {
+    router.addRoute('/', () => this.renderDashboard());
+    router.addRoute('/settings', () => this.renderSettings());
+    router.addRoute('/actions', () => this.renderActions());
+    router.setDefault(() => this.renderDashboard());
+  }
+
+  renderDashboard() {
     this.innerHTML = `
       <div class="container">
         <deploy-header></deploy-header>
@@ -22,6 +33,29 @@ class DeployApp extends HTMLElement {
         <div style="margin-top: var(--size-5);">
           <deploy-actions></deploy-actions>
         </div>
+      </div>
+    `;
+  }
+
+  renderSettings() {
+    this.innerHTML = `<deploy-settings></deploy-settings>`;
+  }
+
+  renderActions() {
+    this.innerHTML = `
+      <div class="container">
+        <header class="flex items-center justify-between mb-4">
+          <div>
+            <h1 style="font-size: var(--font-size-5); font-weight: 600; color: var(--text-1);">
+              Actions
+            </h1>
+          </div>
+          <a href="/" data-route class="btn">
+            Back to Dashboard
+          </a>
+        </header>
+
+        <deploy-actions></deploy-actions>
       </div>
     `;
   }

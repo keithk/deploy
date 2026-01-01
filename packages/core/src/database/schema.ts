@@ -25,14 +25,14 @@ export interface Site {
 export interface DbAction {
   id: string;
   name: string;
-  type: 'scheduled' | 'webhook' | 'hook';
+  type: 'scheduled' | 'webhook' | 'hook' | 'custom';
   site_id: string | null;
   schedule: string | null;
   hook_event: string | null;
   code: string | null;
   git_url: string | null;
   entry_path: string | null;
-  enabled: boolean;
+  enabled: number;  // SQLite stores as integer
   last_run_at: string | null;
   last_run_status: string | null;
 }

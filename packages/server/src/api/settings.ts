@@ -25,6 +25,7 @@ export async function handleSettingsApi(
     return Response.json({
       domain: process.env.PROJECT_DOMAIN,
       github_configured: !!settings.github_token,
+      primary_site: settings.primary_site || null,
       // Don't expose the actual token
     });
   }
@@ -43,9 +44,19 @@ export async function handleSettingsApi(
         }
       }
 
+      // Handle primary_site
+      if (body.primary_site !== undefined) {
+        if (body.primary_site) {
+          settingsModel.set("primary_site", body.primary_site);
+        } else {
+          settingsModel.delete("primary_site");
+        }
+      }
+
       return Response.json({
         success: true,
         github_configured: !!settingsModel.get("github_token"),
+        primary_site: settingsModel.get("primary_site") || null,
       });
     } catch (error) {
       return Response.json(

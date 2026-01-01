@@ -18,3 +18,6 @@ export { SettingsModel, settingsModel } from "./settings";
 
 export { LogModel, logModel } from "./log";
 export type { CreateLogData } from "./log";
+
+export { ActionModel, actionModel } from "./action";
+export type { CreateActionData } from "./action";

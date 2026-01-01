@@ -17,11 +17,12 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, setLogLevel, LogLevel } from "@keithk/deploy-core";
+import { debug, info, setLogLevel, LogLevel, settingsModel, siteModel } from "@keithk/deploy-core";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { SSHAuthServer } from "./auth/ssh-server";
 import { validateSession, createSessionCookie } from "./middleware/auth";
+import { proxyRequest } from "./utils/proxy";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -29,9 +30,12 @@ import { fileURLToPath } from "url";
  * Gets the admin dashboard directory path
  */
 function getAdminDir(): string {
-  // In development, admin is a sibling package
-  // In production, it's built into the same structure
+  // Look for the built admin panel in dist/ directory
   const possiblePaths = [
+    join(process.cwd(), "packages/admin/dist"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../admin/dist"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../../admin/dist"),
+    // Fallback to non-dist paths for development
     join(process.cwd(), "packages/admin"),
     join(dirname(fileURLToPath(import.meta.url)), "../../admin"),
     join(dirname(fileURLToPath(import.meta.url)), "../../../admin"),
@@ -103,6 +107,14 @@ function isRootDomain(host: string, projectDomain: string): boolean {
 }
 
 /**
+ * Checks if a request is for the admin subdomain
+ */
+function isAdminSubdomain(host: string, projectDomain: string): boolean {
+  const hostNoPort = host.split(":")[0] || "";
+  return hostNoPort === `admin.${projectDomain}`;
+}
+
+/**
  * Handles domain validation for on-demand TLS
  * This endpoint is called by Caddy to validate whether a domain should receive a certificate
  */
@@ -117,24 +129,37 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     
     debug(`Validating domain for on-demand TLS: ${domain}`);
     
-    // Check if domain is configured in any site
-    const isValidDomain = sites.some(site => {
+    const projectDomain = process.env.PROJECT_DOMAIN || 'dev.flexi';
+
+    // Always allow admin subdomain
+    if (domain === `admin.${projectDomain}`) {
+      info(`Domain validation approved: ${domain} (admin)`);
+      return new Response('Domain validated', { status: 200 });
+    }
+
+    // Check if domain is configured in any filesystem site
+    const isFilesystemSite = sites.some(site => {
       // Check if it matches a custom domain
       if (site.customDomain === domain) {
         return true;
       }
-      
+
       // Check if it matches a subdomain pattern
-      const projectDomain = process.env.PROJECT_DOMAIN || 'dev.flexi';
       const subdomain = site.subdomain || site.route.replace(/^\//, '');
       if (domain === `${subdomain}.${projectDomain}`) {
         return true;
       }
-      
+
       return false;
     });
-    
-    if (isValidDomain) {
+
+    // Also check database-backed sites
+    const dbSites = siteModel.findAll();
+    const isDbSite = dbSites.some(site => {
+      return domain === `${site.name}.${projectDomain}`;
+    });
+
+    if (isFilesystemSite || isDbSite) {
       info(`Domain validation approved: ${domain}`);
       return new Response('Domain validated', { status: 200 });
     } else {
@@ -312,10 +337,18 @@ export async function createServer({
           return response;
         }
 
-        // Serve admin dashboard for root domain requests
         const host = request.headers.get("host") || "";
-        if (isRootDomain(host, PROJECT_DOMAIN)) {
-          const adminResponse = await serveAdminFile(url.pathname);
+
+        // Serve admin dashboard for admin subdomain
+        if (isAdminSubdomain(host, PROJECT_DOMAIN)) {
+          // Try to serve the exact file first
+          let adminResponse = await serveAdminFile(url.pathname);
+
+          // SPA fallback: if file not found, serve index.html for client-side routing
+          if (!adminResponse && !url.pathname.includes('.')) {
+            adminResponse = await serveAdminFile('/');
+          }
+
           if (adminResponse) {
             // If there's a token in the URL, validate and set a session cookie
             const token = url.searchParams.get("token");
@@ -333,6 +366,51 @@ export async function createServer({
             logger.logResponse(request, adminResponse, loggerStart);
             return adminResponse;
           }
+        }
+
+        // For root domain, check for primary site setting
+        if (isRootDomain(host, PROJECT_DOMAIN)) {
+          const primarySiteId = settingsModel.get("primary_site");
+          if (primarySiteId) {
+            const primarySite = siteModel.findById(primarySiteId);
+            if (primarySite && primarySite.status === "running" && primarySite.port) {
+              // Proxy to the primary site's container
+              const response = await proxyRequest(request, primarySite.port);
+              logger.logResponse(request, response, loggerStart);
+              return response;
+            }
+          }
+
+          // No primary site set - show a simple page directing to admin
+          const noPrimarySiteHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>No Primary Site</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .container { text-align: center; padding: 40px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color: #333; margin-bottom: 16px; }
+    p { color: #666; margin-bottom: 24px; }
+    a { color: #0066cc; text-decoration: none; font-weight: 500; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>No Primary Site Set</h1>
+    <p>Configure a primary site in the admin panel to serve it here.</p>
+    <a href="https://admin.${PROJECT_DOMAIN}/settings">Go to Admin Settings</a>
+  </div>
+</body>
+</html>`;
+          const response = new Response(noPrimarySiteHtml, {
+            status: 200,
+            headers: { "Content-Type": "text/html; charset=utf-8" }
+          });
+          logger.logResponse(request, response, loggerStart);
+          return response;
         }
 
         // Execute route:before-handle hook

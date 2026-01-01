@@ -10,6 +10,7 @@ import { join } from "path";
 import { handleSitesApi } from "./sites";
 import { handleSettingsApi } from "./settings";
 import { handleGitHubApi } from "./github";
+import { handleActionsApi } from "./actions";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -304,6 +305,11 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
   // Route to GitHub API
   if (firstPart === 'github') {
     return handleGitHubApi(request, path);
+  }
+
+  // Route to actions API
+  if (firstPart === 'actions') {
+    return handleActionsApi(request, path);
   }
 
   // Route to sites API for database-backed operations
