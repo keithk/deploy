@@ -63,7 +63,10 @@ export async function deploySite(
     const containerInfo = await startContainer(
       buildResult.imageName,
       site.name,
-      envVars
+      {
+        envVars,
+        persistentStorage: site.persistent_storage === 1
+      }
     );
     log(`Container started on port ${containerInfo.port}`);
 

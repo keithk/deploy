@@ -1,9 +1,10 @@
 // ABOUTME: REST API endpoints for site management.
 // ABOUTME: Handles CRUD operations, deployments, share links, and environment variables.
 
-import { siteModel, shareLinkModel, logModel, error } from "@keithk/deploy-core";
+import { siteModel, shareLinkModel, logModel, error, info } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
+import { stopContainer, removeSiteDataDirectory } from "../services/container";
 
 /**
  * Handle all /api/sites/* requests
@@ -165,10 +166,31 @@ async function handleUpdateSite(
 /**
  * DELETE /api/sites/:id - Delete a site
  */
-function handleDeleteSite(siteId: string): Response {
+async function handleDeleteSite(siteId: string): Promise<Response> {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  // Stop container if running
+  if (site.status === "running") {
+    try {
+      await stopContainer(site.name);
+      info(`Stopped container for ${site.name}`);
+    } catch (err) {
+      // Container might not exist, continue with deletion
+    }
+  }
+
+  // Delete site from database
   const deleted = siteModel.delete(siteId);
   if (!deleted) {
-    return Response.json({ error: "Site not found" }, { status: 404 });
+    return Response.json({ error: "Failed to delete site" }, { status: 500 });
+  }
+
+  // Remove persistent data directory if it existed
+  if (site.persistent_storage) {
+    removeSiteDataDirectory(site.name);
   }
 
   return new Response(null, { status: 204 });

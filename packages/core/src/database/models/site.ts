@@ -15,6 +15,7 @@ export interface CreateSiteData {
   branch?: string;
   visibility?: "public" | "private";
   env_vars?: string;
+  persistent_storage?: boolean;
 }
 
 /**
@@ -27,6 +28,7 @@ export interface UpdateSiteData {
   branch?: string;
   visibility?: "public" | "private";
   env_vars?: string;
+  persistent_storage?: boolean;
 }
 
 /**
@@ -57,13 +59,14 @@ export class SiteModel {
       container_id: null,
       port: null,
       env_vars: data.env_vars ?? "{}",
+      persistent_storage: data.persistent_storage ? 1 : 0,
       created_at: now,
       last_deployed_at: null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, created_at, last_deployed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, created_at, last_deployed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -77,6 +80,7 @@ export class SiteModel {
       site.container_id,
       site.port,
       site.env_vars,
+      site.persistent_storage,
       site.created_at,
       site.last_deployed_at
     );
@@ -148,6 +152,10 @@ export class SiteModel {
     if (data.env_vars !== undefined) {
       updates.push("env_vars = ?");
       values.push(data.env_vars);
+    }
+    if (data.persistent_storage !== undefined) {
+      updates.push("persistent_storage = ?");
+      values.push(data.persistent_storage ? 1 : 0);
     }
 
     if (updates.length === 0) {

@@ -2,7 +2,11 @@
 // ABOUTME: Handles starting, stopping, and monitoring containers with port allocation.
 
 import { $ } from "bun";
+import { existsSync, mkdirSync, rmSync } from "fs";
 import { info, debug, error, siteModel } from "@keithk/deploy-core";
+
+// Base path for persistent site data on host
+const DATA_BASE_PATH = process.env.DEPLOY_DATA_PATH || "/var/deploy/data";
 
 export interface ContainerInfo {
   containerId: string;
@@ -75,18 +79,54 @@ function getContainerName(siteName: string): string {
   return `deploy-${siteName}`;
 }
 
+export interface ContainerOptions {
+  envVars?: Record<string, string>;
+  persistentStorage?: boolean;
+}
+
+/**
+ * Get the data directory path for a site
+ */
+export function getSiteDataPath(siteName: string): string {
+  return `${DATA_BASE_PATH}/${siteName}`;
+}
+
+/**
+ * Ensure the data directory exists for a site
+ */
+function ensureDataDirectory(siteName: string): string {
+  const dataPath = getSiteDataPath(siteName);
+  if (!existsSync(dataPath)) {
+    mkdirSync(dataPath, { recursive: true });
+    info(`Created data directory: ${dataPath}`);
+  }
+  return dataPath;
+}
+
+/**
+ * Remove the data directory for a site
+ */
+export function removeSiteDataDirectory(siteName: string): void {
+  const dataPath = getSiteDataPath(siteName);
+  if (existsSync(dataPath)) {
+    rmSync(dataPath, { recursive: true, force: true });
+    info(`Removed data directory: ${dataPath}`);
+  }
+}
+
 /**
  * Start a container from an image
  * @param imageName The Docker image name to run
  * @param siteName The site name (used for container naming and port allocation)
- * @param envVars Environment variables to pass to the container
+ * @param options Container options including env vars and persistent storage
  * @returns ContainerInfo with container ID and assigned port
  */
 export async function startContainer(
   imageName: string,
   siteName: string,
-  envVars: Record<string, string> = {}
+  options: ContainerOptions = {}
 ): Promise<ContainerInfo> {
+  const { envVars = {}, persistentStorage = false } = options;
   const containerName = getContainerName(siteName);
   const port = await getNextPort(siteName);
 
@@ -101,6 +141,15 @@ export async function startContainer(
   // Always set PORT for the container
   envArgs.push("-e", `PORT=${port}`);
 
+  // Build volume arguments if persistent storage is enabled
+  const volumeArgs: string[] = [];
+  if (persistentStorage) {
+    const dataPath = ensureDataDirectory(siteName);
+    volumeArgs.push("-v", `${dataPath}:/data`);
+    envArgs.push("-e", "DATA_DIR=/data");
+    info(`Persistent storage enabled: ${dataPath} -> /data`);
+  }
+
   try {
     // Stop any existing container with the same name
     await stopContainer(siteName).catch(() => {
@@ -111,6 +160,7 @@ export async function startContainer(
     const result = await $`docker run -d \
       --name ${containerName} \
       -p ${port}:${port} \
+      ${volumeArgs} \
       ${envArgs} \
       ${imageName}`.text();
 
