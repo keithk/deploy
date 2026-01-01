@@ -9,6 +9,7 @@ interface Action {
   schedule: string | null;
   last_run_at: string | null;
   last_run_status: string | null;
+  last_run_message: string | null;
   enabled: number;
 }
 
@@ -115,6 +116,11 @@ class DeployActions extends HTMLElement {
                 ${action.schedule ? `<span>Schedule: ${action.schedule}</span>` : ''}
                 <span>Last run: ${this.formatDate(action.last_run_at)}</span>
               </div>
+              ${action.last_run_message ? `
+                <div class="action-message ${this.getStatusClass(action.last_run_status)}">
+                  ${action.last_run_message}
+                </div>
+              ` : ''}
             </div>
             <div class="action-actions">
               <button
@@ -187,6 +193,21 @@ class DeployActions extends HTMLElement {
         .action-actions {
           display: flex;
           gap: var(--space-2);
+        }
+        .action-message {
+          font-size: var(--text-xs);
+          color: var(--text-muted);
+          margin-top: var(--space-2);
+          padding: var(--space-2) var(--space-3);
+          background: var(--surface);
+          border-radius: 4px;
+          border-left: 2px solid var(--border);
+        }
+        .action-message.success {
+          border-left-color: var(--status-running);
+        }
+        .action-message.error {
+          border-left-color: var(--status-error);
         }
       </style>
     `;
