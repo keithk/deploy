@@ -522,7 +522,7 @@ export async function createServer({
       port: sshPort,
       hostKeyPath: join(dataDir, "host_key"),
       authorizedKeysPath: join(dataDir, "authorized_keys"),
-      dashboardUrl: `https://${PROJECT_DOMAIN}`
+      dashboardUrl: `https://admin.${PROJECT_DOMAIN}`
     });
     await sshServer.start();
     info(`SSH auth server running on port ${sshPort}`);
