@@ -176,16 +176,28 @@ async function handleRunAction(actionId: string): Promise<Response> {
     );
   }
 
+  let module: any;
   try {
     // Import the action module
-    const module = await import(action.entry_path);
-    if (!module.default || typeof module.default.handler !== "function") {
-      return Response.json(
-        { error: "Action has no handler function" },
-        { status: 400 }
-      );
-    }
+    module = await import(action.entry_path);
+  } catch (importError) {
+    const errorMsg = importError instanceof Error ? importError.message : String(importError);
+    actionModel.updateLastRun(actionId, "error", `Import failed: ${errorMsg}`);
+    return Response.json(
+      { error: "Failed to import action module", details: errorMsg },
+      { status: 500 }
+    );
+  }
 
+  if (!module.default || typeof module.default.handler !== "function") {
+    actionModel.updateLastRun(actionId, "error", "Action has no handler function");
+    return Response.json(
+      { error: "Action has no handler function" },
+      { status: 400 }
+    );
+  }
+
+  try {
     // Build context for the action
     const sites = siteModel.findAll();
     const site = action.site_id ? siteModel.findById(action.site_id) : null;
@@ -214,24 +226,37 @@ async function handleRunAction(actionId: string): Promise<Response> {
     };
 
     // Execute the handler
+    console.log(`Executing action handler: ${actionId}`);
     const result = await module.default.handler({}, context);
+    console.log(`Action handler completed: ${actionId}, success=${result?.success}`);
+
+    // Validate result
+    if (!result || typeof result !== "object") {
+      const errorMsg = "Action handler returned invalid result";
+      actionModel.updateLastRun(actionId, "error", errorMsg);
+      return Response.json({ error: errorMsg }, { status: 500 });
+    }
+
     actionModel.updateLastRun(
       actionId,
       result.success ? "success" : "error",
-      result.message
+      result.message || (result.success ? "Completed" : "Failed")
     );
 
+    console.log(`Sending response for action: ${actionId}`);
     return Response.json({
       success: result.success,
       message: result.message,
       data: result.data,
     });
   } catch (error) {
-    actionModel.updateLastRun(actionId, "error");
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`Action execution error for ${actionId}:`, errorMsg);
+    actionModel.updateLastRun(actionId, "error", errorMsg);
     return Response.json(
       {
         error: "Action execution failed",
-        details: error instanceof Error ? error.message : String(error),
+        details: errorMsg,
       },
       { status: 500 }
     );
