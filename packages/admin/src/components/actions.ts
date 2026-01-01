@@ -63,37 +63,22 @@ class DeployActions extends HTMLElement {
 
   formatDate(dateString: string | null): string {
     if (!dateString) return 'Never';
-    const date = new Date(dateString);
-    return date.toLocaleString();
+    return new Date(dateString).toLocaleString();
   }
 
-  getStatusBadge(status: string | null): string {
+  getStatusClass(status: string | null): string {
     if (!status) return '';
-    const color = status === 'success' ? 'var(--green-6)' : 'var(--red-6)';
-    return `<span class="status-badge" style="background: ${color};">${status}</span>`;
-  }
-
-  getTypeBadge(type: string): string {
-    const colors: Record<string, string> = {
-      scheduled: 'var(--blue-6)',
-      webhook: 'var(--purple-6)',
-      hook: 'var(--orange-6)',
-      custom: 'var(--gray-6)'
-    };
-    const color = colors[type] || 'var(--gray-6)';
-    return `<span class="type-badge" style="background: ${color};">${type}</span>`;
+    return status === 'success' ? 'success' : 'error';
   }
 
   render() {
     if (this.loading) {
       this.innerHTML = `
-        <div class="actions-section">
-          <h2 class="actions-heading">
-            ACTIONS
-          </h2>
-          <div class="card empty-state">
-            <p class="text-muted">loading actions...</p>
-          </div>
+        <div class="page-header">
+          <h1 class="page-title">Actions</h1>
+        </div>
+        <div class="empty-state">
+          <p>Loading actions...</p>
         </div>
       `;
       return;
@@ -101,103 +86,107 @@ class DeployActions extends HTMLElement {
 
     if (this.actions.length === 0) {
       this.innerHTML = `
-        <div class="actions-section">
-          <h2 class="actions-heading">
-            ACTIONS
-          </h2>
-          <div class="card empty-state">
-            <p class="text-muted">
-              no actions found. actions are discovered from deployed sites' <code>.deploy/actions/</code> directories.
-            </p>
-          </div>
+        <div class="page-header">
+          <h1 class="page-title">Actions</h1>
+        </div>
+        <div class="empty-state">
+          <p class="empty-state-title">No actions found</p>
+          <p>Actions are discovered from deployed sites' <code>.deploy/actions/</code> directories.</p>
         </div>
       `;
       return;
     }
 
     this.innerHTML = `
-      <div class="actions-section">
-        <h2 class="actions-heading">
-          ACTIONS
-        </h2>
+      <div class="page-header">
+        <h1 class="page-title">Actions</h1>
+      </div>
 
-        <div class="actions-list">
-          ${this.actions.map(action => `
-            <div class="card action-card">
-              <div class="action-header">
-                <div class="action-info">
-                  <span class="action-name">${action.name}</span>
-                  ${this.getTypeBadge(action.type)}
-                  ${this.getStatusBadge(action.last_run_status)}
-                </div>
-                <button
-                  class="btn btn-sm"
-                  data-action-id="${action.id}"
-                  ${this.runningAction === action.id ? 'disabled' : ''}
-                >
-                  ${this.runningAction === action.id ? 'RUNNING...' : 'RUN'}
-                </button>
+      <div class="actions-list">
+        ${this.actions.map(action => `
+          <div class="action-row">
+            <div class="action-status ${this.getStatusClass(action.last_run_status)}"></div>
+            <div class="action-info">
+              <div class="action-name-row">
+                <span class="action-name">${action.name}</span>
+                <span class="action-type">${action.type}</span>
               </div>
               <div class="action-meta">
-                ${action.schedule ? `<span>schedule: ${action.schedule}</span>` : ''}
-                <span>last run: ${this.formatDate(action.last_run_at)}</span>
+                ${action.schedule ? `<span>Schedule: ${action.schedule}</span>` : ''}
+                <span>Last run: ${this.formatDate(action.last_run_at)}</span>
               </div>
             </div>
-          `).join('')}
-        </div>
+            <div class="action-actions">
+              <button
+                class="btn btn-sm"
+                data-action-id="${action.id}"
+                ${this.runningAction === action.id ? 'disabled' : ''}
+              >
+                ${this.runningAction === action.id ? 'Running...' : 'Run'}
+              </button>
+            </div>
+          </div>
+        `).join('')}
       </div>
 
       <style>
-        .empty-state {
-          text-align: center;
-          padding: var(--size-5);
-        }
-        .actions-heading {
-          font-size: var(--font-size-4);
-          font-weight: 400;
-          color: var(--text-1);
-          margin-bottom: var(--size-4);
-          letter-spacing: 0.1em;
-        }
         .actions-list {
           display: flex;
           flex-direction: column;
-          gap: var(--size-3);
         }
-        .action-card {
-          padding: var(--size-4);
-        }
-        .action-header {
+        .action-row {
           display: flex;
-          justify-content: space-between;
           align-items: center;
+          gap: var(--space-4);
+          padding: var(--space-4);
+          border-bottom: 1px solid var(--border);
+        }
+        .action-row:last-child {
+          border-bottom: none;
+        }
+        .action-status {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--text-faint);
+          flex-shrink: 0;
+        }
+        .action-status.success {
+          background: var(--status-running);
+        }
+        .action-status.error {
+          background: var(--status-error);
         }
         .action-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .action-name-row {
           display: flex;
           align-items: center;
-          gap: var(--size-2);
+          gap: var(--space-3);
         }
         .action-name {
-          font-weight: 400;
-          color: var(--text-1);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
+          font-weight: 500;
+          color: var(--text);
+        }
+        .action-type {
+          font-size: var(--text-xs);
+          color: var(--text-muted);
+          padding: 2px 6px;
+          background: var(--surface);
+          border-radius: 2px;
         }
         .action-meta {
           display: flex;
-          gap: var(--size-4);
-          margin-top: var(--size-2);
-          font-size: var(--font-size-0);
-          color: var(--text-2);
+          gap: var(--space-4);
+          margin-top: var(--space-1);
+          font-size: var(--text-xs);
+          color: var(--text-muted);
         }
-        .type-badge, .status-badge {
-          padding: var(--size-1) var(--size-2);
-          border-radius: 0;
-          font-size: var(--font-size-00);
-          color: var(--surface-1);
-          font-weight: 400;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
+        .action-actions {
+          display: flex;
+          gap: var(--space-2);
         }
       </style>
     `;

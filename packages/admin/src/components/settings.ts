@@ -95,10 +95,8 @@ class DeploySettings extends HTMLElement {
   render() {
     if (this.loading) {
       this.innerHTML = `
-        <div class="container">
-          <div class="card empty-state">
-            <p class="text-muted">loading settings...</p>
-          </div>
+        <div class="empty-state">
+          <p>Loading settings...</p>
         </div>
       `;
       return;
@@ -107,172 +105,84 @@ class DeploySettings extends HTMLElement {
     const runningSites = this.sites.filter(s => s.status === 'running');
 
     this.innerHTML = `
-      <div class="container">
-        <header class="flex items-center justify-between mb-4">
-          <div>
-            <h1 class="settings-title">
-              SETTINGS
-            </h1>
-            <p class="settings-domain text-muted">
-              ${this.settings.domain || 'deploy.local'}
-            </p>
-          </div>
-          <a href="/" data-route class="btn">
-            BACK TO DASHBOARD
-          </a>
-        </header>
+      <div class="page-header">
+        <h1 class="page-title">Settings</h1>
+      </div>
 
-        <div class="card settings-card">
-          <h2 class="settings-section-title">
-            DOMAIN
-          </h2>
-          <p class="settings-description text-muted">
-            the root domain for your deploy instance (e.g., keith.is, example.com)
-          </p>
-          <div class="domain-input-row">
-            <input
-              type="text"
-              id="domain-input"
-              class="domain-input"
-              value="${this.settings.domain || ''}"
-              placeholder="example.com"
-              ${this.saving ? 'disabled' : ''}
-            >
-            <button id="save-domain-btn" class="btn" ${this.saving ? 'disabled' : ''}>
-              SAVE
-            </button>
-          </div>
-        </div>
-
-        <div class="card settings-card">
-          <h2 class="settings-section-title">
-            PRIMARY SITE
-          </h2>
-          <p class="settings-description text-muted">
-            select which site to serve at the root domain (${this.settings.domain}).
-          </p>
-
-          <div class="radio-options">
-            <label class="radio-option ${!this.settings.primary_site ? 'selected' : ''}">
-              <input
-                type="radio"
-                name="primary_site"
-                value=""
-                ${!this.settings.primary_site ? 'checked' : ''}
-                ${this.saving ? 'disabled' : ''}
-              >
-              <span>none (show placeholder page)</span>
-            </label>
-            ${runningSites.map(site => `
-              <label class="radio-option ${this.settings.primary_site === site.id ? 'selected' : ''}">
-                <input
-                  type="radio"
-                  name="primary_site"
-                  value="${site.id}"
-                  ${this.settings.primary_site === site.id ? 'checked' : ''}
-                  ${this.saving ? 'disabled' : ''}
-                >
-                <span>${site.name}</span>
-              </label>
-            `).join('')}
-          </div>
-
-          ${runningSites.length === 0 ? `
-            <p class="no-sites-hint text-muted">
-              no running sites available. deploy a site first.
-            </p>
-          ` : ''}
-        </div>
-
-        <div class="card settings-card">
-          <h2 class="settings-section-title">
-            GITHUB INTEGRATION
-          </h2>
-          <p class="settings-description text-muted">
-            ${this.settings.github_configured
-              ? 'github token is configured for private repository access.'
-              : 'no github token configured. private repositories will not be accessible.'}
-          </p>
+      <div class="settings-section">
+        <h3 class="settings-section-title">Domain</h3>
+        <p class="text-muted mb-4">
+          The root domain for your deploy instance (e.g., keith.is, example.com)
+        </p>
+        <div class="domain-input-row">
+          <input
+            type="text"
+            id="domain-input"
+            class="form-input"
+            value="${this.settings.domain || ''}"
+            placeholder="example.com"
+            ${this.saving ? 'disabled' : ''}
+          >
+          <button id="save-domain-btn" class="btn btn-primary" ${this.saving ? 'disabled' : ''}>
+            Save
+          </button>
         </div>
       </div>
 
+      <div class="settings-section">
+        <h3 class="settings-section-title">Primary Site</h3>
+        <p class="text-muted mb-4">
+          Select which site to serve at the root domain (${this.settings.domain || 'your domain'}).
+        </p>
+
+        <div class="form-radio-group">
+          <label class="form-radio">
+            <input
+              type="radio"
+              name="primary_site"
+              value=""
+              ${!this.settings.primary_site ? 'checked' : ''}
+              ${this.saving ? 'disabled' : ''}
+            >
+            <span>None (show placeholder page)</span>
+          </label>
+          ${runningSites.map(site => `
+            <label class="form-radio">
+              <input
+                type="radio"
+                name="primary_site"
+                value="${site.id}"
+                ${this.settings.primary_site === site.id ? 'checked' : ''}
+                ${this.saving ? 'disabled' : ''}
+              >
+              <span>${site.name}</span>
+            </label>
+          `).join('')}
+        </div>
+
+        ${runningSites.length === 0 ? `
+          <p class="text-muted mt-4" style="font-style: italic;">
+            No running sites available. Deploy a site first.
+          </p>
+        ` : ''}
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">GitHub Integration</h3>
+        <p class="text-muted">
+          ${this.settings.github_configured
+            ? 'GitHub token is configured for private repository access.'
+            : 'No GitHub token configured. Private repositories will not be accessible.'}
+        </p>
+      </div>
+
       <style>
-        .empty-state {
-          text-align: center;
-          padding: var(--size-5);
-        }
-        .settings-title {
-          font-size: var(--font-size-5);
-          font-weight: 400;
-          color: var(--text-1);
-          letter-spacing: 0.1em;
-        }
-        .settings-domain {
-          font-size: var(--font-size-0);
-          margin-top: var(--size-1);
-        }
-        .settings-card {
-          margin-top: var(--size-5);
-        }
-        .settings-card:first-of-type {
-          margin-top: 0;
-        }
-        .settings-section-title {
-          font-size: var(--font-size-3);
-          font-weight: 400;
-          color: var(--text-1);
-          margin-bottom: var(--size-4);
-          letter-spacing: 0.05em;
-        }
-        .settings-description {
-          margin-bottom: var(--size-4);
-        }
-        .radio-options {
-          display: flex;
-          flex-direction: column;
-          gap: var(--size-2);
-        }
-        .radio-option {
-          display: flex;
-          align-items: center;
-          gap: var(--size-2);
-          padding: var(--size-3);
-          border: 1px solid var(--border);
-          border-radius: 0;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .radio-option:hover {
-          border-color: var(--text-1);
-        }
-        .radio-option.selected {
-          border-color: var(--text-1);
-          background: var(--surface-3);
-        }
-        .radio-option input {
-          accent-color: var(--text-1);
-        }
-        .no-sites-hint {
-          margin-top: var(--size-3);
-          font-style: italic;
-        }
         .domain-input-row {
           display: flex;
-          gap: var(--size-2);
+          gap: var(--space-3);
         }
-        .domain-input {
+        .domain-input-row .form-input {
           flex: 1;
-          font-family: var(--font-mono);
-          font-size: var(--font-size-1);
-          padding: var(--size-2) var(--size-3);
-          background: var(--surface-1);
-          border: 1px solid var(--border);
-          color: var(--text-1);
-          letter-spacing: 0.02em;
-        }
-        .domain-input:focus {
-          outline: none;
-          border-color: var(--text-1);
         }
       </style>
     `;

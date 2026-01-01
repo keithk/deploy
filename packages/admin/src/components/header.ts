@@ -1,16 +1,25 @@
-// ABOUTME: Header component with navigation and domain display
-// ABOUTME: Provides links to dashboard, actions, and settings pages
+// ABOUTME: App header component with navigation and theme toggle
+// ABOUTME: Provides site branding, nav links, and light/dark/system theme switching
 
 interface Settings {
   domain?: string;
 }
 
 class DeployHeader extends HTMLElement {
-  private domain: string = 'Loading...';
+  private domain: string = '';
+  private currentTheme: 'system' | 'light' | 'dark' = 'system';
 
   connectedCallback() {
+    this.loadTheme();
     this.render();
     this.loadSettings();
+
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (this.currentTheme === 'system') {
+        this.applyTheme();
+      }
+    });
   }
 
   async loadSettings() {
@@ -18,81 +27,114 @@ class DeployHeader extends HTMLElement {
       const response = await fetch('/api/settings');
       if (response.ok) {
         const settings: Settings = await response.json();
-        this.domain = settings.domain || 'deploy.local';
+        this.domain = settings.domain || window.location.hostname;
         this.render();
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
-      this.domain = 'deploy.local';
+      this.domain = window.location.hostname;
       this.render();
     }
   }
 
+  loadTheme() {
+    const stored = localStorage.getItem('theme') as 'system' | 'light' | 'dark' | null;
+    this.currentTheme = stored || 'system';
+    this.applyTheme();
+  }
+
+  applyTheme() {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    let effectiveTheme: 'light' | 'dark';
+
+    if (this.currentTheme === 'system') {
+      effectiveTheme = prefersDark ? 'dark' : 'light';
+    } else {
+      effectiveTheme = this.currentTheme;
+    }
+
+    document.documentElement.setAttribute('data-theme', effectiveTheme);
+  }
+
+  setTheme(theme: 'system' | 'light' | 'dark') {
+    this.currentTheme = theme;
+    localStorage.setItem('theme', theme);
+    this.applyTheme();
+    this.render();
+  }
+
+  getCurrentPath(): string {
+    return window.location.pathname;
+  }
+
   render() {
-    const currentPath = window.location.pathname;
+    const path = this.getCurrentPath();
 
     this.innerHTML = `
-      <header class="flex items-center justify-between mb-4">
-        <div>
-          <h1 class="header-title">
-            <a href="/" data-route class="header-link">DEPLOY</a>
-          </h1>
-          <p class="header-domain text-muted">
-            ${this.domain}
-          </p>
+      <header class="app-header">
+        <div class="header-inner">
+          <div class="header-left">
+            <a href="/" class="header-brand" data-route>
+              <span class="header-brand-name">deploy</span>
+              <span class="header-brand-domain">${this.domain || window.location.hostname}</span>
+            </a>
+            <nav class="header-nav">
+              <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route>Sites</a>
+              <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route>Actions</a>
+              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route>Settings</a>
+            </nav>
+          </div>
+          <div class="header-right">
+            <div class="theme-toggle">
+              <button class="theme-btn ${this.currentTheme === 'system' ? 'active' : ''}" data-theme="system" title="System theme">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+              </button>
+              <button class="theme-btn ${this.currentTheme === 'light' ? 'active' : ''}" data-theme="light" title="Light theme">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                  <line x1="1" y1="12" x2="3" y2="12"></line>
+                  <line x1="21" y1="12" x2="23" y2="12"></line>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+              </button>
+              <button class="theme-btn ${this.currentTheme === 'dark' ? 'active' : ''}" data-theme="dark" title="Dark theme">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+              </button>
+            </div>
+            <button class="btn btn-ghost" id="sign-out-btn">Sign out</button>
+          </div>
         </div>
-        <nav class="nav-links">
-          <a href="/" data-route class="nav-link ${currentPath === '/' ? 'active' : ''}">
-            SITES
-          </a>
-          <a href="/actions" data-route class="nav-link ${currentPath === '/actions' ? 'active' : ''}">
-            ACTIONS
-          </a>
-          <a href="/settings" data-route class="nav-link ${currentPath === '/settings' ? 'active' : ''}">
-            SETTINGS
-          </a>
-        </nav>
       </header>
-
-      <style>
-        .header-title {
-          font-size: var(--font-size-5);
-          font-weight: 400;
-          color: var(--text-1);
-          letter-spacing: 0.1em;
-        }
-        .header-link {
-          text-decoration: none;
-          color: inherit;
-        }
-        .header-domain {
-          font-size: var(--font-size-0);
-          margin-top: var(--size-1);
-        }
-        .nav-links {
-          display: flex;
-          gap: var(--size-3);
-        }
-        .nav-link {
-          padding: var(--size-2) var(--size-3);
-          border-radius: 0;
-          text-decoration: none;
-          color: var(--text-2);
-          font-weight: 400;
-          letter-spacing: 0.05em;
-          transition: all 0.2s;
-          border: 1px solid transparent;
-        }
-        .nav-link:hover {
-          color: var(--text-1);
-          border-color: var(--border);
-        }
-        .nav-link.active {
-          color: var(--text-1);
-          border-color: var(--text-1);
-        }
-      </style>
     `;
+
+    // Theme toggle handlers
+    this.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const theme = (e.currentTarget as HTMLElement).dataset.theme as 'system' | 'light' | 'dark';
+        this.setTheme(theme);
+      });
+    });
+
+    // Sign out handler
+    this.querySelector('#sign-out-btn')?.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        window.location.href = '/login';
+      } catch (error) {
+        console.error('Logout failed:', error);
+      }
+    });
   }
 }
 

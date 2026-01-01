@@ -1,15 +1,15 @@
-// ABOUTME: Site card component displaying individual site information
-// ABOUTME: Shows status dot, name, URL, actions (Logs/Redeploy), and dropdown menu
+// ABOUTME: Site card component displaying individual site in a row
+// ABOUTME: Shows status dot, name, URL, action buttons, and dropdown menu
 
 class DeploySiteCard extends HTMLElement {
   private dropdownOpen: boolean = false;
 
   static get observedAttributes() {
-    return ['id', 'name', 'status', 'visibility', 'git-url', 'subdomain', 'persistent-storage'];
+    return ['site-id', 'name', 'status', 'visibility', 'git-url', 'subdomain', 'domain', 'persistent-storage'];
   }
 
   get siteId(): string {
-    return this.getAttribute('id') || '';
+    return this.getAttribute('site-id') || '';
   }
 
   get siteName(): string {
@@ -32,14 +32,16 @@ class DeploySiteCard extends HTMLElement {
     return this.getAttribute('subdomain') || '';
   }
 
+  get domain(): string {
+    return this.getAttribute('domain') || '';
+  }
+
   get persistentStorage(): boolean {
     return this.getAttribute('persistent-storage') === '1';
   }
 
   get siteUrl(): string {
-    // Get domain from window location or use subdomain
-    const domain = window.location.hostname.split('.').slice(-2).join('.');
-    return `https://${this.subdomain}.${domain}`;
+    return `https://${this.subdomain}.${this.domain}`;
   }
 
   connectedCallback() {
@@ -62,7 +64,6 @@ class DeploySiteCard extends HTMLElement {
       });
 
       if (response.ok) {
-        alert('Redeployment started');
         window.dispatchEvent(new CustomEvent('site-updated'));
       } else {
         const error = await response.json();
@@ -74,28 +75,27 @@ class DeploySiteCard extends HTMLElement {
     }
   }
 
-  handleLogs() {
-    window.location.href = `/sites/${this.siteId}/logs`;
+  handleViewLogs() {
+    window.location.href = `/sites/${this.siteId}`;
   }
 
-  handleViewSite() {
+  handleOpenSite() {
     window.open(this.siteUrl, '_blank');
   }
 
   handleEnvironment() {
-    window.location.href = `/sites/${this.siteId}/environment`;
+    window.location.href = `/sites/${this.siteId}?tab=environment`;
   }
 
-  handleShareLink() {
-    navigator.clipboard.writeText(this.siteUrl);
-    alert('Link copied to clipboard');
+  handleSettings() {
+    window.location.href = `/sites/${this.siteId}?tab=settings`;
   }
 
   async handleTogglePersistentStorage() {
     const newValue = !this.persistentStorage;
     const action = newValue ? 'enable' : 'disable';
 
-    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage for ${this.siteName}? This requires a redeploy to take effect.`)) {
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage for ${this.siteName}? This requires a redeploy.`)) {
       return;
     }
 
@@ -108,7 +108,6 @@ class DeploySiteCard extends HTMLElement {
       });
 
       if (response.ok) {
-        alert(`Persistent storage ${newValue ? 'enabled' : 'disabled'}. Redeploy to apply changes.`);
         window.dispatchEvent(new CustomEvent('site-updated'));
       } else {
         const error = await response.json();
@@ -121,7 +120,7 @@ class DeploySiteCard extends HTMLElement {
   }
 
   async handleDelete() {
-    if (!confirm(`Are you sure you want to delete ${this.siteName}?`)) {
+    if (!confirm(`Delete ${this.siteName}? This cannot be undone.`)) {
       return;
     }
 
@@ -143,90 +142,62 @@ class DeploySiteCard extends HTMLElement {
     }
   }
 
-  toggleDropdown() {
+  toggleDropdown(e: Event) {
+    e.stopPropagation();
     this.dropdownOpen = !this.dropdownOpen;
     this.render();
   }
 
   render() {
+    const showPublicBadge = this.visibility === 'public';
+
     this.innerHTML = `
-      <div class="card">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3 site-card-info">
-            <span class="status-dot ${this.status}">
-              ${this.status}
-            </span>
+      <div class="site-row">
+        <div class="site-status ${this.status}"></div>
 
-            <div class="site-card-details">
-              <h3 class="site-card-name">
-                ${this.siteName}
-              </h3>
-              <a href="${this.siteUrl}" target="_blank" class="site-card-url text-muted">
-                ${this.siteUrl}
-              </a>
-            </div>
+        <div class="site-info">
+          <div class="site-name-row">
+            <a href="/sites/${this.siteId}" class="site-name" data-route>${this.siteName}</a>
+            ${showPublicBadge ? '<span class="site-badge">Public</span>' : ''}
           </div>
+          <div class="site-url">${this.siteUrl}</div>
+        </div>
 
-          <div class="flex items-center gap-2">
-            <button class="btn btn-sm" id="logs-btn">
-              Logs
-            </button>
-            <button class="btn btn-sm" id="redeploy-btn">
-              Redeploy
-            </button>
+        <div class="site-actions">
+          <button class="btn btn-sm" id="logs-btn">Logs</button>
+          <button class="btn btn-sm" id="redeploy-btn">Redeploy</button>
+          <button class="btn btn-sm" id="open-btn">Open</button>
 
-            <div class="dropdown">
-              <button class="btn btn-sm" id="menu-btn">
-                ⋮
+          <div class="dropdown ${this.dropdownOpen ? 'open' : ''}">
+            <button class="dropdown-trigger" id="menu-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="dropdown-menu">
+              <button class="dropdown-item" id="env-btn">Environment</button>
+              <button class="dropdown-item" id="storage-btn">
+                ${this.persistentStorage ? 'Disable' : 'Enable'} Storage
               </button>
-              ${this.dropdownOpen ? `
-                <div class="dropdown-menu">
-                  <button class="dropdown-item" id="view-site-btn">View Site</button>
-                  <button class="dropdown-item" id="environment-btn">Environment</button>
-                  <button class="dropdown-item" id="storage-btn">${this.persistentStorage ? 'Disable' : 'Enable'} Storage</button>
-                  <button class="dropdown-item" id="share-link-btn">Share Link</button>
-                  <button class="dropdown-item danger" id="delete-btn">Delete</button>
-                </div>
-              ` : ''}
+              <button class="dropdown-item" id="settings-btn">Settings</button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="delete-btn">Delete</button>
             </div>
           </div>
         </div>
       </div>
-
-      <style>
-        .site-card-info {
-          flex: 1;
-        }
-        .site-card-details {
-          flex: 1;
-        }
-        .site-card-name {
-          font-size: var(--font-size-2);
-          font-weight: 400;
-          color: var(--text-1);
-          margin-bottom: var(--size-1);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .site-card-url {
-          font-size: var(--font-size-0);
-        }
-      </style>
     `;
 
     // Attach event listeners
-    this.querySelector('#logs-btn')?.addEventListener('click', () => this.handleLogs());
+    this.querySelector('#logs-btn')?.addEventListener('click', () => this.handleViewLogs());
     this.querySelector('#redeploy-btn')?.addEventListener('click', () => this.handleRedeploy());
-    this.querySelector('#menu-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleDropdown();
-    });
+    this.querySelector('#open-btn')?.addEventListener('click', () => this.handleOpenSite());
+    this.querySelector('#menu-btn')?.addEventListener('click', (e) => this.toggleDropdown(e));
 
     if (this.dropdownOpen) {
-      this.querySelector('#view-site-btn')?.addEventListener('click', () => this.handleViewSite());
-      this.querySelector('#environment-btn')?.addEventListener('click', () => this.handleEnvironment());
+      this.querySelector('#env-btn')?.addEventListener('click', () => this.handleEnvironment());
       this.querySelector('#storage-btn')?.addEventListener('click', () => this.handleTogglePersistentStorage());
-      this.querySelector('#share-link-btn')?.addEventListener('click', () => this.handleShareLink());
+      this.querySelector('#settings-btn')?.addEventListener('click', () => this.handleSettings());
       this.querySelector('#delete-btn')?.addEventListener('click', () => this.handleDelete());
     }
   }

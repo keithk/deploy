@@ -1,12 +1,12 @@
 // ABOUTME: Main DeployApp web component with client-side routing
-// ABOUTME: Renders different views based on URL path (/, /settings, /actions, /sites/:id/logs)
+// ABOUTME: Renders different views based on URL path (/, /settings, /actions, /sites/:id)
 
 import { router, setupLinkInterception } from './router.js';
 import './components/header.js';
 import './components/sites.js';
 import './components/actions.js';
 import './components/settings.js';
-import './components/site-logs.js';
+import './components/site-detail.js';
 
 class DeployApp extends HTMLElement {
   connectedCallback() {
@@ -16,54 +16,47 @@ class DeployApp extends HTMLElement {
   }
 
   setupRoutes() {
-    router.addRoute('/', () => this.renderDashboard());
+    router.addRoute('/', () => this.renderSites());
     router.addRoute('/settings', () => this.renderSettings());
     router.addRoute('/actions', () => this.renderActions());
-    router.addRoute('/sites/:id/logs', (params) => this.renderLogs(params.id));
-    router.setDefault(() => this.renderDashboard());
+    router.addRoute('/sites/:id', (params) => this.renderSiteDetail(params.id));
+    router.setDefault(() => this.renderSites());
   }
 
-  renderDashboard() {
+  renderSites() {
     this.innerHTML = `
-      <div class="container">
-        <deploy-header></deploy-header>
-
-        <div style="margin-top: var(--size-5);">
-          <deploy-sites></deploy-sites>
-        </div>
-
-        <div style="margin-top: var(--size-5);">
-          <deploy-actions></deploy-actions>
-        </div>
-      </div>
+      <deploy-header></deploy-header>
+      <main class="main-content">
+        <deploy-sites></deploy-sites>
+      </main>
     `;
   }
 
   renderSettings() {
-    this.innerHTML = `<deploy-settings></deploy-settings>`;
+    this.innerHTML = `
+      <deploy-header></deploy-header>
+      <main class="main-content">
+        <deploy-settings></deploy-settings>
+      </main>
+    `;
   }
 
   renderActions() {
     this.innerHTML = `
-      <div class="container">
-        <header class="flex items-center justify-between mb-4">
-          <div>
-            <h1 style="font-size: var(--font-size-5); font-weight: 600; color: var(--text-1);">
-              Actions
-            </h1>
-          </div>
-          <a href="/" data-route class="btn">
-            Back to Dashboard
-          </a>
-        </header>
-
+      <deploy-header></deploy-header>
+      <main class="main-content">
         <deploy-actions></deploy-actions>
-      </div>
+      </main>
     `;
   }
 
-  renderLogs(siteId: string) {
-    this.innerHTML = `<site-logs site-id="${siteId}"></site-logs>`;
+  renderSiteDetail(siteId: string) {
+    this.innerHTML = `
+      <deploy-header></deploy-header>
+      <main class="main-content">
+        <deploy-site-detail site-id="${siteId}"></deploy-site-detail>
+      </main>
+    `;
   }
 }
 
