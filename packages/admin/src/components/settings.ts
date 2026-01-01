@@ -81,11 +81,20 @@ class DeploySettings extends HTMLElement {
       });
 
       if (response.ok) {
+        const result = await response.json();
         this.settings.domain = domain;
-        alert('Domain saved. Server restart required for changes to take effect.');
+
+        if (result.caddy_updated) {
+          alert(`Domain saved. ${result.caddy_updated}`);
+        } else {
+          alert('Domain saved.');
+        }
+      } else {
+        alert('Failed to save domain. Please try again.');
       }
     } catch (error) {
       console.error('Failed to save domain:', error);
+      alert('Failed to save domain. Please try again.');
     } finally {
       this.saving = false;
       this.render();

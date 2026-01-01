@@ -1,8 +1,11 @@
 
+// ABOUTME: CLI commands for managing Caddy configuration.
+// ABOUTME: Provides update, push, configure, and show subcommands.
+
 import { Command } from "commander";
 import { resolve, join } from "path";
 import chalk from "chalk";
-import { generateCaddyfileContent } from "@keithk/deploy-core";
+import { generateCaddyfileContent, generateSimpleCaddyfile } from "@keithk/deploy-core";
 import { execCommand, ensureDir } from "../utils/setup-utils";
 
 // Log functions using chalk
@@ -211,6 +214,102 @@ export function registerCaddyfileCommands(program: Command): void {
       } catch (error) {
         log.error(
           `Error showing Caddyfile: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        process.exit(1);
+      }
+    });
+
+  caddyfileCommand
+    .command("push")
+    .description("Push Caddyfile to a remote production server via SSH")
+    .option("-h, --host <host>", "Remote host (e.g., root@192.168.1.100)")
+    .option("-d, --domain <domain>", "Domain to use (overrides PROJECT_DOMAIN)")
+    .option("-p, --port <port>", "Deploy server port", "3000")
+    .option("--on-demand-tls", "Enable on-demand TLS for subdomains")
+    .option("--dry-run", "Show what would be pushed without executing")
+    .action(async (options) => {
+      try {
+        log.step("Pushing Caddyfile to remote server...");
+
+        const host = options.host || process.env.DEPLOY_HOST;
+        if (!host) {
+          log.error("No host specified. Use --host or set DEPLOY_HOST env var.");
+          log.info("Example: deploy caddyfile push --host root@192.168.1.100");
+          process.exit(1);
+        }
+
+        const domain = options.domain || process.env.PROJECT_DOMAIN;
+        if (!domain) {
+          log.error("No domain specified. Use --domain or set PROJECT_DOMAIN.");
+          process.exit(1);
+        }
+
+        const port = parseInt(options.port, 10);
+
+        log.info(`Host: ${host}`);
+        log.info(`Domain: ${domain}`);
+        log.info(`Port: ${port}`);
+        log.info(`On-demand TLS: ${options.onDemandTls ? 'enabled' : 'disabled'}`);
+
+        // Set env var for on-demand TLS if requested
+        if (options.onDemandTls) {
+          process.env.ENABLE_ON_DEMAND_TLS = "true";
+        }
+
+        // Generate simple Caddyfile for production
+        const caddyfileContent = generateSimpleCaddyfile(domain, port);
+
+        if (options.dryRun) {
+          log.info("\n--- Dry run: Would push this Caddyfile ---\n");
+          console.log(caddyfileContent);
+          log.info("\n--- End of Caddyfile ---");
+          process.exit(0);
+        }
+
+        // Write to temp file
+        const tempFile = `/tmp/caddyfile-push-${Date.now()}`;
+        await Bun.write(tempFile, caddyfileContent);
+
+        // Push via SSH
+        log.info("Copying Caddyfile to remote server...");
+        const scpProc = Bun.spawn(["scp", tempFile, `${host}:/tmp/Caddyfile.new`], {
+          stdio: ["inherit", "pipe", "pipe"],
+        });
+        const scpExit = await scpProc.exited;
+        if (scpExit !== 0) {
+          const stderr = await new Response(scpProc.stderr).text();
+          log.error(`Failed to copy Caddyfile: ${stderr}`);
+          process.exit(1);
+        }
+
+        // Move to /etc/caddy and reload
+        log.info("Installing Caddyfile and reloading Caddy...");
+        const sshProc = Bun.spawn([
+          "ssh",
+          host,
+          "cp /tmp/Caddyfile.new /etc/caddy/Caddyfile && systemctl reload caddy && rm /tmp/Caddyfile.new"
+        ], {
+          stdio: ["inherit", "pipe", "pipe"],
+        });
+        const sshExit = await sshProc.exited;
+        if (sshExit !== 0) {
+          const stderr = await new Response(sshProc.stderr).text();
+          log.error(`Failed to install Caddyfile: ${stderr}`);
+          process.exit(1);
+        }
+
+        // Cleanup local temp file
+        await Bun.spawn(["rm", tempFile]).exited;
+
+        log.success(`Caddyfile pushed to ${host} and Caddy reloaded`);
+        log.info(`Site should be accessible at https://${domain}`);
+        process.exit(0);
+
+      } catch (error) {
+        log.error(
+          `Error pushing Caddyfile: ${
             error instanceof Error ? error.message : String(error)
           }`
         );

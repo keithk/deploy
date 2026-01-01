@@ -1,7 +1,7 @@
 // ABOUTME: REST API endpoint for server settings.
 // ABOUTME: Provides domain configuration, GitHub token, and other server-level settings.
 
-import { settingsModel } from "@keithk/deploy-core";
+import { settingsModel, updateCaddyConfig } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 
 /**
@@ -54,9 +54,19 @@ export async function handleSettingsApi(
       }
 
       // Handle domain
+      let caddyMessage: string | undefined;
       if (body.domain !== undefined) {
         if (body.domain) {
           settingsModel.set("domain", body.domain);
+
+          // Regenerate Caddyfile with new domain
+          const caddyResult = await updateCaddyConfig({
+            domain: body.domain,
+            sitesDir: process.env.ROOT_DIR || "./sites",
+            port: parseInt(process.env.PORT || "3000", 10),
+          });
+
+          caddyMessage = caddyResult.message;
         } else {
           settingsModel.delete("domain");
         }
@@ -67,6 +77,7 @@ export async function handleSettingsApi(
         domain: settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "localhost",
         github_configured: !!settingsModel.get("github_token"),
         primary_site: settingsModel.get("primary_site") || null,
+        caddy_updated: caddyMessage,
       });
     } catch (error) {
       return Response.json(

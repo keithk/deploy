@@ -1,54 +1,19 @@
+// ABOUTME: CLI utilities for Caddy server management.
+// ABOUTME: Re-exports core utilities and adds CLI-specific functions.
 
 import { join, resolve } from "path";
-import { debug, info, error, warn } from "@keithk/deploy-core";
+import {
+  debug,
+  info,
+  error,
+  warn,
+  isCaddyInstalled,
+  isCaddyRunning,
+  reloadCaddy as coreReloadCaddy,
+} from "@keithk/deploy-core";
 
-/**
- * Check if Caddy is installed
- */
-export async function isCaddyInstalled(): Promise<boolean> {
-  try {
-    const proc = Bun.spawn(["which", "caddy"], {
-      stdio: ["ignore", "ignore", "ignore"]
-    });
-    return (await proc.exited) === 0;
-  } catch (error) {
-    return false;
-  }
-}
-
-/**
- * Check if Caddy is running
- */
-export async function isCaddyRunning(): Promise<boolean> {
-  try {
-    // Use pgrep to find Caddy processes
-    const proc = Bun.spawn(["pgrep", "caddy"], {
-      stdio: ["ignore", "pipe", "ignore"]
-    });
-
-    // Check the exit code AND if there's actual output
-    const exitCode = await proc.exited;
-    const output = await new Response(proc.stdout).text();
-
-    // pgrep returns exit code 0 only if processes were found
-    // and the output will contain the PIDs
-    return exitCode === 0 && output.trim().length > 0;
-  } catch (error) {
-    // If pgrep fails for some reason, try an alternative approach
-    try {
-      const proc = Bun.spawn(["ps", "aux"], {
-        stdio: ["ignore", "pipe", "ignore"]
-      });
-      const output = await new Response(proc.stdout).text();
-
-      // Look for caddy process specifically, not just the string "caddy"
-      // This regex looks for lines that contain /caddy or caddy as a command
-      return /\s(\/.*\/caddy|caddy)\s/.test(output);
-    } catch (e) {
-      return false;
-    }
-  }
-}
+// Re-export core utilities
+export { isCaddyInstalled, isCaddyRunning };
 
 /**
  * Get the domain from .env file or use default
@@ -261,46 +226,21 @@ async function ensureCaddyfileExists(mode: 'dev' | 'production'): Promise<boolea
 export async function reloadCaddy(): Promise<boolean> {
   debug("Reloading Caddy configuration...");
 
-  if (!(await isCaddyRunning())) {
-    debug("Caddy is not running. Cannot reload configuration.");
+  // Ensure Caddyfile exists before attempting reload
+  if (!(await ensureCaddyfileExists('dev'))) {
+    warn("Caddyfile does not exist and could not be generated");
     return false;
   }
 
-  try {
-    const caddyfilePath = getCaddyfilePath();
-    
-    // Ensure Caddyfile exists
-    if (!(await ensureCaddyfileExists('dev'))) {
-      warn("Caddyfile does not exist and could not be generated");
-      return false;
-    }
+  const result = await coreReloadCaddy(getCaddyfilePath());
 
-    // Reload configuration
-    const proc = Bun.spawn(
-      ["caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"],
-      {
-        stdio: ["ignore", "pipe", "pipe"]
-      }
-    );
-
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      error(`Failed to reload Caddy (exit code ${exitCode}):`, stderr);
-      return false;
-    }
-
-    debug("Caddy configuration reloaded successfully.");
-    return true;
-  } catch (err) {
-    error(
-      `Failed to reload Caddy: ${
-        err instanceof Error ? err.message : String(err)
-      }`
-    );
+  if (!result.success) {
+    error(result.message);
     return false;
   }
+
+  debug(result.message);
+  return true;
 }
 
 /**

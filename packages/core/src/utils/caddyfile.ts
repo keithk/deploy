@@ -68,7 +68,11 @@ ${domain} {
 
 # Wildcard subdomain - all subdomains route to deploy server
 *.${domain} {
-  encode {
+  ${enableOnDemandTls ? `tls {
+    on_demand
+  }
+
+  ` : ""}encode {
     gzip 6
     zstd
   }
