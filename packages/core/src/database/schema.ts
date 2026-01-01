@@ -80,3 +80,21 @@ export interface Settings {
   key: string;
   value: string;
 }
+
+/**
+ * Represents a deployment record for tracking deployment history
+ */
+export interface Deployment {
+  id: string;
+  site_id: string;
+  status: 'pending' | 'cloning' | 'building' | 'starting' | 'healthy' | 'switching' | 'completed' | 'failed' | 'rolled_back';
+  started_at: string;
+  completed_at: string | null;
+  old_container_id: string | null;
+  old_port: number | null;
+  new_container_id: string | null;
+  new_port: number | null;
+  commit_sha: string | null;
+  commit_message: string | null;
+  error_message: string | null;
+}

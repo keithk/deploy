@@ -7,6 +7,7 @@ import './components/sites.js';
 import './components/actions.js';
 import './components/settings.js';
 import './components/site-detail.js';
+import './components/deployments.js';
 
 class DeployApp extends HTMLElement {
   connectedCallback() {
@@ -19,6 +20,7 @@ class DeployApp extends HTMLElement {
     router.addRoute('/', () => this.renderSites());
     router.addRoute('/settings', () => this.renderSettings());
     router.addRoute('/actions', () => this.renderActions());
+    router.addRoute('/deployments', () => this.renderDeployments());
     router.addRoute('/sites/:id', (params) => this.renderSiteDetail(params.id));
     router.setDefault(() => this.renderSites());
   }
@@ -55,6 +57,15 @@ class DeployApp extends HTMLElement {
       <deploy-header></deploy-header>
       <main class="main-content">
         <deploy-site-detail site-id="${siteId}"></deploy-site-detail>
+      </main>
+    `;
+  }
+
+  renderDeployments() {
+    this.innerHTML = `
+      <deploy-header></deploy-header>
+      <main class="main-content">
+        <deploy-deployments></deploy-deployments>
       </main>
     `;
   }

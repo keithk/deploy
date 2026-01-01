@@ -11,6 +11,7 @@ import { handleSitesApi } from "./sites";
 import { handleSettingsApi } from "./settings";
 import { handleGitHubApi } from "./github";
 import { handleActionsApi } from "./actions";
+import { handleDeploymentsApi } from "./deployments";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -312,8 +313,18 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
     return handleActionsApi(request, path);
   }
 
+  // Route to deployments API
+  if (firstPart === 'deployments') {
+    return handleDeploymentsApi(request, path);
+  }
+
   // Route to sites API for database-backed operations
   if (firstPart === 'sites') {
+    // Check for site deployments endpoint: /api/sites/:id/deployments
+    if (apiParts.length === 3 && apiParts[2] === 'deployments') {
+      return handleDeploymentsApi(request, path);
+    }
+
     // Try database-backed sites API first
     const sitesApiResponse = await handleSitesApi(request, path);
     if (sitesApiResponse) {

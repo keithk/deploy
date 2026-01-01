@@ -80,6 +80,7 @@ class DeployHeader extends HTMLElement {
             </a>
             <nav class="header-nav">
               <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route>Sites</a>
+              <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route>Deployments</a>
               <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route>Actions</a>
               <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route>Settings</a>
             </nav>
