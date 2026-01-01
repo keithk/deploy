@@ -302,7 +302,8 @@ export async function handleSubdomainRequest(
   }
 
   // Handle based on site status
-  if (site.status === "running" && site.port) {
+  // Proxy to container if running, or building (for blue-green deployment where old container still serves)
+  if ((site.status === "running" || site.status === "building") && site.port) {
     // Proxy to the running container
     return proxyRequest(request, site.port);
   }

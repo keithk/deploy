@@ -50,16 +50,20 @@ async function getUsedPorts(): Promise<Set<number>> {
 
 /**
  * Get the next available port for a container
+ * @param siteName The site name for port lookup
+ * @param forceNew If true, always allocate a new port (for blue-green deployments)
  */
-async function getNextPort(siteName: string): Promise<number> {
+async function getNextPort(siteName: string, forceNew: boolean = false): Promise<number> {
   // Check if this site already has an allocated port in database
-  try {
-    const existingSite = siteModel.findByName(siteName);
-    if (existingSite?.port) {
-      return existingSite.port;
+  if (!forceNew) {
+    try {
+      const existingSite = siteModel.findByName(siteName);
+      if (existingSite?.port) {
+        return existingSite.port;
+      }
+    } catch (err) {
+      debug(`Could not check database for existing port: ${err}`);
     }
-  } catch (err) {
-    debug(`Could not check database for existing port: ${err}`);
   }
 
   // Find the next available port
@@ -82,6 +86,8 @@ function getContainerName(siteName: string): string {
 export interface ContainerOptions {
   envVars?: Record<string, string>;
   persistentStorage?: boolean;
+  /** If true, don't stop the old container - caller is responsible for cleanup */
+  blueGreen?: boolean;
 }
 
 /**
@@ -114,21 +120,32 @@ export function removeSiteDataDirectory(siteName: string): void {
   }
 }
 
+export interface ContainerStartResult extends ContainerInfo {
+  /** Container name that was started (may be temporary for blue-green) */
+  containerName: string;
+  /** If true, this is a blue-green deployment with old container still running */
+  isBlueGreen: boolean;
+}
+
 /**
  * Start a container from an image
  * @param imageName The Docker image name to run
  * @param siteName The site name (used for container naming and port allocation)
  * @param options Container options including env vars and persistent storage
- * @returns ContainerInfo with container ID and assigned port
+ * @returns ContainerStartResult with container ID, port, and deployment info
  */
 export async function startContainer(
   imageName: string,
   siteName: string,
   options: ContainerOptions = {}
-): Promise<ContainerInfo> {
-  const { envVars = {}, persistentStorage = false } = options;
-  const containerName = getContainerName(siteName);
-  const port = await getNextPort(siteName);
+): Promise<ContainerStartResult> {
+  const { envVars = {}, persistentStorage = false, blueGreen = false } = options;
+
+  // For blue-green deployment, use a temporary container name and new port
+  const containerName = blueGreen
+    ? `${getContainerName(siteName)}-new`
+    : getContainerName(siteName);
+  const port = await getNextPort(siteName, blueGreen);
 
   info(`Starting container ${containerName} from ${imageName} on port ${port}`);
 
@@ -151,10 +168,19 @@ export async function startContainer(
   }
 
   try {
-    // Stop any existing container with the same name
-    await stopContainer(siteName).catch(() => {
-      // Ignore errors if container doesn't exist
-    });
+    // For non-blue-green deployment, stop any existing container first
+    if (!blueGreen) {
+      await stopContainer(siteName).catch(() => {
+        // Ignore errors if container doesn't exist
+      });
+    } else {
+      // For blue-green, clean up any previous failed blue-green container
+      try {
+        await $`docker rm -f ${containerName}`.quiet();
+      } catch {
+        // Ignore if doesn't exist
+      }
+    }
 
     // Start the container
     const result = await $`docker run -d \
@@ -167,11 +193,57 @@ export async function startContainer(
     const containerId = result.trim();
     debug(`Started container ${containerId} on port ${port}`);
 
-    return { containerId, port };
+    return { containerId, port, containerName, isBlueGreen: blueGreen };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     error(`Failed to start container ${containerName}: ${message}`);
     throw new Error(`Container start failed: ${message}`);
+  }
+}
+
+/**
+ * Complete a blue-green deployment by stopping the old container and renaming the new one
+ * @param siteName The site name
+ */
+export async function completeBlueGreenDeployment(siteName: string): Promise<void> {
+  const oldContainerName = getContainerName(siteName);
+  const newContainerName = `${oldContainerName}-new`;
+
+  info(`Completing blue-green deployment for ${siteName}`);
+
+  try {
+    // Stop and remove the old container
+    await stopContainer(siteName).catch(() => {
+      debug(`No old container to stop for ${siteName}`);
+    });
+
+    // Rename the new container to the standard name
+    // Docker doesn't have a rename for running containers that changes the name,
+    // but we can use docker rename
+    await $`docker rename ${newContainerName} ${oldContainerName}`.quiet();
+    info(`Renamed ${newContainerName} to ${oldContainerName}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    error(`Failed to complete blue-green deployment for ${siteName}: ${message}`);
+    throw new Error(`Blue-green completion failed: ${message}`);
+  }
+}
+
+/**
+ * Rollback a blue-green deployment by removing the new container
+ * @param siteName The site name
+ */
+export async function rollbackBlueGreenDeployment(siteName: string): Promise<void> {
+  const newContainerName = `${getContainerName(siteName)}-new`;
+
+  info(`Rolling back blue-green deployment for ${siteName}`);
+
+  try {
+    await $`docker stop ${newContainerName}`.quiet();
+    await $`docker rm ${newContainerName}`.quiet();
+    info(`Removed failed container ${newContainerName}`);
+  } catch (err) {
+    debug(`Rollback cleanup: ${err}`);
   }
 }
 
@@ -240,4 +312,37 @@ export async function isContainerRunning(siteName: string): Promise<boolean> {
     // Container doesn't exist
     return false;
   }
+}
+
+/**
+ * Wait for a container to be healthy (responding on its port)
+ * @param port The port to check
+ * @param timeoutMs Maximum time to wait in milliseconds
+ * @returns True if container became healthy, false if timed out
+ */
+export async function waitForContainerHealth(
+  port: number,
+  timeoutMs: number = 30000
+): Promise<boolean> {
+  const startTime = Date.now();
+  const checkInterval = 1000;
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`http://localhost:${port}/`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(2000)
+      });
+      if (response.ok || response.status < 500) {
+        info(`Container on port ${port} is healthy (status: ${response.status})`);
+        return true;
+      }
+    } catch {
+      // Container not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkInterval));
+  }
+
+  error(`Container on port ${port} did not become healthy within ${timeoutMs}ms`);
+  return false;
 }

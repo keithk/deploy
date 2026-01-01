@@ -4,7 +4,13 @@
 import { info, debug, error, siteModel, logModel, actionModel } from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
-import { startContainer, stopContainer } from "./container";
+import {
+  startContainer,
+  stopContainer,
+  completeBlueGreenDeployment,
+  rollbackBlueGreenDeployment,
+  waitForContainerHealth
+} from "./container";
 import { discoverSiteActions } from "./actions";
 
 /**
@@ -40,9 +46,15 @@ export async function deploySite(
 
   log(`Starting deployment for ${site.name}`);
 
+  // Check if this site already has a running container (for blue-green deployment)
+  const hasExistingContainer = site.status === "running" && site.container_id;
+
   try {
-    // Update status to building
-    siteModel.updateStatus(siteId, "building");
+    // Only update status to building if there's NO existing container
+    // For blue-green deploys, keep status as "running" so routing continues to work
+    if (!hasExistingContainer) {
+      siteModel.updateStatus(siteId, "building");
+    }
 
     // Step 1: Clone or pull the repository
     log(`Cloning repository from ${site.git_url}...`);
@@ -58,19 +70,41 @@ export async function deploySite(
     log(`Build complete: ${buildResult.imageName}`);
 
     // Step 3: Start the container with environment variables
-    log(`Starting container...`);
+    // Use blue-green deployment if there's an existing container
+    log(`Starting container${hasExistingContainer ? " (blue-green deployment)" : ""}...`);
     const envVars = parseEnvVars(site.env_vars);
     const containerInfo = await startContainer(
       buildResult.imageName,
       site.name,
       {
         envVars,
-        persistentStorage: site.persistent_storage === 1
+        persistentStorage: site.persistent_storage === 1,
+        blueGreen: !!hasExistingContainer
       }
     );
     log(`Container started on port ${containerInfo.port}`);
 
-    // Step 4: Update status to running with container info
+    // Step 4: Wait for the new container to be healthy before switching
+    log(`Waiting for container to be healthy...`);
+    const isHealthy = await waitForContainerHealth(containerInfo.port);
+    if (!isHealthy) {
+      // Rollback: remove the new container and keep the old one
+      if (containerInfo.isBlueGreen) {
+        await rollbackBlueGreenDeployment(site.name);
+        // Restore status to running since old container is still serving
+        siteModel.updateStatus(siteId, "running", site.container_id ?? undefined, site.port ?? undefined);
+      }
+      throw new Error("Container failed health check");
+    }
+    log(`Container is healthy`);
+
+    // Step 5: Complete blue-green deployment (stop old container, rename new)
+    if (containerInfo.isBlueGreen) {
+      log(`Completing blue-green deployment...`);
+      await completeBlueGreenDeployment(site.name);
+    }
+
+    // Step 6: Update status to running with new container info
     siteModel.updateStatus(
       siteId,
       "running",
@@ -79,7 +113,7 @@ export async function deploySite(
     );
     siteModel.markDeployed(siteId);
 
-    // Step 5: Discover and register actions from the site
+    // Step 7: Discover and register actions from the site
     log(`Discovering actions...`);
     const actions = await discoverSiteActions(sitePath, siteId);
     if (actions.length > 0) {
@@ -106,8 +140,14 @@ export async function deploySite(
     error(`Deployment failed for ${site.name}: ${message}`);
     logModel.append(siteId, "build", `ERROR: ${message}`);
 
-    // Update status to error
-    siteModel.updateStatus(siteId, "error");
+    // Update status to error (but only if we don't have a healthy old container)
+    if (!hasExistingContainer) {
+      siteModel.updateStatus(siteId, "error");
+    } else {
+      // Restore to running if old container is still serving
+      siteModel.updateStatus(siteId, "running", site.container_id ?? undefined, site.port ?? undefined);
+      log(`Restored to previous running state`);
+    }
 
     return { success: false, error: message };
   }

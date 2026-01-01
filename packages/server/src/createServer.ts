@@ -418,7 +418,10 @@ export async function createServer({
           const primarySiteId = settingsModel.get("primary_site");
           if (primarySiteId) {
             const primarySite = siteModel.findById(primarySiteId);
-            if (primarySite && primarySite.status === "running" && primarySite.port) {
+            // Proxy to primary site if it has a valid port and is running or building
+            // (during blue-green deployment, old container keeps serving while building)
+            if (primarySite && primarySite.port &&
+                (primarySite.status === "running" || primarySite.status === "building")) {
               // Proxy to the primary site's container
               const response = await proxyRequest(request, primarySite.port);
               logger.logResponse(request, response, loggerStart);

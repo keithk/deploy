@@ -11,6 +11,9 @@ interface Settings {
   domain?: string;
   github_configured?: boolean;
   primary_site?: string | null;
+  build_nice_level?: number;
+  build_io_class?: 'idle' | 'best-effort' | 'realtime';
+  build_max_parallelism?: number;
 }
 
 class DeploySettings extends HTMLElement {
@@ -101,6 +104,35 @@ class DeploySettings extends HTMLElement {
     }
   }
 
+  async saveBuildSettings(settings: Partial<Settings>) {
+    this.saving = true;
+    this.render();
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        this.settings.build_nice_level = result.build_nice_level;
+        this.settings.build_io_class = result.build_io_class;
+        this.settings.build_max_parallelism = result.build_max_parallelism;
+      } else {
+        alert('Failed to save build settings. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to save build settings:', error);
+      alert('Failed to save build settings. Please try again.');
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+
   render() {
     if (this.loading) {
       this.innerHTML = `
@@ -185,6 +217,71 @@ class DeploySettings extends HTMLElement {
         </p>
       </div>
 
+      <div class="settings-section">
+        <h3 class="settings-section-title">Build Resources</h3>
+        <p class="text-muted mb-4">
+          Control how much system resources builds consume. Lower values = less resource usage but slower builds.
+        </p>
+
+        <div class="build-settings-grid">
+          <div class="form-group">
+            <label class="form-label" for="build-nice-level">
+              CPU Priority (nice level)
+              <span class="form-hint">0 = highest priority, 19 = lowest</span>
+            </label>
+            <input
+              type="range"
+              id="build-nice-level"
+              class="form-range"
+              min="0"
+              max="19"
+              value="${this.settings.build_nice_level ?? 10}"
+              ${this.saving ? 'disabled' : ''}
+            >
+            <span class="range-value">${this.settings.build_nice_level ?? 10}</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="build-io-class">
+              I/O Priority
+              <span class="form-hint">Controls disk access priority during builds</span>
+            </label>
+            <select id="build-io-class" class="form-select" ${this.saving ? 'disabled' : ''}>
+              <option value="idle" ${this.settings.build_io_class === 'idle' ? 'selected' : ''}>
+                Idle (lowest - only when system idle)
+              </option>
+              <option value="best-effort" ${this.settings.build_io_class === 'best-effort' ? 'selected' : ''}>
+                Best Effort (normal priority)
+              </option>
+              <option value="realtime" ${this.settings.build_io_class === 'realtime' ? 'selected' : ''}>
+                Realtime (highest - not recommended)
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="build-parallelism">
+              Build Parallelism
+              <span class="form-hint">Max concurrent build operations (1-16)</span>
+            </label>
+            <input
+              type="range"
+              id="build-parallelism"
+              class="form-range"
+              min="1"
+              max="8"
+              value="${this.settings.build_max_parallelism ?? 2}"
+              ${this.saving ? 'disabled' : ''}
+            >
+            <span class="range-value">${this.settings.build_max_parallelism ?? 2}</span>
+          </div>
+        </div>
+
+        <button id="save-build-settings-btn" class="btn btn-primary mt-4" ${this.saving ? 'disabled' : ''}>
+          Save Build Settings
+        </button>
+      </div>
+
       <style>
         .domain-input-row {
           display: flex;
@@ -192,6 +289,46 @@ class DeploySettings extends HTMLElement {
         }
         .domain-input-row .form-input {
           flex: 1;
+        }
+        .build-settings-grid {
+          display: grid;
+          gap: var(--space-4);
+        }
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+        }
+        .form-label {
+          font-weight: 500;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1);
+        }
+        .form-hint {
+          font-weight: 400;
+          font-size: 0.85em;
+          color: var(--text-muted);
+        }
+        .form-range {
+          width: 100%;
+          max-width: 300px;
+        }
+        .range-value {
+          font-family: var(--font-mono);
+          font-size: 0.9em;
+          color: var(--text-muted);
+        }
+        .form-select {
+          padding: var(--space-2) var(--space-3);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          background: var(--bg-primary);
+          font-size: 1rem;
+          max-width: 300px;
+        }
+        .mt-4 {
+          margin-top: var(--space-4);
         }
       </style>
     `;
@@ -211,6 +348,32 @@ class DeploySettings extends HTMLElement {
       if (input?.value) {
         this.saveDomain(input.value);
       }
+    });
+
+    // Build settings: update displayed value on range change
+    const niceLevel = this.querySelector('#build-nice-level') as HTMLInputElement;
+    niceLevel?.addEventListener('input', () => {
+      const valueSpan = niceLevel.nextElementSibling;
+      if (valueSpan) valueSpan.textContent = niceLevel.value;
+    });
+
+    const parallelism = this.querySelector('#build-parallelism') as HTMLInputElement;
+    parallelism?.addEventListener('input', () => {
+      const valueSpan = parallelism.nextElementSibling;
+      if (valueSpan) valueSpan.textContent = parallelism.value;
+    });
+
+    // Save build settings button
+    this.querySelector('#save-build-settings-btn')?.addEventListener('click', () => {
+      const niceInput = this.querySelector('#build-nice-level') as HTMLInputElement;
+      const ioSelect = this.querySelector('#build-io-class') as HTMLSelectElement;
+      const parallelismInput = this.querySelector('#build-parallelism') as HTMLInputElement;
+
+      this.saveBuildSettings({
+        build_nice_level: parseInt(niceInput?.value || '10', 10),
+        build_io_class: (ioSelect?.value || 'idle') as Settings['build_io_class'],
+        build_max_parallelism: parseInt(parallelismInput?.value || '2', 10),
+      });
     });
   }
 }

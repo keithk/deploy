@@ -233,7 +233,8 @@ export class SiteModel {
   }
 
   /**
-   * Update site status and optionally container_id and port
+   * Update site status and optionally container_id and port.
+   * If containerId and port are not provided, they are preserved (not cleared).
    */
   public updateStatus(
     id: string,
@@ -241,10 +242,19 @@ export class SiteModel {
     containerId?: string,
     port?: number
   ): void {
-    const stmt = this.db.prepare(`
-      UPDATE sites SET status = ?, container_id = ?, port = ? WHERE id = ?
-    `);
-    stmt.run(status, containerId ?? null, port ?? null, id);
+    // If container info is provided, update everything
+    if (containerId !== undefined || port !== undefined) {
+      const stmt = this.db.prepare(`
+        UPDATE sites SET status = ?, container_id = ?, port = ? WHERE id = ?
+      `);
+      stmt.run(status, containerId ?? null, port ?? null, id);
+    } else {
+      // Only update status, preserve existing container_id and port
+      const stmt = this.db.prepare(`
+        UPDATE sites SET status = ? WHERE id = ?
+      `);
+      stmt.run(status, id);
+    }
   }
 
   /**

@@ -26,6 +26,10 @@ export async function handleSettingsApi(
       domain: settings.domain || process.env.PROJECT_DOMAIN || "localhost",
       github_configured: !!settings.github_token,
       primary_site: settings.primary_site || null,
+      // Build resource settings
+      build_nice_level: parseInt(settings.build_nice_level || process.env.BUILD_NICE_LEVEL || "10", 10),
+      build_io_class: settings.build_io_class || process.env.BUILD_IO_CLASS || "idle",
+      build_max_parallelism: parseInt(settings.build_max_parallelism || process.env.BUILD_MAX_PARALLELISM || "2", 10),
       // Don't expose the actual token
     });
   }
@@ -72,11 +76,35 @@ export async function handleSettingsApi(
         }
       }
 
+      // Handle build resource settings
+      if (body.build_nice_level !== undefined) {
+        const level = parseInt(body.build_nice_level, 10);
+        if (level >= 0 && level <= 19) {
+          settingsModel.set("build_nice_level", String(level));
+        }
+      }
+
+      if (body.build_io_class !== undefined) {
+        if (["idle", "best-effort", "realtime"].includes(body.build_io_class)) {
+          settingsModel.set("build_io_class", body.build_io_class);
+        }
+      }
+
+      if (body.build_max_parallelism !== undefined) {
+        const parallelism = parseInt(body.build_max_parallelism, 10);
+        if (parallelism >= 1 && parallelism <= 16) {
+          settingsModel.set("build_max_parallelism", String(parallelism));
+        }
+      }
+
       return Response.json({
         success: true,
         domain: settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "localhost",
         github_configured: !!settingsModel.get("github_token"),
         primary_site: settingsModel.get("primary_site") || null,
+        build_nice_level: parseInt(settingsModel.get("build_nice_level") || "10", 10),
+        build_io_class: settingsModel.get("build_io_class") || "idle",
+        build_max_parallelism: parseInt(settingsModel.get("build_max_parallelism") || "2", 10),
         caddy_updated: caddyMessage,
       });
     } catch (error) {

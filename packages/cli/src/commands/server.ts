@@ -579,17 +579,17 @@ export function registerServerCommands(program: Command): void {
           }
           info("✅ Deploy service restarted");
 
-          // Step 5: Reload Caddy
-          info("\n🔄 Reloading Caddy...");
-          const caddyProc = spawn(["sudo", "systemctl", "reload", "caddy"], {
+          // Step 5: Restart Caddy (reload isn't always sufficient)
+          info("\n🔄 Restarting Caddy...");
+          const caddyProc = spawn(["sudo", "systemctl", "restart", "caddy"], {
             cwd,
             stdio: ["inherit", "inherit", "inherit"]
           });
           await caddyProc.exited;
           if (caddyProc.exitCode !== 0) {
-            warn("Failed to reload Caddy via systemctl");
+            warn("Failed to restart Caddy via systemctl");
           } else {
-            info("✅ Caddy reloaded");
+            info("✅ Caddy restarted");
           }
 
           // Wait and check status
