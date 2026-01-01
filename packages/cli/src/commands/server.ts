@@ -514,7 +514,7 @@ export function registerServerCommands(program: Command): void {
   program
     .command("update")
     .description("Pull latest code, rebuild, and restart the server")
-    .option("--branch <branch>", "Git branch to pull from", "feature/simplified-deploy")
+    .option("--branch <branch>", "Git branch to pull from", "main")
     .option("--skip-restart", "Skip restarting the server after update")
     .action(async (options) => {
       try {
@@ -562,7 +562,7 @@ export function registerServerCommands(program: Command): void {
 
         // Step 4: Restart service (if running as systemd)
         if (!options.skipRestart) {
-          info("\n🔄 Restarting service...");
+          info("\n🔄 Restarting deploy service...");
           const restartProc = spawn(["sudo", "systemctl", "restart", "deploy"], {
             cwd,
             stdio: ["inherit", "inherit", "inherit"]
@@ -577,7 +577,20 @@ export function registerServerCommands(program: Command): void {
             });
             await manualRestartProc.exited;
           }
-          info("✅ Service restarted");
+          info("✅ Deploy service restarted");
+
+          // Step 5: Reload Caddy
+          info("\n🔄 Reloading Caddy...");
+          const caddyProc = spawn(["sudo", "systemctl", "reload", "caddy"], {
+            cwd,
+            stdio: ["inherit", "inherit", "inherit"]
+          });
+          await caddyProc.exited;
+          if (caddyProc.exitCode !== 0) {
+            warn("Failed to reload Caddy via systemctl");
+          } else {
+            info("✅ Caddy reloaded");
+          }
 
           // Wait and check status
           await new Promise(resolve => setTimeout(resolve, 2000));
