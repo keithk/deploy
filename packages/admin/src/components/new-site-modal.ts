@@ -179,12 +179,11 @@ class DeployNewSiteModal extends HTMLElement {
               <div class="form-group">
                 <button
                   type="button"
-                  class="btn ${this.showRepoPicker ? 'btn-primary' : ''}"
+                  class="btn toggle-repos-btn ${this.showRepoPicker ? 'btn-primary' : ''}"
                   id="toggle-repos-btn"
-                  style="width: 100%;"
                   ${this.submitting ? 'disabled' : ''}
                 >
-                  ${this.showRepoPicker ? '← back to form' : 'select from github'}
+                  ${this.showRepoPicker ? '← BACK TO FORM' : 'SELECT FROM GITHUB'}
                 </button>
               </div>
             ` : ''}
@@ -199,20 +198,16 @@ class DeployNewSiteModal extends HTMLElement {
                   value="${this.repoFilter}"
                 />
               </div>
-              <div class="repo-list" style="max-height: 300px; overflow-y: auto; border: 3px solid var(--black);">
+              <div class="repo-list">
                 ${this.loadingRepos ? `
-                  <div class="loading">loading repos...</div>
+                  <div class="repo-loading">loading repos...</div>
                 ` : filteredRepos.length === 0 ? `
-                  <div style="padding: 1rem; text-align: center; color: var(--gray);">no repos found</div>
+                  <div class="repo-empty">no repos found</div>
                 ` : filteredRepos.map(repo => `
-                  <div class="repo-item" data-clone-url="${repo.clone_url}" data-name="${repo.name}" style="
-                    padding: 0.75rem 1rem;
-                    border-bottom: 2px solid var(--black);
-                    cursor: pointer;
-                  ">
-                    <div style="font-weight: 700;">${repo.name}</div>
-                    ${repo.description ? `<div style="font-size: 0.75rem; color: var(--gray); margin-top: 0.25rem;">${repo.description}</div>` : ''}
-                    <div style="font-size: 0.625rem; color: var(--gray); margin-top: 0.25rem;">
+                  <div class="repo-item" data-clone-url="${repo.clone_url}" data-name="${repo.name}">
+                    <div class="repo-name">${repo.name}</div>
+                    ${repo.description ? `<div class="repo-description">${repo.description}</div>` : ''}
+                    <div class="repo-meta">
                       ${repo.private ? 'private' : 'public'} · updated ${new Date(repo.updated_at).toLocaleDateString()}
                     </div>
                   </div>
@@ -234,21 +229,20 @@ class DeployNewSiteModal extends HTMLElement {
 
               <div class="form-group">
                 <label class="form-label" for="subdomain">subdomain</label>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div class="subdomain-input-wrapper">
                   <input
                     type="text"
                     id="subdomain"
-                    class="form-input"
+                    class="form-input subdomain-input"
                     placeholder="my-site"
                     value="${this.subdomain}"
                     ${this.submitting ? 'disabled' : ''}
                     pattern="[a-z0-9-]+"
                     required
-                    style="flex: 1;"
                   />
-                  <span class="text-muted" style="white-space: nowrap;">.${this.domain}</span>
+                  <span class="subdomain-suffix text-muted">.${this.domain}</span>
                 </div>
-                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 0.5rem;">
+                <small class="subdomain-hint text-muted">
                   lowercase letters, numbers, and hyphens only
                 </small>
               </div>
@@ -267,13 +261,79 @@ class DeployNewSiteModal extends HTMLElement {
                   class="btn btn-primary"
                   ${this.submitting ? 'disabled' : ''}
                 >
-                  ${this.submitting ? 'creating...' : 'create site'}
+                  ${this.submitting ? 'CREATING...' : 'CREATE SITE'}
                 </button>
               </div>
             `}
           </form>
         </div>
       </div>
+
+      <style>
+        .toggle-repos-btn {
+          width: 100%;
+        }
+        .repo-list {
+          max-height: 300px;
+          overflow-y: auto;
+          border: 1px solid var(--border);
+        }
+        .repo-loading,
+        .repo-empty {
+          padding: 1rem;
+          text-align: center;
+          color: var(--text-2);
+        }
+        .repo-item {
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid var(--border);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .repo-item:last-child {
+          border-bottom: none;
+        }
+        .repo-item:hover {
+          background: var(--text-1);
+          color: var(--surface-1);
+        }
+        .repo-name {
+          font-weight: 400;
+        }
+        .repo-description {
+          font-size: 0.75rem;
+          color: var(--text-2);
+          margin-top: 0.25rem;
+        }
+        .repo-item:hover .repo-description {
+          color: var(--surface-2);
+        }
+        .repo-meta {
+          font-size: 0.625rem;
+          color: var(--text-2);
+          margin-top: 0.25rem;
+          text-transform: uppercase;
+        }
+        .repo-item:hover .repo-meta {
+          color: var(--surface-2);
+        }
+        .subdomain-input-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .subdomain-input {
+          flex: 1;
+        }
+        .subdomain-suffix {
+          white-space: nowrap;
+        }
+        .subdomain-hint {
+          font-size: 0.75rem;
+          display: block;
+          margin-top: 0.5rem;
+        }
+      </style>
     `;
 
     // Attach event listeners
@@ -320,14 +380,6 @@ class DeployNewSiteModal extends HTMLElement {
         const cloneUrl = item.getAttribute('data-clone-url') || '';
         const name = item.getAttribute('data-name') || '';
         this.handleRepoSelect({ clone_url: cloneUrl, name } as GitHubRepo);
-      });
-      item.addEventListener('mouseenter', () => {
-        (item as HTMLElement).style.background = 'var(--black)';
-        (item as HTMLElement).style.color = 'var(--white)';
-      });
-      item.addEventListener('mouseleave', () => {
-        (item as HTMLElement).style.background = '';
-        (item as HTMLElement).style.color = '';
       });
     });
 

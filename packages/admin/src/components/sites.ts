@@ -72,11 +72,11 @@ class DeploySites extends HTMLElement {
     this.innerHTML = `
       <div class="sites-section">
         <div class="flex items-center justify-between mb-4">
-          <h2 style="font-size: var(--font-size-4); font-weight: 600; color: var(--text-1);">
-            Sites
+          <h2 class="sites-heading">
+            SITES
           </h2>
           <button class="btn btn-primary" id="new-site-btn">
-            + New
+            + NEW
           </button>
         </div>
 
@@ -84,7 +84,7 @@ class DeploySites extends HTMLElement {
           <input
             type="text"
             class="form-input"
-            placeholder="Search sites..."
+            placeholder="search sites..."
             id="search-input"
             value="${this.searchQuery}"
           />
@@ -94,6 +94,19 @@ class DeploySites extends HTMLElement {
           ${this.renderContent()}
         </div>
       </div>
+
+      <style>
+        .sites-heading {
+          font-size: var(--font-size-4);
+          font-weight: 400;
+          color: var(--text-1);
+          letter-spacing: 0.1em;
+        }
+        .empty-state {
+          text-align: center;
+          padding: var(--size-5);
+        }
+      </style>
     `;
 
     // Attach event listeners
@@ -118,16 +131,16 @@ class DeploySites extends HTMLElement {
 
   renderContent(): string {
     if (this.loading) {
-      return '<p class="text-muted">Loading sites...</p>';
+      return '<p class="text-muted">loading sites...</p>';
     }
 
     const sites = this.filteredSites;
 
     if (sites.length === 0) {
       return `
-        <div class="card" style="text-align: center; padding: var(--size-5);">
+        <div class="card empty-state">
           <p class="text-muted">
-            ${this.searchQuery ? 'No sites found matching your search.' : 'No sites yet. Create your first site to get started.'}
+            ${this.searchQuery ? 'no sites found matching your search.' : 'no sites yet. create your first site to get started.'}
           </p>
         </div>
       `;

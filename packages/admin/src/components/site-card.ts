@@ -117,16 +117,16 @@ class DeploySiteCard extends HTMLElement {
     this.innerHTML = `
       <div class="card">
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3" style="flex: 1;">
+          <div class="flex items-center gap-3 site-card-info">
             <span class="status-dot ${this.status}">
               ${this.status}
             </span>
 
-            <div style="flex: 1;">
-              <h3 style="font-size: var(--font-size-2); font-weight: 600; color: var(--text-1); margin-bottom: var(--size-1);">
+            <div class="site-card-details">
+              <h3 class="site-card-name">
                 ${this.siteName}
               </h3>
-              <a href="${this.siteUrl}" target="_blank" class="text-muted" style="font-size: var(--font-size-0); text-decoration: none;">
+              <a href="${this.siteUrl}" target="_blank" class="site-card-url text-muted">
                 ${this.siteUrl}
               </a>
             </div>
@@ -156,6 +156,26 @@ class DeploySiteCard extends HTMLElement {
           </div>
         </div>
       </div>
+
+      <style>
+        .site-card-info {
+          flex: 1;
+        }
+        .site-card-details {
+          flex: 1;
+        }
+        .site-card-name {
+          font-size: var(--font-size-2);
+          font-weight: 400;
+          color: var(--text-1);
+          margin-bottom: var(--size-1);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .site-card-url {
+          font-size: var(--font-size-0);
+        }
+      </style>
     `;
 
     // Attach event listeners

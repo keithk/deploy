@@ -88,11 +88,11 @@ class DeployActions extends HTMLElement {
     if (this.loading) {
       this.innerHTML = `
         <div class="actions-section">
-          <h2 style="font-size: var(--font-size-4); font-weight: 600; color: var(--text-1); margin-bottom: var(--size-4);">
-            Actions
+          <h2 class="actions-heading">
+            ACTIONS
           </h2>
-          <div class="card" style="text-align: center; padding: var(--size-5);">
-            <p class="text-muted">Loading actions...</p>
+          <div class="card empty-state">
+            <p class="text-muted">loading actions...</p>
           </div>
         </div>
       `;
@@ -102,12 +102,12 @@ class DeployActions extends HTMLElement {
     if (this.actions.length === 0) {
       this.innerHTML = `
         <div class="actions-section">
-          <h2 style="font-size: var(--font-size-4); font-weight: 600; color: var(--text-1); margin-bottom: var(--size-4);">
-            Actions
+          <h2 class="actions-heading">
+            ACTIONS
           </h2>
-          <div class="card" style="text-align: center; padding: var(--size-5);">
+          <div class="card empty-state">
             <p class="text-muted">
-              No actions found. Actions are discovered from deployed sites' <code>.deploy/actions/</code> directories.
+              no actions found. actions are discovered from deployed sites' <code>.deploy/actions/</code> directories.
             </p>
           </div>
         </div>
@@ -117,8 +117,8 @@ class DeployActions extends HTMLElement {
 
     this.innerHTML = `
       <div class="actions-section">
-        <h2 style="font-size: var(--font-size-4); font-weight: 600; color: var(--text-1); margin-bottom: var(--size-4);">
-          Actions
+        <h2 class="actions-heading">
+          ACTIONS
         </h2>
 
         <div class="actions-list">
@@ -135,12 +135,12 @@ class DeployActions extends HTMLElement {
                   data-action-id="${action.id}"
                   ${this.runningAction === action.id ? 'disabled' : ''}
                 >
-                  ${this.runningAction === action.id ? 'Running...' : 'Run'}
+                  ${this.runningAction === action.id ? 'RUNNING...' : 'RUN'}
                 </button>
               </div>
               <div class="action-meta">
-                ${action.schedule ? `<span>Schedule: ${action.schedule}</span>` : ''}
-                <span>Last run: ${this.formatDate(action.last_run_at)}</span>
+                ${action.schedule ? `<span>schedule: ${action.schedule}</span>` : ''}
+                <span>last run: ${this.formatDate(action.last_run_at)}</span>
               </div>
             </div>
           `).join('')}
@@ -148,6 +148,17 @@ class DeployActions extends HTMLElement {
       </div>
 
       <style>
+        .empty-state {
+          text-align: center;
+          padding: var(--size-5);
+        }
+        .actions-heading {
+          font-size: var(--font-size-4);
+          font-weight: 400;
+          color: var(--text-1);
+          margin-bottom: var(--size-4);
+          letter-spacing: 0.1em;
+        }
         .actions-list {
           display: flex;
           flex-direction: column;
@@ -167,8 +178,10 @@ class DeployActions extends HTMLElement {
           gap: var(--size-2);
         }
         .action-name {
-          font-weight: 600;
+          font-weight: 400;
           color: var(--text-1);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
         .action-meta {
           display: flex;
@@ -179,14 +192,12 @@ class DeployActions extends HTMLElement {
         }
         .type-badge, .status-badge {
           padding: var(--size-1) var(--size-2);
-          border-radius: var(--radius-1);
+          border-radius: 0;
           font-size: var(--font-size-00);
-          color: white;
-          font-weight: 500;
-        }
-        .btn-sm {
-          padding: var(--size-1) var(--size-3);
-          font-size: var(--font-size-0);
+          color: var(--surface-1);
+          font-weight: 400;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
       </style>
     `;

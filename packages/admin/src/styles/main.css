@@ -1,59 +1,37 @@
 /* ABOUTME: Main stylesheet for Deploy dashboard UI */
-/* ABOUTME: Uses Open Props, monospace fonts, and supports light/dark modes */
+/* ABOUTME: Minimalist terminal-style design with monospace fonts and pure black/white aesthetic */
 
 :root {
   /* Monospace font stack */
   --font-mono: "Monaspace Neon", "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
 
-  /* Light mode colors (using Open Props as base) */
-  --surface-1: var(--gray-0);
-  --surface-2: var(--gray-1);
-  --surface-3: var(--gray-2);
-  --text-1: var(--gray-9);
-  --text-2: var(--gray-7);
-  --text-3: var(--gray-6);
-  --border: var(--gray-3);
-  --border-hover: var(--gray-4);
+  /* Pure black/white color scheme */
+  --surface-1: #000000;
+  --surface-2: #0a0a0a;
+  --surface-3: #141414;
+  --text-1: #ffffff;
+  --text-2: #a0a0a0;
+  --text-3: #707070;
+  --border: #333333;
+  --border-hover: #4a4a4a;
 
-  /* Status colors */
-  --status-running: var(--green-6);
-  --status-running-bg: var(--green-1);
-  --status-stopped: var(--red-6);
-  --status-stopped-bg: var(--red-1);
-  --status-building: var(--yellow-6);
-  --status-building-bg: var(--yellow-1);
-  --status-error: var(--orange-6);
-  --status-error-bg: var(--orange-1);
+  /* Status colors - subdued */
+  --status-running: #00ff00;
+  --status-running-bg: rgba(0, 255, 0, 0.1);
+  --status-stopped: #ff0000;
+  --status-stopped-bg: rgba(255, 0, 0, 0.1);
+  --status-building: #ffaa00;
+  --status-building-bg: rgba(255, 170, 0, 0.1);
+  --status-error: #ff0000;
+  --status-error-bg: rgba(255, 0, 0, 0.1);
 
-  /* Primary accent */
-  --accent: var(--blue-6);
-  --accent-hover: var(--blue-7);
-}
+  /* Minimal accent - only for critical UI states */
+  --accent: #ffffff;
+  --accent-hover: #cccccc;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface-1: var(--gray-9);
-    --surface-2: var(--gray-8);
-    --surface-3: var(--gray-7);
-    --text-1: var(--gray-1);
-    --text-2: var(--gray-3);
-    --text-3: var(--gray-4);
-    --border: var(--gray-7);
-    --border-hover: var(--gray-6);
-
-    /* Status colors for dark mode */
-    --status-running: var(--green-4);
-    --status-running-bg: var(--green-9);
-    --status-stopped: var(--red-4);
-    --status-stopped-bg: var(--red-9);
-    --status-building: var(--yellow-4);
-    --status-building-bg: var(--yellow-9);
-    --status-error: var(--orange-4);
-    --status-error-bg: var(--orange-9);
-
-    --accent: var(--blue-5);
-    --accent-hover: var(--blue-4);
-  }
+  /* Link color */
+  --link: #ffffff;
+  --link-hover: #cccccc;
 }
 
 * {
@@ -81,7 +59,7 @@ body {
 .card {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2);
+  border-radius: 0;
   padding: var(--size-4);
   margin-bottom: var(--size-4);
   transition: border-color 0.2s;
@@ -98,12 +76,12 @@ body {
   gap: var(--size-2);
   padding: var(--size-2) var(--size-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2);
+  border-radius: 0;
   font-family: var(--font-mono);
   font-size: var(--font-size-0);
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text-1);
   transition: all 0.2s;
   text-decoration: none;
@@ -111,18 +89,23 @@ body {
 
 .btn:hover {
   background: var(--surface-3);
-  border-color: var(--border-hover);
+  border-color: var(--text-1);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  background: var(--text-1);
+  color: var(--surface-1);
+  border-color: var(--text-1);
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--text-2);
+  border-color: var(--text-2);
 }
 
 .btn-sm {
@@ -136,9 +119,11 @@ body {
   align-items: center;
   gap: var(--size-2);
   padding: var(--size-1) var(--size-2);
-  border-radius: var(--radius-2);
+  border-radius: 0;
   font-size: var(--font-size-00);
-  font-weight: 500;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .status-dot::before {
@@ -146,28 +131,32 @@ body {
   display: inline-block;
   width: var(--size-2);
   height: var(--size-2);
-  border-radius: var(--radius-round);
+  border-radius: 0;
   background: currentColor;
 }
 
 .status-dot.running {
   color: var(--status-running);
   background: var(--status-running-bg);
+  border: 1px solid var(--status-running);
 }
 
 .status-dot.stopped {
   color: var(--status-stopped);
   background: var(--status-stopped-bg);
+  border: 1px solid var(--status-stopped);
 }
 
 .status-dot.building {
   color: var(--status-building);
   background: var(--status-building-bg);
+  border: 1px solid var(--status-building);
 }
 
 .status-dot.error {
   color: var(--status-error);
   background: var(--status-error-bg);
+  border: 1px solid var(--status-error);
 }
 
 /* Form elements */
@@ -178,15 +167,18 @@ body {
 .form-label {
   display: block;
   margin-bottom: var(--size-2);
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-1);
+  text-transform: uppercase;
+  font-size: var(--font-size-00);
+  letter-spacing: 0.05em;
 }
 
 .form-input {
   width: 100%;
   padding: var(--size-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2);
+  border-radius: 0;
   font-family: var(--font-mono);
   font-size: var(--font-size-0);
   background: var(--surface-1);
@@ -195,8 +187,8 @@ body {
 
 .form-input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--text-1);
+  box-shadow: none;
 }
 
 /* Utilities */
@@ -242,10 +234,10 @@ body {
   top: 100%;
   right: 0;
   margin-top: var(--size-1);
-  background: var(--surface-2);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2);
-  box-shadow: var(--shadow-3);
+  border-radius: 0;
+  box-shadow: none;
   min-width: 150px;
   z-index: 10;
 }
@@ -255,12 +247,17 @@ body {
   width: 100%;
   padding: var(--size-2) var(--size-3);
   border: none;
+  border-bottom: 1px solid var(--border);
   background: none;
   color: var(--text-1);
   text-align: left;
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: var(--font-size-0);
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
 }
 
 .dropdown-item:hover {
@@ -278,7 +275,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -286,13 +283,13 @@ body {
 }
 
 .modal-content {
-  background: var(--surface-2);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2);
+  border-radius: 0;
   padding: var(--size-5);
   max-width: 500px;
   width: 90%;
-  box-shadow: var(--shadow-6);
+  box-shadow: none;
 }
 
 .modal-header {
@@ -301,8 +298,10 @@ body {
 
 .modal-title {
   font-size: var(--font-size-3);
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-1);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .modal-footer {
@@ -310,4 +309,25 @@ body {
   display: flex;
   gap: var(--size-2);
   justify-content: flex-end;
+}
+
+/* Links */
+a {
+  color: var(--text-2);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--text-1);
+}
+
+/* Code elements */
+code {
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  padding: 0.2em 0.4em;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 0.9em;
 }
