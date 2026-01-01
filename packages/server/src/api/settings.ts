@@ -23,7 +23,7 @@ export async function handleSettingsApi(
   if (method === "GET") {
     const settings = settingsModel.getAll();
     return Response.json({
-      domain: process.env.PROJECT_DOMAIN,
+      domain: settings.domain || process.env.PROJECT_DOMAIN || "localhost",
       github_configured: !!settings.github_token,
       primary_site: settings.primary_site || null,
       // Don't expose the actual token
@@ -53,8 +53,18 @@ export async function handleSettingsApi(
         }
       }
 
+      // Handle domain
+      if (body.domain !== undefined) {
+        if (body.domain) {
+          settingsModel.set("domain", body.domain);
+        } else {
+          settingsModel.delete("domain");
+        }
+      }
+
       return Response.json({
         success: true,
+        domain: settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "localhost",
         github_configured: !!settingsModel.get("github_token"),
         primary_site: settingsModel.get("primary_site") || null,
       });

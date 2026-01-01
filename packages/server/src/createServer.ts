@@ -257,8 +257,8 @@ export async function createServer({
     }
   }
 
-  // Load .env if present (Bun automatically loads .env, but ensure PROJECT_DOMAIN is present)
-  const PROJECT_DOMAIN = process.env.PROJECT_DOMAIN || "dev.flexi";
+  // Load domain from database first, then fall back to env var
+  const PROJECT_DOMAIN = settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "dev.flexi";
 
   // Load root configuration
   const rootConfig = await loadRootConfig();

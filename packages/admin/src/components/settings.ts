@@ -53,6 +53,7 @@ class DeploySettings extends HTMLElement {
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ primary_site: siteId })
       });
 
@@ -61,6 +62,30 @@ class DeploySettings extends HTMLElement {
       }
     } catch (error) {
       console.error('Failed to save primary site:', error);
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+
+  async saveDomain(domain: string) {
+    this.saving = true;
+    this.render();
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ domain })
+      });
+
+      if (response.ok) {
+        this.settings.domain = domain;
+        alert('Domain saved. Server restart required for changes to take effect.');
+      }
+    } catch (error) {
+      console.error('Failed to save domain:', error);
     } finally {
       this.saving = false;
       this.render();
@@ -96,6 +121,28 @@ class DeploySettings extends HTMLElement {
             BACK TO DASHBOARD
           </a>
         </header>
+
+        <div class="card settings-card">
+          <h2 class="settings-section-title">
+            DOMAIN
+          </h2>
+          <p class="settings-description text-muted">
+            the root domain for your deploy instance (e.g., keith.is, example.com)
+          </p>
+          <div class="domain-input-row">
+            <input
+              type="text"
+              id="domain-input"
+              class="domain-input"
+              value="${this.settings.domain || ''}"
+              placeholder="example.com"
+              ${this.saving ? 'disabled' : ''}
+            >
+            <button id="save-domain-btn" class="btn" ${this.saving ? 'disabled' : ''}>
+              SAVE
+            </button>
+          </div>
+        </div>
 
         <div class="card settings-card">
           <h2 class="settings-section-title">
@@ -209,6 +256,24 @@ class DeploySettings extends HTMLElement {
           margin-top: var(--size-3);
           font-style: italic;
         }
+        .domain-input-row {
+          display: flex;
+          gap: var(--size-2);
+        }
+        .domain-input {
+          flex: 1;
+          font-family: var(--font-mono);
+          font-size: var(--font-size-1);
+          padding: var(--size-2) var(--size-3);
+          background: var(--surface-1);
+          border: 1px solid var(--border);
+          color: var(--text-1);
+          letter-spacing: 0.02em;
+        }
+        .domain-input:focus {
+          outline: none;
+          border-color: var(--text-1);
+        }
       </style>
     `;
 
@@ -220,6 +285,13 @@ class DeploySettings extends HTMLElement {
         const value = target.value || null;
         this.savePrimarySite(value);
       });
+    });
+
+    this.querySelector('#save-domain-btn')?.addEventListener('click', () => {
+      const input = this.querySelector('#domain-input') as HTMLInputElement;
+      if (input?.value) {
+        this.saveDomain(input.value);
+      }
     });
   }
 }
