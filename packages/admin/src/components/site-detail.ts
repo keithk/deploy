@@ -8,7 +8,9 @@ interface Site {
   status: 'running' | 'stopped' | 'building' | 'error';
   visibility?: 'public' | 'private';
   gitUrl?: string;
+  git_url?: string;
   persistent_storage?: number;
+  autodeploy?: number;
 }
 
 interface LogEntry {
@@ -204,6 +206,76 @@ class DeploySiteDetail extends HTMLElement {
     }
   }
 
+  async handleAutodeployToggle() {
+    if (!this.site) return;
+
+    const newValue = !this.site.autodeploy;
+    const gitUrl = this.site.git_url || this.site.gitUrl;
+
+    if (!gitUrl) {
+      alert('Cannot enable autodeploy: no git URL configured for this site.');
+      return;
+    }
+
+    // Check if GitHub is configured
+    try {
+      const statusResponse = await fetch('/api/github/status', { credentials: 'include' });
+      const status = await statusResponse.json();
+      if (!status.configured) {
+        alert('Cannot enable autodeploy: GitHub token not configured. Go to Settings to add your token.');
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to check GitHub status:', error);
+      alert('Failed to check GitHub configuration.');
+      return;
+    }
+
+    try {
+      // Update the site's autodeploy setting
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ autodeploy: newValue })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Failed to update autodeploy: ${error.message || 'Unknown error'}`);
+        return;
+      }
+
+      // Create or delete the webhook on GitHub
+      const webhookMethod = newValue ? 'POST' : 'DELETE';
+      const webhookResponse = await fetch('/api/github/webhooks', {
+        method: webhookMethod,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ git_url: gitUrl })
+      });
+
+      if (!webhookResponse.ok) {
+        const error = await webhookResponse.json();
+        // Revert the autodeploy setting
+        await fetch(`/api/sites/${this.siteId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ autodeploy: !newValue })
+        });
+        alert(`Failed to ${newValue ? 'create' : 'delete'} webhook: ${error.error || 'Unknown error'}`);
+        return;
+      }
+
+      this.site.autodeploy = newValue ? 1 : 0;
+      this.render();
+    } catch (error) {
+      console.error('Failed to toggle autodeploy:', error);
+      alert('Failed to toggle autodeploy.');
+    }
+  }
+
   async handleDelete() {
     if (!this.site) return;
 
@@ -306,6 +378,7 @@ class DeploySiteDetail extends HTMLElement {
         });
       });
 
+      this.querySelector('#autodeploy-checkbox')?.addEventListener('change', () => this.handleAutodeployToggle());
       this.querySelector('#storage-checkbox')?.addEventListener('change', () => this.handleStorageToggle());
       this.querySelector('#delete-btn')?.addEventListener('click', () => this.handleDelete());
     }
@@ -382,6 +455,8 @@ class DeploySiteDetail extends HTMLElement {
   renderSettingsTab(): string {
     const isPublic = this.site?.visibility === 'public';
     const hasStorage = this.site?.persistent_storage;
+    const hasAutodeploy = this.site?.autodeploy;
+    const hasGitUrl = this.site?.git_url || this.site?.gitUrl;
 
     return `
       <div class="settings-section">
@@ -396,6 +471,15 @@ class DeploySiteDetail extends HTMLElement {
             <span>Private</span>
           </label>
         </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Autodeploy</h3>
+        <label class="form-checkbox">
+          <input type="checkbox" id="autodeploy-checkbox" ${hasAutodeploy ? 'checked' : ''} ${!hasGitUrl ? 'disabled' : ''}>
+          <span>Deploy automatically when code is pushed to GitHub</span>
+        </label>
+        <p class="text-muted mt-4">${hasGitUrl ? 'Creates a webhook on the GitHub repository.' : 'Requires a GitHub repository URL.'}</p>
       </div>
 
       <div class="settings-section">

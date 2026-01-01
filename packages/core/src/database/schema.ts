@@ -16,6 +16,7 @@ export interface Site {
   port: number | null;
   env_vars: string;       // JSON, encrypted
   persistent_storage: number;  // SQLite boolean: 0 = false, 1 = true
+  autodeploy: number;          // SQLite boolean: 0 = false, 1 = true
   created_at: string;
   last_deployed_at: string | null;
 }

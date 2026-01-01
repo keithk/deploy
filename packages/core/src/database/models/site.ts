@@ -16,6 +16,7 @@ export interface CreateSiteData {
   visibility?: "public" | "private";
   env_vars?: string;
   persistent_storage?: boolean;
+  autodeploy?: boolean;
 }
 
 /**
@@ -29,6 +30,7 @@ export interface UpdateSiteData {
   visibility?: "public" | "private";
   env_vars?: string;
   persistent_storage?: boolean;
+  autodeploy?: boolean;
 }
 
 /**
@@ -60,13 +62,14 @@ export class SiteModel {
       port: null,
       env_vars: data.env_vars ?? "{}",
       persistent_storage: data.persistent_storage ? 1 : 0,
+      autodeploy: data.autodeploy ? 1 : 0,
       created_at: now,
       last_deployed_at: null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, created_at, last_deployed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -81,6 +84,7 @@ export class SiteModel {
       site.port,
       site.env_vars,
       site.persistent_storage,
+      site.autodeploy,
       site.created_at,
       site.last_deployed_at
     );
@@ -115,6 +119,45 @@ export class SiteModel {
    */
   public findAll(): Site[] {
     return this.db.query<Site>(`SELECT * FROM sites`);
+  }
+
+  /**
+   * Normalize a git URL to canonical form for comparison
+   * Converts various formats to: github.com/owner/repo
+   */
+  private normalizeGitUrl(url: string): string {
+    let normalized = url.toLowerCase().trim();
+
+    // Remove protocol
+    normalized = normalized.replace(/^https?:\/\//, "");
+    normalized = normalized.replace(/^git@/, "");
+
+    // Convert SSH format (git@github.com:owner/repo) to path format
+    normalized = normalized.replace(":", "/");
+
+    // Remove .git suffix
+    normalized = normalized.replace(/\.git$/, "");
+
+    // Remove trailing slash
+    normalized = normalized.replace(/\/$/, "");
+
+    return normalized;
+  }
+
+  /**
+   * Find a site by git URL (with normalization for matching)
+   */
+  public findByGitUrl(gitUrl: string): Site | null {
+    const normalizedSearch = this.normalizeGitUrl(gitUrl);
+    const allSites = this.findAll();
+
+    for (const site of allSites) {
+      if (this.normalizeGitUrl(site.git_url) === normalizedSearch) {
+        return site;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -156,6 +199,10 @@ export class SiteModel {
     if (data.persistent_storage !== undefined) {
       updates.push("persistent_storage = ?");
       values.push(data.persistent_storage ? 1 : 0);
+    }
+    if (data.autodeploy !== undefined) {
+      updates.push("autodeploy = ?");
+      values.push(data.autodeploy ? 1 : 0);
     }
 
     if (updates.length === 0) {

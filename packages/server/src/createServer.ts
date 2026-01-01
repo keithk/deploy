@@ -21,6 +21,7 @@ import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Dat
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
+import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
 import { SSHAuthServer } from "./auth/ssh-server";
 import { validateSession, createSessionCookie } from "./middleware/auth";
 import { proxyRequest } from "./utils/proxy";
@@ -358,6 +359,13 @@ export async function createServer({
           }
         }
         
+        // Handle autodeploy webhook (per-site GitHub webhooks)
+        const autodeployResponse = await handleAutodeployWebhook(request);
+        if (autodeployResponse) {
+          logger.logResponse(request, autodeployResponse, loggerStart);
+          return autodeployResponse;
+        }
+
         // Check if this is a webhook request (legacy support)
         if (
           url.pathname.startsWith(webhookPath) &&

@@ -136,11 +136,11 @@ When checkbox changes:
 
 ## Implementation Phases
 
-- [ ] **Phase 1: Database** - Add migration, update Site model and interfaces
-- [ ] **Phase 2: Webhook API** - Add POST/DELETE /api/github/webhooks endpoints
-- [ ] **Phase 3: Receiver** - Update webhook handler to match by repo URL
-- [ ] **Phase 4: Admin UI** - Add autodeploy toggle to site settings
-- [ ] **Phase 5: Integration** - Wire toggle to create/delete webhooks on change
+- [x] **Phase 1: Database** - Add migration, update Site model and interfaces
+- [x] **Phase 2: Webhook API** - Add POST/DELETE /api/github/webhooks endpoints
+- [x] **Phase 3: Receiver** - Update webhook handler to match by repo URL
+- [x] **Phase 4: Admin UI** - Add autodeploy toggle to site settings
+- [x] **Phase 5: Integration** - Wire toggle to create/delete webhooks on change
 
 ## Testing
 

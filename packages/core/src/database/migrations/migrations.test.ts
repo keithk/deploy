@@ -150,13 +150,17 @@ describe("Database Migrations", () => {
 
   test("runMigrations is idempotent - running twice doesn't error", async () => {
     await db.runMigrations();
+    const firstRunCount = db.query<{ name: string }>(
+      `SELECT name FROM _migrations`
+    ).length;
+
     await db.runMigrations(); // Should not throw
 
     const migrations = db.query<{ name: string }>(
       `SELECT name FROM _migrations`
     );
-    expect(migrations.length).toBe(1);
-    expect(migrations[0].name).toBe("001-simplified-schema");
+    expect(migrations.length).toBe(firstRunCount);
+    expect(migrations.some((m) => m.name === "001-simplified-schema")).toBe(true);
   });
 
   test("can insert and query sites", async () => {
