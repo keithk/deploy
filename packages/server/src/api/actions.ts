@@ -1,8 +1,10 @@
 // ABOUTME: REST API endpoints for action management.
-// ABOUTME: Handles listing and running actions discovered from deployed sites.
+// ABOUTME: Handles listing, running, and discovering actions from deployed sites.
 
-import { actionModel } from "@keithk/deploy-core";
+import { actionModel, siteModel } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
+import { discoverSiteActions } from "../services/actions";
+import { getSitePath } from "../services/git";
 
 /**
  * Handle all /api/actions/* requests
@@ -40,6 +42,16 @@ export async function handleActionsApi(
     return handleRunAction(actionId);
   }
 
+  // POST /api/actions/discover/:siteId - Discover actions for a site
+  if (method === "POST" && pathParts[2] === "discover" && pathParts[3]) {
+    return handleDiscoverActions(pathParts[3]);
+  }
+
+  // POST /api/actions/discover-all - Discover actions for all sites
+  if (method === "POST" && pathParts[2] === "discover-all") {
+    return handleDiscoverAllActions();
+  }
+
   return null;
 }
 
@@ -60,6 +72,92 @@ function handleGetAction(actionId: string): Response {
     return Response.json({ error: "Action not found" }, { status: 404 });
   }
   return Response.json(action);
+}
+
+/**
+ * POST /api/actions/discover/:siteId - Discover actions for a site
+ */
+async function handleDiscoverActions(siteId: string): Promise<Response> {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  try {
+    const sitePath = getSitePath(site.name);
+    const actions = await discoverSiteActions(sitePath, siteId);
+
+    // Clear old actions and register new ones
+    actionModel.deleteBySiteId(siteId);
+    for (const action of actions) {
+      actionModel.upsert({
+        id: action.id,
+        name: action.name || action.id,
+        type: action.type,
+        site_id: siteId,
+        entry_path: action.entryPath,
+        enabled: true,
+      });
+    }
+
+    return Response.json({
+      success: true,
+      discovered: actions.length,
+      actions: actions.map((a) => ({ id: a.id, name: a.name, type: a.type })),
+    });
+  } catch (error) {
+    return Response.json(
+      {
+        error: "Discovery failed",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/actions/discover-all - Discover actions for all sites
+ */
+async function handleDiscoverAllActions(): Promise<Response> {
+  const sites = siteModel.findAll();
+  const results: { siteId: string; siteName: string; discovered: number }[] =
+    [];
+
+  for (const site of sites) {
+    try {
+      const sitePath = getSitePath(site.name);
+      const actions = await discoverSiteActions(sitePath, site.id);
+
+      // Clear old actions and register new ones
+      actionModel.deleteBySiteId(site.id);
+      for (const action of actions) {
+        actionModel.upsert({
+          id: action.id,
+          name: action.name || action.id,
+          type: action.type,
+          site_id: site.id,
+          entry_path: action.entryPath,
+          enabled: true,
+        });
+      }
+
+      results.push({
+        siteId: site.id,
+        siteName: site.name,
+        discovered: actions.length,
+      });
+    } catch {
+      results.push({ siteId: site.id, siteName: site.name, discovered: 0 });
+    }
+  }
+
+  const totalDiscovered = results.reduce((sum, r) => sum + r.discovered, 0);
+  return Response.json({
+    success: true,
+    totalDiscovered,
+    results,
+  });
 }
 
 /**
