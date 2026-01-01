@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
@@ -201,6 +201,10 @@ export async function createServer({
     : require("path").resolve(process.cwd(), "../../../../sites");
 
   debug(`Using root directory: ${resolvedRootDir}`);
+
+  // Run database migrations on startup
+  const db = Database.getInstance();
+  await db.runMigrations();
 
   const actionContext: import("@keithk/deploy-core").ActionContext = {
     rootDir: resolvedRootDir,
