@@ -17,7 +17,8 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, setLogLevel, LogLevel, settingsModel, siteModel } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel } from "@keithk/deploy-core";
+import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { SSHAuthServer } from "./auth/ssh-server";
@@ -223,6 +224,38 @@ export async function createServer({
 
   // Update action context with sites
   actionContext.sites = sites;
+
+  // Restart any containers that should be running
+  const dbSites = siteModel.findAll();
+  for (const site of dbSites) {
+    if (site.status === "running" && site.container_id) {
+      try {
+        // Check if container is actually running
+        const checkProc = spawn(["docker", "inspect", "-f", "{{.State.Running}}", `deploy-${site.name}`], {
+          stdout: "pipe",
+          stderr: "pipe"
+        });
+        await checkProc.exited;
+        const output = await new Response(checkProc.stdout).text();
+
+        if (output.trim() !== "true") {
+          info(`Restarting container for ${site.name}...`);
+          const startProc = spawn(["docker", "start", `deploy-${site.name}`], {
+            stdout: "pipe",
+            stderr: "pipe"
+          });
+          await startProc.exited;
+          if (startProc.exitCode === 0) {
+            info(`Container deploy-${site.name} restarted successfully`);
+          } else {
+            warn(`Failed to restart container deploy-${site.name}`);
+          }
+        }
+      } catch (err) {
+        warn(`Error checking/restarting container for ${site.name}: ${err}`);
+      }
+    }
+  }
 
   // Load .env if present (Bun automatically loads .env, but ensure PROJECT_DOMAIN is present)
   const PROJECT_DOMAIN = process.env.PROJECT_DOMAIN || "dev.flexi";
