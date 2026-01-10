@@ -1,0 +1,120 @@
+{
+  # Use project directory for storage
+  storage file_system {
+    root /Users/keith/projects/deploy/.deploy/caddy/data
+  }
+
+  # Use local certificates for development
+  local_certs
+  
+  # Enable debug logging in development
+  debug
+  
+  # Log configuration
+  log {
+    output file /Users/keith/projects/deploy/.deploy/caddy/access.log
+    format json
+  }
+}
+
+# Root domain configuration
+deploy {
+  # Enable compression
+  encode {
+    gzip 6
+    zstd
+  }
+  
+  # Security headers
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+  
+  # Proxy to main application with health monitoring
+  reverse_proxy localhost:3000 {
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    flush_interval -1
+  }
+}
+
+# Dev domain configuration (our main domain)
+dev.deploy {
+  tls /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.crt /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.key
+  
+  # Enable compression
+  encode {
+    gzip 6
+    zstd
+  }
+  
+  # Security headers
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+  
+  # Proxy to main application with health monitoring
+  reverse_proxy localhost:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    flush_interval -1
+  }
+}
+
+# Wildcard subdomain configuration with SSL
+*.dev.deploy {
+  tls /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.crt /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.key
+  
+  # Proxy to main application (will be overridden by specific dynamic routes)
+  reverse_proxy localhost:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
+
+# Dynamic preview routes
+
+edit-1756863157320-blog.dev.deploy {  tls /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.crt /Users/keith/projects/deploy/.deploy/ssl/dev/dev.deploy.key
+  
+  # Enable compression for preview
+  encode {
+    gzip 6
+    zstd
+  }
+  
+  # Security headers for preview (allow iframe for editor)
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-XSS-Protection "1; mode=block"
+    Content-Security-Policy "frame-ancestors 'self' https://editor.dev.deploy;"
+  }
+  
+  # Proxy to preview container with health check
+  reverse_proxy localhost:5066 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    health_uri /
+    health_interval 10s
+    health_timeout 3s
+    flush_interval -1
+  }
+}

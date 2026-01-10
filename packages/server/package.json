@@ -1,0 +1,31 @@
+{
+  "name": "@keithk/deploy-server",
+  "version": "0.1.0",
+  "description": "Server for DialUpDeploy",
+  "main": "dist/index.js",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun --minify"
+  },
+  "dependencies": {
+    "@keithk/deploy-actions": "workspace:*",
+    "@keithk/deploy-core": "workspace:*",
+    "croner": "^9.0.0",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/ssh2": "^1.15.5",
+    "bun-types": "latest"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithk/deploy.git",
+    "directory": "packages/server"
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
+}

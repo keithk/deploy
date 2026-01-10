@@ -1,0 +1,51 @@
+{
+  "name": "@keithk/deploy-cli",
+  "version": "0.1.0",
+  "description": "CLI for DialUpDeploy - The fastest way to get a site online",
+  "main": "dist/index.js",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "deploy": "./dist/index.js",
+    "dd-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts start",
+    "dev": "bun run src/index.ts dev",
+    "build": "bun build src/index.ts --outdir dist --target bun --minify",
+    "build:sites": "bun run src/scripts/build-sites.ts",
+    "setup:local": "bun run src/index.ts setup local",
+    "setup:production": "bun run src/index.ts setup production",
+    "setup": "bun run src/index.ts setup local"
+  },
+  "dependencies": {
+    "@keithk/deploy-actions": "workspace:*",
+    "@keithk/deploy-core": "workspace:*",
+    "@keithk/deploy-server": "workspace:*",
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^9.2.15",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "bun-types": "latest"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithk/deploy.git",
+    "directory": "packages/cli"
+  },
+  "gitHead": "4e53073ee074064d19459919631ec4a4b222516a"
+}
