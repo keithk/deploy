@@ -52,7 +52,10 @@ sleep 3
 
 echo ""
 echo "📊 Service status:"
-systemctl status deploy --no-pager -l | head -15
+systemctl is-active deploy && echo "   Deploy service is active" || echo "   Deploy service is not active"
+systemctl is-active caddy && echo "   Caddy is active" || echo "   Caddy is not active"
 
 echo ""
 echo "🎉 Update complete!"
+echo ""
+echo "View logs with: journalctl -u deploy -f"
