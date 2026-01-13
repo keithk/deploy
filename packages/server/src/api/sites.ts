@@ -1,10 +1,20 @@
 // ABOUTME: REST API endpoints for site management.
 // ABOUTME: Handles CRUD operations, deployments, share links, and environment variables.
 
-import { siteModel, shareLinkModel, logModel, error, info } from "@keithk/deploy-core";
+import {
+  siteModel,
+  shareLinkModel,
+  logModel,
+  error,
+  info,
+} from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
-import { stopContainer, removeSiteDataDirectory, getContainerLogs } from "../services/container";
+import {
+  stopContainer,
+  removeSiteDataDirectory,
+  getContainerLogs,
+} from "../services/container";
 
 /**
  * Handle all /api/sites/* requests
@@ -75,6 +85,11 @@ export async function handleSitesApi(
   // POST /api/sites/:id/share - Create share link
   if (method === "POST" && subResource === "share") {
     return handleCreateShareLink(siteId, request);
+  }
+
+  // GET /api/sites/:id/env - Get environment variables
+  if (method === "GET" && subResource === "env") {
+    return handleGetEnvVars(siteId);
   }
 
   // PATCH /api/sites/:id/env - Update environment variables
@@ -199,7 +214,10 @@ async function handleDeleteSite(siteId: string): Promise<Response> {
 /**
  * GET /api/sites/:id/logs - Get logs for a site
  */
-async function handleGetLogs(siteId: string, request: Request): Promise<Response> {
+async function handleGetLogs(
+  siteId: string,
+  request: Request
+): Promise<Response> {
   const site = siteModel.findById(siteId);
   if (!site) {
     return Response.json({ error: "Site not found" }, { status: 404 });
@@ -297,6 +315,27 @@ async function handleCreateShareLink(
     { token: shareLink.token, expires_at: shareLink.expires_at },
     { status: 201 }
   );
+}
+
+/**
+ * GET /api/sites/:id/env - Get environment variables
+ */
+function handleGetEnvVars(siteId: string): Response {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  let envVars: Record<string, string> = {};
+  if (site.env_vars) {
+    try {
+      envVars = JSON.parse(site.env_vars);
+    } catch {
+      envVars = {};
+    }
+  }
+
+  return Response.json(envVars);
 }
 
 /**
