@@ -1,7 +1,15 @@
 // ABOUTME: Deployment orchestrator that coordinates the full deployment pipeline.
 // ABOUTME: Handles git clone, railpack build, container start, and database status updates.
 
-import { info, debug, error, siteModel, logModel, actionModel, deploymentModel } from "@keithk/deploy-core";
+import {
+  info,
+  debug,
+  error,
+  siteModel,
+  logModel,
+  actionModel,
+  deploymentModel,
+} from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
 import {
@@ -9,7 +17,8 @@ import {
   stopContainer,
   completeBlueGreenDeployment,
   rollbackBlueGreenDeployment,
-  waitForContainerHealth
+  waitForContainerHealth,
+  getContainerLogs,
 } from "./container";
 import { discoverSiteActions } from "./actions";
 
@@ -25,7 +34,9 @@ export async function deploySite(
   try {
     site = siteModel.findById(siteId);
   } catch (err) {
-    const message = `Database error: ${err instanceof Error ? err.message : String(err)}`;
+    const message = `Database error: ${
+      err instanceof Error ? err.message : String(err)
+    }`;
     error(message);
     return { success: false, error: message };
   }
@@ -82,7 +93,11 @@ export async function deploySite(
     // Step 3: Start the container with environment variables
     // Use blue-green deployment if there's an existing container
     deploymentModel.updateStatus(deployment.id, "starting");
-    log(`Starting container${hasExistingContainer ? " (blue-green deployment)" : ""}...`);
+    log(
+      `Starting container${
+        hasExistingContainer ? " (blue-green deployment)" : ""
+      }...`
+    );
     const envVars = parseEnvVars(site.env_vars);
     const containerInfo = await startContainer(
       buildResult.imageName,
@@ -90,7 +105,7 @@ export async function deploySite(
       {
         envVars,
         persistentStorage: site.persistent_storage === 1,
-        blueGreen: !!hasExistingContainer
+        blueGreen: !!hasExistingContainer,
       }
     );
     log(`Container started on port ${containerInfo.port}`);
@@ -98,17 +113,43 @@ export async function deploySite(
     // Step 4: Wait for the new container to be healthy before switching
     deploymentModel.updateStatus(deployment.id, "healthy");
     log(`Waiting for container to be healthy...`);
+    const containerName = containerInfo.isBlueGreen
+      ? `deploy-${site.name}-new`
+      : `deploy-${site.name}`;
     const isHealthy = await waitForContainerHealth(containerInfo.port);
     if (!isHealthy) {
+      // Capture container logs to help debug the failure
+      log(`Container failed health check. Capturing logs...`);
+      try {
+        const containerLogs = await getContainerLogs(containerName, 50);
+        if (containerLogs) {
+          log(`--- Container Logs ---`);
+          for (const line of containerLogs.split("\n")) {
+            if (line.trim()) {
+              log(line);
+            }
+          }
+          log(`--- End Container Logs ---`);
+        }
+      } catch (logErr) {
+        log(`Could not capture container logs: ${logErr}`);
+      }
+
       // Rollback: remove the new container and keep the old one
       if (containerInfo.isBlueGreen) {
         await rollbackBlueGreenDeployment(site.name);
         // Restore status to running since old container is still serving
-        siteModel.updateStatus(siteId, "running", site.container_id ?? undefined, site.port ?? undefined);
+        siteModel.updateStatus(
+          siteId,
+          "running",
+          site.container_id ?? undefined,
+          site.port ?? undefined
+        );
         deploymentModel.update(deployment.id, {
           status: "rolled_back",
           completed_at: new Date().toISOString(),
-          error_message: "Container failed health check - rolled back to previous version",
+          error_message:
+            "Container failed health check - rolled back to previous version",
         });
       }
       throw new Error("Container failed health check");
@@ -145,14 +186,18 @@ export async function deploySite(
           type: action.type,
           site_id: siteId,
           entry_path: action.entryPath,
-          enabled: true
+          enabled: true,
         });
         log(`Registered action: ${action.id} (${action.type})`);
       }
     }
 
     // Mark deployment as completed
-    deploymentModel.complete(deployment.id, containerInfo.containerId, containerInfo.port);
+    deploymentModel.complete(
+      deployment.id,
+      containerInfo.containerId,
+      containerInfo.port
+    );
 
     log(`Deployment complete!`);
     return { success: true, deploymentId: deployment.id };
@@ -171,7 +216,12 @@ export async function deploySite(
       siteModel.updateStatus(siteId, "error");
     } else {
       // Restore to running if old container is still serving
-      siteModel.updateStatus(siteId, "running", site.container_id ?? undefined, site.port ?? undefined);
+      siteModel.updateStatus(
+        siteId,
+        "running",
+        site.container_id ?? undefined,
+        site.port ?? undefined
+      );
       log(`Restored to previous running state`);
     }
 
@@ -188,7 +238,9 @@ export async function stopSite(siteId: string): Promise<void> {
   try {
     site = siteModel.findById(siteId);
   } catch (err) {
-    const message = `Database error: ${err instanceof Error ? err.message : String(err)}`;
+    const message = `Database error: ${
+      err instanceof Error ? err.message : String(err)
+    }`;
     throw new Error(message);
   }
 
