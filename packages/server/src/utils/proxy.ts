@@ -21,14 +21,35 @@ export async function proxyRequest(
   try {
     // Clone headers to avoid mutation side effects
     const headers = new Headers(request.headers);
+
+    // Preserve the original host for the application
+    const originalHost =
+      request.headers.get("Host") || request.headers.get("X-Forwarded-Host");
+    if (originalHost) {
+      headers.set("X-Forwarded-Host", originalHost);
+    }
+
+    // Set forwarding headers so the app knows the original request details
+    const clientIp =
+      request.headers.get("X-Forwarded-For") ||
+      request.headers.get("X-Real-IP") ||
+      "127.0.0.1";
+    headers.set("X-Forwarded-For", clientIp);
+    headers.set(
+      "X-Forwarded-Proto",
+      request.headers.get("X-Forwarded-Proto") || "https"
+    );
+
+    // Set Host to target for the actual connection
     headers.set("Host", `localhost:${targetPort}`);
+
     const proxyReq = new Request(targetUrl, {
       method: request.method,
       headers: headers,
       body:
         request.method !== "GET" && request.method !== "HEAD"
           ? request.clone().body
-          : undefined
+          : undefined,
     });
 
     const response = await fetch(proxyReq);
@@ -37,18 +58,18 @@ export async function proxyRequest(
 
     // Enable CORS for development
     responseHeaders.set("Access-Control-Allow-Origin", "*");
-    
+
     // Remove content-encoding header to prevent encoding issues with Caddy
     // Caddy will handle compression on its own
     responseHeaders.delete("Content-Encoding");
-    
+
     // Also remove content-length as it might be incorrect after decompression
     responseHeaders.delete("Content-Length");
 
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
-      headers: responseHeaders
+      headers: responseHeaders,
     });
   } catch (err) {
     return new Response(
@@ -77,14 +98,16 @@ export async function startDevServer(
   siteSubdomain?: string
 ): Promise<boolean> {
   const siteName = siteSubdomain || require("path").basename(sitePath);
-  
+
   // Check if a process is already running for this site
   if (processManager.hasProcess(siteName, port)) {
     debug(`Dev server for ${siteName} is already running on port ${port}`);
     return true;
   }
 
-  info(`Starting dev server for ${siteName} on port ${port} with script: ${devScript}`);
+  info(
+    `Starting dev server for ${siteName} on port ${port} with script: ${devScript}`
+  );
 
   try {
     // Start the process using the process manager
