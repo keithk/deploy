@@ -12,6 +12,7 @@ import { handleSettingsApi } from "./settings";
 import { handleGitHubApi } from "./github";
 import { handleActionsApi } from "./actions";
 import { handleDeploymentsApi } from "./deployments";
+import { handleSystemApi } from "./system";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -22,34 +23,44 @@ interface ApiContext {
 /**
  * Handle GET /api/sites - Get all configured sites
  */
-export async function handleGetSites(request: Request, context: ApiContext): Promise<Response> {
+export async function handleGetSites(
+  request: Request,
+  context: ApiContext
+): Promise<Response> {
   try {
     // Get fresh site data
-    const sites = await discoverSites(context.rootDir, context.mode as "serve" | "dev");
-    
+    const sites = await discoverSites(
+      context.rootDir,
+      context.mode as "serve" | "dev"
+    );
+
     // Enhance with process status
     const allProcesses = processModel.getAll();
-    const sitesWithStatus = sites.map(site => {
-      const siteProcesses = allProcesses.filter(p => p.site === site.subdomain);
-      const runningProcess = siteProcesses.find((p: any) => p.status === 'running');
-      
+    const sitesWithStatus = sites.map((site) => {
+      const siteProcesses = allProcesses.filter(
+        (p) => p.site === site.subdomain
+      );
+      const runningProcess = siteProcesses.find(
+        (p: any) => p.status === "running"
+      );
+
       return {
         ...site,
         name: site.subdomain, // Add name for compatibility
-        status: runningProcess ? 'running' : 'stopped',
+        status: runningProcess ? "running" : "stopped",
         port: runningProcess?.port,
-        processId: runningProcess?.id
+        processId: runningProcess?.id,
       };
     });
 
     return new Response(JSON.stringify(sitesWithStatus), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error('Error getting sites:', error);
-    return new Response(JSON.stringify({ error: 'Failed to get sites' }), {
+    console.error("Error getting sites:", error);
+    return new Response(JSON.stringify({ error: "Failed to get sites" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -57,42 +68,56 @@ export async function handleGetSites(request: Request, context: ApiContext): Pro
 /**
  * Handle POST /api/sites - Create a new site
  */
-export async function handleCreateSite(request: Request, context: ApiContext): Promise<Response> {
+export async function handleCreateSite(
+  request: Request,
+  context: ApiContext
+): Promise<Response> {
   try {
-    const { name, type = 'static', force = false } = await request.json();
-    
+    const { name, type = "static", force = false } = await request.json();
+
     if (!name) {
-      return new Response(JSON.stringify({ error: 'Site name is required' }), {
+      return new Response(JSON.stringify({ error: "Site name is required" }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     }
 
     // Use the CLI command to create the site
-    const proc = spawn([
-      'bun', 'run', 'deploy', 'site', 'create', name, '--type', type, ...(force ? ['--force'] : [])
-    ], {
-      cwd: context.rootDir,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    const proc = spawn(
+      [
+        "bun",
+        "run",
+        "deploy",
+        "site",
+        "create",
+        name,
+        "--type",
+        type,
+        ...(force ? ["--force"] : []),
+      ],
+      {
+        cwd: context.rootDir,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
 
     await proc.exited;
 
     if (proc.exitCode === 0) {
       return new Response(JSON.stringify({ success: true, name, type }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     } else {
-      return new Response(JSON.stringify({ error: 'Failed to create site' }), {
+      return new Response(JSON.stringify({ error: "Failed to create site" }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     }
   } catch (error) {
-    console.error('Error creating site:', error);
-    return new Response(JSON.stringify({ error: 'Failed to create site' }), {
+    console.error("Error creating site:", error);
+    return new Response(JSON.stringify({ error: "Failed to create site" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -104,13 +129,13 @@ export async function handleGetProcesses(request: Request): Promise<Response> {
   try {
     const processes = processModel.getAll();
     return new Response(JSON.stringify(processes), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error('Error getting processes:', error);
-    return new Response(JSON.stringify({ error: 'Failed to get processes' }), {
+    console.error("Error getting processes:", error);
+    return new Response(JSON.stringify({ error: "Failed to get processes" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -118,13 +143,16 @@ export async function handleGetProcesses(request: Request): Promise<Response> {
 /**
  * Handle POST /api/processes/:id/start - Start a process
  */
-export async function handleStartProcess(request: Request, processId: string): Promise<Response> {
+export async function handleStartProcess(
+  request: Request,
+  processId: string
+): Promise<Response> {
   try {
     const process = processModel.getById(processId);
     if (!process) {
-      return new Response(JSON.stringify({ error: 'Process not found' }), {
+      return new Response(JSON.stringify({ error: "Process not found" }), {
         status: 404,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -140,19 +168,22 @@ export async function handleStartProcess(request: Request, processId: string): P
 
     if (success) {
       return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     } else {
-      return new Response(JSON.stringify({ error: 'Failed to start process' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ error: "Failed to start process" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
   } catch (error) {
-    console.error('Error starting process:', error);
-    return new Response(JSON.stringify({ error: 'Failed to start process' }), {
+    console.error("Error starting process:", error);
+    return new Response(JSON.stringify({ error: "Failed to start process" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -160,13 +191,16 @@ export async function handleStartProcess(request: Request, processId: string): P
 /**
  * Handle POST /api/processes/:id/stop - Stop a process
  */
-export async function handleStopProcess(request: Request, processId: string): Promise<Response> {
+export async function handleStopProcess(
+  request: Request,
+  processId: string
+): Promise<Response> {
   try {
     const process = processModel.getById(processId);
     if (!process) {
-      return new Response(JSON.stringify({ error: 'Process not found' }), {
+      return new Response(JSON.stringify({ error: "Process not found" }), {
         status: 404,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -174,13 +208,13 @@ export async function handleStopProcess(request: Request, processId: string): Pr
     await processManager.stopProcess(process.id);
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error('Error stopping process:', error);
-    return new Response(JSON.stringify({ error: 'Failed to stop process' }), {
+    console.error("Error stopping process:", error);
+    return new Response(JSON.stringify({ error: "Failed to stop process" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -188,34 +222,39 @@ export async function handleStopProcess(request: Request, processId: string): Pr
 /**
  * Handle POST /api/sites/:name/build - Build a site
  */
-export async function handleBuildSite(request: Request, siteName: string, context: ApiContext): Promise<Response> {
+export async function handleBuildSite(
+  request: Request,
+  siteName: string,
+  context: ApiContext
+): Promise<Response> {
   try {
     // Use the CLI command to build the site
-    const proc = spawn([
-      'bun', 'run', 'deploy', 'build', siteName
-    ], {
+    const proc = spawn(["bun", "run", "deploy", "build", siteName], {
       cwd: context.rootDir,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     await proc.exited;
 
     if (proc.exitCode === 0) {
       return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     } else {
       const stderr = await new Response(proc.stderr).text();
-      return new Response(JSON.stringify({ error: 'Build failed', details: stderr }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ error: "Build failed", details: stderr }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
   } catch (error) {
-    console.error('Error building site:', error);
-    return new Response(JSON.stringify({ error: 'Failed to build site' }), {
+    console.error("Error building site:", error);
+    return new Response(JSON.stringify({ error: "Failed to build site" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -224,38 +263,39 @@ export async function handleBuildSite(request: Request, siteName: string, contex
  * Handle POST /api/sites/:name/run/:command - Run a command for a site
  */
 export async function handleRunSiteCommand(
-  request: Request, 
-  siteName: string, 
-  command: string, 
+  request: Request,
+  siteName: string,
+  command: string,
   context: ApiContext
 ): Promise<Response> {
   try {
     // Use the CLI command to run the site command
-    const proc = spawn([
-      'bun', 'run', 'deploy', 'run', siteName, command
-    ], {
+    const proc = spawn(["bun", "run", "deploy", "run", siteName, command], {
       cwd: context.rootDir,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     await proc.exited;
 
     if (proc.exitCode === 0) {
       return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
     } else {
       const stderr = await new Response(proc.stderr).text();
-      return new Response(JSON.stringify({ error: 'Command failed', details: stderr }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ error: "Command failed", details: stderr }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
   } catch (error) {
-    console.error('Error running site command:', error);
-    return new Response(JSON.stringify({ error: 'Failed to run command' }), {
+    console.error("Error running site command:", error);
+    return new Response(JSON.stringify({ error: "Failed to run command" }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
@@ -263,65 +303,81 @@ export async function handleRunSiteCommand(
 /**
  * Handle GET /api/server/status - Get server status
  */
-export async function handleGetServerStatus(request: Request): Promise<Response> {
+export async function handleGetServerStatus(
+  request: Request
+): Promise<Response> {
   try {
-    return new Response(JSON.stringify({
-      status: 'running',
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      version: process.version
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        status: "running",
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (error) {
-    console.error('Error getting server status:', error);
-    return new Response(JSON.stringify({ error: 'Failed to get server status' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    console.error("Error getting server status:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to get server status" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
 
 /**
  * Main API router
  */
-export async function handleApiRequest(request: Request, context: ApiContext): Promise<Response | null> {
+export async function handleApiRequest(
+  request: Request,
+  context: ApiContext
+): Promise<Response | null> {
   const url = new URL(request.url);
   const method = request.method;
   const path = url.pathname;
-  const pathParts = path.split('/').filter(Boolean);
+  const pathParts = path.split("/").filter(Boolean);
 
   // Remove 'api' prefix
-  if (pathParts[0] !== 'api') {
+  if (pathParts[0] !== "api") {
     return null;
   }
   const apiParts = pathParts.slice(1); // Remove 'api' and get remaining parts
   const firstPart = apiParts[0];
 
   // Route to settings API
-  if (firstPart === 'settings') {
+  if (firstPart === "settings") {
     return handleSettingsApi(request);
   }
 
   // Route to GitHub API
-  if (firstPart === 'github') {
+  if (firstPart === "github") {
     return handleGitHubApi(request, path);
   }
 
+  // Route to system API
+  if (firstPart === "system") {
+    return handleSystemApi(request, path);
+  }
+
   // Route to actions API
-  if (firstPart === 'actions') {
+  if (firstPart === "actions") {
     return handleActionsApi(request, path);
   }
 
   // Route to deployments API
-  if (firstPart === 'deployments') {
+  if (firstPart === "deployments") {
     return handleDeploymentsApi(request, path);
   }
 
   // Route to sites API for database-backed operations
-  if (firstPart === 'sites') {
+  if (firstPart === "sites") {
     // Check for site deployments endpoint: /api/sites/:id/deployments
-    if (apiParts.length === 3 && apiParts[2] === 'deployments') {
+    if (apiParts.length === 3 && apiParts[2] === "deployments") {
       return handleDeploymentsApi(request, path);
     }
 
@@ -332,34 +388,34 @@ export async function handleApiRequest(request: Request, context: ApiContext): P
     }
 
     // Fall back to filesystem-based site discovery handlers
-    if (method === 'GET' && apiParts.length === 1) {
+    if (method === "GET" && apiParts.length === 1) {
       return handleGetSites(request, context);
     }
-    if (method === 'POST' && apiParts.length === 1) {
+    if (method === "POST" && apiParts.length === 1) {
       return handleCreateSite(request, context);
     }
-    if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'build') {
+    if (method === "POST" && apiParts.length === 3 && apiParts[2] === "build") {
       return handleBuildSite(request, apiParts[1], context);
     }
-    if (method === 'POST' && apiParts.length === 4 && apiParts[2] === 'run') {
+    if (method === "POST" && apiParts.length === 4 && apiParts[2] === "run") {
       return handleRunSiteCommand(request, apiParts[1], apiParts[3], context);
     }
   }
 
-  if (firstPart === 'processes') {
-    if (method === 'GET' && apiParts.length === 1) {
+  if (firstPart === "processes") {
+    if (method === "GET" && apiParts.length === 1) {
       return handleGetProcesses(request);
     }
-    if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'start') {
+    if (method === "POST" && apiParts.length === 3 && apiParts[2] === "start") {
       return handleStartProcess(request, apiParts[1]);
     }
-    if (method === 'POST' && apiParts.length === 3 && apiParts[2] === 'stop') {
+    if (method === "POST" && apiParts.length === 3 && apiParts[2] === "stop") {
       return handleStopProcess(request, apiParts[1]);
     }
   }
 
-  if (firstPart === 'server' && apiParts[1] === 'status') {
-    if (method === 'GET') {
+  if (firstPart === "server" && apiParts[1] === "status") {
+    if (method === "GET") {
       return handleGetServerStatus(request);
     }
   }
