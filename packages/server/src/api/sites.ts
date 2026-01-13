@@ -326,16 +326,29 @@ function handleGetEnvVars(siteId: string): Response {
     return Response.json({ error: "Site not found" }, { status: 404 });
   }
 
-  let envVars: Record<string, string> = {};
+  // Parse user-defined env vars
+  let userEnvVars: Record<string, string> = {};
   if (site.env_vars) {
     try {
-      envVars = JSON.parse(site.env_vars);
+      userEnvVars = JSON.parse(site.env_vars);
     } catch {
-      envVars = {};
+      userEnvVars = {};
     }
   }
 
-  return Response.json(envVars);
+  // Build system env vars (these are injected at runtime)
+  const systemEnvVars: Record<string, string> = {};
+  if (site.port) {
+    systemEnvVars.PORT = String(site.port);
+  }
+  if (site.persistent_storage) {
+    systemEnvVars.DATA_DIR = "/data";
+  }
+
+  return Response.json({
+    user: userEnvVars,
+    system: systemEnvVars,
+  });
 }
 
 /**
