@@ -53,7 +53,10 @@ async function getUsedPorts(): Promise<Set<number>> {
  * @param siteName The site name for port lookup
  * @param forceNew If true, always allocate a new port (for blue-green deployments)
  */
-async function getNextPort(siteName: string, forceNew: boolean = false): Promise<number> {
+async function getNextPort(
+  siteName: string,
+  forceNew: boolean = false
+): Promise<number> {
   // Check if this site already has an allocated port in database
   if (!forceNew) {
     try {
@@ -139,7 +142,11 @@ export async function startContainer(
   siteName: string,
   options: ContainerOptions = {}
 ): Promise<ContainerStartResult> {
-  const { envVars = {}, persistentStorage = false, blueGreen = false } = options;
+  const {
+    envVars = {},
+    persistentStorage = false,
+    blueGreen = false,
+  } = options;
 
   // For blue-green deployment, use a temporary container name and new port
   const containerName = blueGreen
@@ -205,7 +212,9 @@ export async function startContainer(
  * Complete a blue-green deployment by stopping the old container and renaming the new one
  * @param siteName The site name
  */
-export async function completeBlueGreenDeployment(siteName: string): Promise<void> {
+export async function completeBlueGreenDeployment(
+  siteName: string
+): Promise<void> {
   const oldContainerName = getContainerName(siteName);
   const newContainerName = `${oldContainerName}-new`;
 
@@ -224,7 +233,9 @@ export async function completeBlueGreenDeployment(siteName: string): Promise<voi
     info(`Renamed ${newContainerName} to ${oldContainerName}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    error(`Failed to complete blue-green deployment for ${siteName}: ${message}`);
+    error(
+      `Failed to complete blue-green deployment for ${siteName}: ${message}`
+    );
     throw new Error(`Blue-green completion failed: ${message}`);
   }
 }
@@ -233,7 +244,9 @@ export async function completeBlueGreenDeployment(siteName: string): Promise<voi
  * Rollback a blue-green deployment by removing the new container
  * @param siteName The site name
  */
-export async function rollbackBlueGreenDeployment(siteName: string): Promise<void> {
+export async function rollbackBlueGreenDeployment(
+  siteName: string
+): Promise<void> {
   const newContainerName = `${getContainerName(siteName)}-new`;
 
   info(`Rolling back blue-green deployment for ${siteName}`);
@@ -288,7 +301,9 @@ export async function getContainerLogs(
   const containerName = getContainerName(siteName);
 
   try {
-    const logs = await $`docker logs --tail ${lines} ${containerName}`.text();
+    // Use 2>&1 to capture both stdout and stderr
+    const logs =
+      await $`docker logs --tail ${lines} ${containerName} 2>&1`.text();
     return logs;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -306,7 +321,8 @@ export async function isContainerRunning(siteName: string): Promise<boolean> {
   const containerName = getContainerName(siteName);
 
   try {
-    const result = await $`docker inspect -f '{{.State.Running}}' ${containerName}`.text();
+    const result =
+      await $`docker inspect -f '{{.State.Running}}' ${containerName}`.text();
     return result.trim() === "true";
   } catch (err) {
     // Container doesn't exist
@@ -331,10 +347,12 @@ export async function waitForContainerHealth(
     try {
       const response = await fetch(`http://localhost:${port}/`, {
         method: "HEAD",
-        signal: AbortSignal.timeout(2000)
+        signal: AbortSignal.timeout(2000),
       });
       if (response.ok || response.status < 500) {
-        info(`Container on port ${port} is healthy (status: ${response.status})`);
+        info(
+          `Container on port ${port} is healthy (status: ${response.status})`
+        );
         return true;
       }
     } catch {
@@ -343,6 +361,8 @@ export async function waitForContainerHealth(
     await new Promise((resolve) => setTimeout(resolve, checkInterval));
   }
 
-  error(`Container on port ${port} did not become healthy within ${timeoutMs}ms`);
+  error(
+    `Container on port ${port} did not become healthy within ${timeoutMs}ms`
+  );
   return false;
 }
