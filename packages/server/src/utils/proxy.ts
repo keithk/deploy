@@ -52,7 +52,7 @@ export async function proxyRequest(
           : undefined,
     });
 
-    const response = await fetch(proxyReq);
+    const response = await fetch(proxyReq, { redirect: "manual" });
 
     const responseHeaders = new Headers(response.headers);
 
