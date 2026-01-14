@@ -1,4 +1,11 @@
 import type { SiteConfig, Site } from "@keithk/deploy-core";
+import type { Server } from "bun";
+
+// WebSocket data type for proxy connections
+interface WsProxyData {
+  targetWs: WebSocket;
+  targetPort: number;
+}
 import { siteModel } from "@keithk/deploy-core";
 import { ActionRegistry } from "../actions/registry";
 import { join } from "path";
@@ -280,6 +287,7 @@ function generateStatusPage(site: Site): Response {
  * This is the main entry point for subdomain routing with containerized sites.
  */
 export async function handleSubdomainRequest(
+  server: Server<WsProxyData>,
   request: Request,
   projectDomain: string
 ): Promise<Response> {
@@ -305,7 +313,7 @@ export async function handleSubdomainRequest(
   // Proxy to container if running, or building (for blue-green deployment where old container still serves)
   if ((site.status === "running" || site.status === "building") && site.port) {
     // Proxy to the running container
-    return proxyRequest(request, site.port);
+    return proxyRequest(request, site.port, server);
   }
 
   // Show status page for non-running sites

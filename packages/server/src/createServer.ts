@@ -24,7 +24,7 @@ import { handleApiRequest } from "./api/handlers";
 import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
 import { SSHAuthServer } from "./auth/ssh-server";
 import { validateSession, createSessionCookie } from "./middleware/auth";
-import { proxyRequest } from "./utils/proxy";
+import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -305,12 +305,8 @@ export async function createServer({
   const server = Bun.serve({
     port,
     // Add websocket property to satisfy TypeScript
-    websocket: {
-      message() {},
-      open() {},
-      close() {}
-    },
-    fetch: async (request) => {
+    websocket: createWebSocketHandlers(),
+    fetch: async (request, server) => {
       const context = new Map();
 
       // Apply logger middleware
@@ -423,7 +419,7 @@ export async function createServer({
             if (primarySite && primarySite.port &&
                 (primarySite.status === "running" || primarySite.status === "building")) {
               // Proxy to the primary site's container
-              const response = await proxyRequest(request, primarySite.port);
+              const response = await proxyRequest(request, primarySite.port, server);
               logger.logResponse(request, response, loggerStart);
               return response;
             }
@@ -469,7 +465,7 @@ export async function createServer({
 
         // Try database-backed containerized sites FIRST
         // This gives containerized deployments priority over filesystem sites
-        const dbResponse = await handleSubdomainRequest(request, PROJECT_DOMAIN);
+        const dbResponse = await handleSubdomainRequest(server, request, PROJECT_DOMAIN);
         if (dbResponse.status !== 404) {
           logger.logResponse(request, dbResponse, loggerStart);
           return dbResponse;
