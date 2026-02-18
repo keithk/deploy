@@ -24,7 +24,9 @@
     "clear:dist": "rm -rf packages/*/dist && rm -f tsconfig.tsbuildinfo && rm -f packages/*/tsconfig.tsbuildinfo",
     "typecheck": "tsc --build --dry",
     "typecheck:watch": "tsc --build --watch",
-    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup"
+    "setup": "bun run build:all && ROOT_DIR=$(pwd)/sites bun packages/cli/dist/index.js setup",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix ."
   },
   "keywords": [
     "deploy",
@@ -35,6 +37,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@biomejs/biome": "^2.4.2",
     "@types/node": "^20.17.32",
     "bun-plugin-dtsx": "^0.21.9",
     "bun-types": "latest",

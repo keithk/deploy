@@ -5,6 +5,15 @@ import { createHmac } from "crypto";
 import { settingsModel, siteModel, info, warn } from "@keithk/deploy-core";
 import { pullSite, deploySite } from "../services";
 
+interface GitHubPushPayload {
+  ref?: string;
+  repository?: {
+    clone_url?: string;
+    html_url?: string;
+    url?: string;
+  };
+}
+
 /**
  * Verify the GitHub webhook signature
  */
@@ -75,7 +84,7 @@ export async function handleAutodeployWebhook(
 
   // Read and parse body
   let rawBody: string;
-  let payload: any;
+  let payload: GitHubPushPayload;
 
   try {
     rawBody = await request.text();

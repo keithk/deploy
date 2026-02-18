@@ -1,7 +1,7 @@
 // ABOUTME: Core database class providing SQLite connection management and query execution.
 // ABOUTME: Implements singleton pattern for consistent database access across the application.
 
-import { Database as SQLiteDatabase } from "bun:sqlite";
+import { Database as SQLiteDatabase, type Statement, type SQLQueryBindings } from "bun:sqlite";
 import { join } from "path";
 import { existsSync, mkdirSync, readdirSync } from "fs";
 import { debug, error, info, warn } from "../utils/logging";
@@ -68,7 +68,7 @@ export class Database {
   /**
    * Execute a SQL statement
    */
-  public run(sql: string, params: any[] = []): void {
+  public run(sql: string, params: SQLQueryBindings[] = []): void {
     try {
       this.db.run(sql, params);
     } catch (err) {
@@ -81,7 +81,7 @@ export class Database {
   /**
    * Prepare a SQL statement
    */
-  public prepare(sql: string): any {
+  public prepare(sql: string): Statement {
     try {
       return this.db.prepare(sql);
     } catch (err) {
@@ -94,7 +94,7 @@ export class Database {
   /**
    * Execute a query and return results
    */
-  public query<T = any>(sql: string, params: any[] = []): T[] {
+  public query<T = Record<string, unknown>>(sql: string, params: SQLQueryBindings[] = []): T[] {
     try {
       const stmt = this.db.prepare(sql);
       return stmt.all(...(params || [])) as T[];
