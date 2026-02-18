@@ -12,6 +12,7 @@ import { join, resolve } from "path";
 import { existsSync } from "fs";
 import { proxyRequest } from "../utils/proxy";
 import { checkSiteAccess } from "../middleware/auth";
+import { renderDeployScreen } from "../pages/deploy-screen";
 
 // Type definition for the routing configuration
 export interface RoutingConfig {
@@ -215,16 +216,24 @@ function extractSubdomain(host: string, projectDomain: string): string | null {
 
 /**
  * Generate an HTML status page for non-running sites.
+ * Building sites get the black hole animation; other statuses get a simple page.
  */
 function generateStatusPage(site: Site): Response {
-  const statusMessages: Record<Site["status"], { title: string; message: string }> = {
+  // Building sites get the black hole animation
+  if (site.status === "building") {
+    return new Response(renderDeployScreen(site.name, "deploying..."), {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": "10",
+      },
+    });
+  }
+
+  const statusMessages: Record<string, { title: string; message: string }> = {
     stopped: {
       title: "Site Stopped",
       message: "This site is currently stopped. Please contact the site owner to start it.",
-    },
-    building: {
-      title: "Site Building",
-      message: "This site is currently being built. Please check back in a few minutes.",
     },
     error: {
       title: "Site Error",
@@ -236,7 +245,10 @@ function generateStatusPage(site: Site): Response {
     },
   };
 
-  const { title, message } = statusMessages[site.status];
+  const { title, message } = statusMessages[site.status] || {
+    title: "Unknown Status",
+    message: "This site is in an unknown state.",
+  };
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -274,7 +286,6 @@ function generateStatusPage(site: Site): Response {
       margin-bottom: 20px;
     }
     .status-stopped { background: #fef3c7; color: #92400e; }
-    .status-building { background: #dbeafe; color: #1e40af; }
     .status-error { background: #fee2e2; color: #991b1b; }
   </style>
 </head>

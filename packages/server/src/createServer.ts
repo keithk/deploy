@@ -27,6 +27,7 @@ import { validateSession, createSessionCookie, getSessionFromRequest } from "./m
 import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
+import { renderDeployScreen } from "./pages/deploy-screen";
 
 /**
  * Gets the admin dashboard directory path
@@ -598,6 +599,15 @@ export async function createServer({
               return response;
             }
             const response = new Response(renderLoginPage(), {
+              headers: { "Content-Type": "text/html; charset=utf-8" }
+            });
+            logger.logResponse(request, response, loggerStart);
+            return response;
+          }
+
+          // Serve deploy screen preview at /deploy-screen
+          if (url.pathname === '/deploy-screen') {
+            const response = new Response(renderDeployScreen('my-app', 'deploying...'), {
               headers: { "Content-Type": "text/html; charset=utf-8" }
             });
             logger.logResponse(request, response, loggerStart);
