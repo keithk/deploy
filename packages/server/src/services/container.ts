@@ -37,7 +37,7 @@ async function getUsedPorts(): Promise<Set<number>> {
   // Check running docker containers
   try {
     const result = await $`docker ps --format '{{.Ports}}'`.text();
-    const portMatches = result.matchAll(/0\.0\.0\.0:(\d+)/g);
+    const portMatches = result.matchAll(/(?:0\.0\.0\.0|127\.0\.0\.1):(\d+)/g);
     for (const match of portMatches) {
       usedPorts.add(parseInt(match[1], 10));
     }
@@ -192,7 +192,10 @@ export async function startContainer(
     // Start the container
     const result = await $`docker run -d \
       --name ${containerName} \
-      -p ${port}:${port} \
+      -p 127.0.0.1:${port}:${port} \
+      --memory=512m \
+      --cpus=1 \
+      --restart unless-stopped \
       ${volumeArgs} \
       ${envArgs} \
       ${imageName}`.text();
@@ -365,4 +368,56 @@ export async function waitForContainerHealth(
     `Container on port ${port} did not become healthy within ${timeoutMs}ms`
   );
   return false;
+}
+
+export interface CleanupResult {
+  containersRemoved: string;
+  imagesRemoved: string;
+}
+
+/**
+ * Remove stopped containers older than 24 hours and dangling images
+ */
+export async function cleanupContainers(): Promise<CleanupResult> {
+  let containersRemoved = "";
+  let imagesRemoved = "";
+
+  try {
+    containersRemoved =
+      await $`docker container prune -f --filter "until=24h"`.text();
+    info(`Container cleanup: ${containersRemoved.trim()}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    error(`Failed to prune containers: ${message}`);
+    containersRemoved = `Error: ${message}`;
+  }
+
+  try {
+    imagesRemoved = await $`docker image prune -f`.text();
+    info(`Image cleanup: ${imagesRemoved.trim()}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    error(`Failed to prune images: ${message}`);
+    imagesRemoved = `Error: ${message}`;
+  }
+
+  return {
+    containersRemoved: containersRemoved.trim(),
+    imagesRemoved: imagesRemoved.trim(),
+  };
+}
+
+/**
+ * Remove old blue-green deployment containers for a specific site
+ */
+export async function cleanupSiteContainers(siteName: string): Promise<void> {
+  const blueGreenName = `${getContainerName(siteName)}-new`;
+
+  try {
+    await $`docker rm -f ${blueGreenName}`.quiet();
+    info(`Removed old blue-green container: ${blueGreenName}`);
+  } catch {
+    // No leftover blue-green container — nothing to do
+    debug(`No blue-green container to clean up for ${siteName}`);
+  }
 }

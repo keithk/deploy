@@ -116,7 +116,7 @@ export async function deploySite(
     const containerName = containerInfo.isBlueGreen
       ? `deploy-${site.name}-new`
       : `deploy-${site.name}`;
-    const isHealthy = await waitForContainerHealth(containerInfo.port);
+    const isHealthy = await waitForContainerHealth(containerInfo.port, 120000);
     if (!isHealthy) {
       // Capture container logs to help debug the failure
       log(`Container failed health check. Capturing logs...`);
