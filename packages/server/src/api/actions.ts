@@ -6,6 +6,18 @@ import { requireAuth } from "../middleware/auth";
 import { discoverSiteActions } from "../services/actions";
 import { getSitePath } from "../services/git";
 
+interface ActionHandlerResult {
+  success: boolean;
+  message?: string;
+  data?: unknown;
+}
+
+interface ActionModule {
+  default?: {
+    handler?: (params: unknown, context: unknown) => Promise<ActionHandlerResult>;
+  };
+}
+
 /**
  * Handle all /api/actions/* requests
  * Returns Response if handled, null if not an actions path
@@ -176,10 +188,10 @@ async function handleRunAction(actionId: string): Promise<Response> {
     );
   }
 
-  let module: any;
+  let actionModule: ActionModule;
   try {
     // Import the action module
-    module = await import(action.entry_path);
+    actionModule = await import(action.entry_path) as ActionModule;
   } catch (importError) {
     const errorMsg = importError instanceof Error ? importError.message : String(importError);
     actionModel.updateLastRun(actionId, "error", `Import failed: ${errorMsg}`);
@@ -189,7 +201,7 @@ async function handleRunAction(actionId: string): Promise<Response> {
     );
   }
 
-  if (!module.default || typeof module.default.handler !== "function") {
+  if (!actionModule.default || typeof actionModule.default.handler !== "function") {
     actionModel.updateLastRun(actionId, "error", "Action has no handler function");
     return Response.json(
       { error: "Action has no handler function" },
@@ -227,7 +239,7 @@ async function handleRunAction(actionId: string): Promise<Response> {
 
     // Execute the handler
     console.log(`Executing action handler: ${actionId}`);
-    const result = await module.default.handler({}, context);
+    const result = await actionModule.default!.handler!({}, context);
     console.log(`Action handler completed: ${actionId}, success=${result?.success}`);
 
     // Validate result

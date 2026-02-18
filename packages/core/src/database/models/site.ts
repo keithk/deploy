@@ -170,7 +170,7 @@ export class SiteModel {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | null)[] = [];
 
     if (data.name !== undefined) {
       updates.push("name = ?");
