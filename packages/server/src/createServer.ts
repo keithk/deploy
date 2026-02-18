@@ -22,8 +22,8 @@ import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
-import { SSHAuthServer } from "./auth/ssh-server";
-import { validateSession, createSessionCookie } from "./middleware/auth";
+import { isPasswordConfigured } from "./api/auth";
+import { validateSession, createSessionCookie, getSessionFromRequest } from "./middleware/auth";
 import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -114,6 +114,203 @@ function isRootDomain(host: string, projectDomain: string): boolean {
 function isAdminSubdomain(host: string, projectDomain: string): boolean {
   const hostNoPort = host.split(":")[0] || "";
   return hostNoPort === `admin.${projectDomain}`;
+}
+
+/**
+ * Shared styles for login and setup pages, matching the admin dashboard theme.
+ */
+function authPageStyles(): string {
+  return `
+    <style>
+      :root { --font-mono: "JetBrains Mono", monospace; --accent: #e91e8c; --accent-hover: #d11a7a; }
+      :root, [data-theme="light"] { --bg: #ffffff; --bg-surface: #f8f8f8; --border: #e0e0e0; --text: #1a1a1a; --text-muted: #6b6b6b; }
+      [data-theme="dark"] { --bg: #0a0a0a; --bg-surface: #141414; --border: #2a2a2a; --text: #f0f0f0; --text-muted: #888888; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: var(--font-mono); background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+      .auth-container { width: 100%; max-width: 380px; padding: 24px; }
+      .auth-brand { text-align: center; margin-bottom: 32px; }
+      .auth-brand-name { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+      .auth-brand-accent { color: var(--accent); }
+      .auth-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+      .auth-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+      .auth-card p { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+      label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+      input[type="password"] { width: 100%; padding: 8px 12px; font-family: var(--font-mono); font-size: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; }
+      input[type="password"]:focus { border-color: var(--accent); }
+      .field { margin-bottom: 16px; }
+      .btn-primary { width: 100%; padding: 10px; font-family: var(--font-mono); font-size: 13px; font-weight: 600; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+      .error { color: #ef4444; font-size: 12px; margin-bottom: 12px; display: none; }
+      .error.visible { display: block; }
+    </style>`;
+}
+
+/**
+ * Render the login page HTML.
+ */
+function renderLoginPage(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Deploy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${authPageStyles()}
+  <script>
+    (function() {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const stored = localStorage.getItem('theme');
+      const theme = stored === 'dark' || stored === 'light' ? stored : (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-brand">
+      <span class="auth-brand-name">deploy<span class="auth-brand-accent">.</span></span>
+    </div>
+    <div class="auth-card">
+      <h2>Sign in</h2>
+      <p>Enter your password to access the dashboard.</p>
+      <div class="error" id="error"></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autofocus>
+        </div>
+        <button type="submit" class="btn-primary" id="submit-btn">Sign in</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const err = document.getElementById('error');
+      const password = document.getElementById('password').value;
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      err.classList.remove('visible');
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+          credentials: 'include'
+        });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const data = await res.json();
+          err.textContent = data.error || 'Login failed';
+          err.classList.add('visible');
+        }
+      } catch {
+        err.textContent = 'Connection error. Try again.';
+        err.classList.add('visible');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    });
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * Render the initial setup page HTML (first-time password creation).
+ */
+function renderSetupPage(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup - Deploy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${authPageStyles()}
+  <script>
+    (function() {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const stored = localStorage.getItem('theme');
+      const theme = stored === 'dark' || stored === 'light' ? stored : (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-brand">
+      <span class="auth-brand-name">deploy<span class="auth-brand-accent">.</span></span>
+    </div>
+    <div class="auth-card">
+      <h2>Welcome to Deploy</h2>
+      <p>Create a password to secure your dashboard.</p>
+      <div class="error" id="error"></div>
+      <form id="setup-form">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autofocus minlength="8" placeholder="At least 8 characters">
+        </div>
+        <div class="field">
+          <label for="confirm">Confirm password</label>
+          <input type="password" id="confirm" name="confirm" required minlength="8">
+        </div>
+        <button type="submit" class="btn-primary" id="submit-btn">Set password</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById('setup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const err = document.getElementById('error');
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirm').value;
+      err.classList.remove('visible');
+      if (password !== confirm) {
+        err.textContent = 'Passwords do not match.';
+        err.classList.add('visible');
+        return;
+      }
+      if (password.length < 8) {
+        err.textContent = 'Password must be at least 8 characters.';
+        err.classList.add('visible');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Setting up...';
+      try {
+        const res = await fetch('/api/auth/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+          credentials: 'include'
+        });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const data = await res.json();
+          err.textContent = data.error || 'Setup failed';
+          err.classList.add('visible');
+        }
+      } catch {
+        err.textContent = 'Connection error. Try again.';
+        err.classList.add('visible');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Set password';
+    });
+  </script>
+</body>
+</html>`;
 }
 
 /**
@@ -382,7 +579,27 @@ export async function createServer({
 
         // Serve admin dashboard for admin subdomain
         if (isAdminSubdomain(host, PROJECT_DOMAIN)) {
-          // Try to serve the exact file first
+          // Check authentication before serving the dashboard
+          const sessionToken = getSessionFromRequest(request);
+          const isAuthenticated = validateSession(sessionToken);
+
+          if (!isAuthenticated) {
+            // Unauthenticated: serve login or setup page
+            if (!isPasswordConfigured()) {
+              const response = new Response(renderSetupPage(), {
+                headers: { "Content-Type": "text/html; charset=utf-8" }
+              });
+              logger.logResponse(request, response, loggerStart);
+              return response;
+            }
+            const response = new Response(renderLoginPage(), {
+              headers: { "Content-Type": "text/html; charset=utf-8" }
+            });
+            logger.logResponse(request, response, loggerStart);
+            return response;
+          }
+
+          // Authenticated: serve the SPA
           let adminResponse = await serveAdminFile(url.pathname);
 
           // SPA fallback: if file not found, serve index.html for client-side routing
@@ -391,19 +608,6 @@ export async function createServer({
           }
 
           if (adminResponse) {
-            // If there's a token in the URL, validate and set a session cookie
-            const token = url.searchParams.get("token");
-            if (token && validateSession(token)) {
-              const cookie = createSessionCookie(token);
-              const headers = new Headers(adminResponse.headers);
-              headers.set("Set-Cookie", cookie);
-              const responseWithCookie = new Response(adminResponse.body, {
-                status: adminResponse.status,
-                headers
-              });
-              logger.logResponse(request, responseWithCookie, loggerStart);
-              return responseWithCookie;
-            }
             logger.logResponse(request, adminResponse, loggerStart);
             return adminResponse;
           }
@@ -523,23 +727,6 @@ export async function createServer({
   info(
     `Server running at http://localhost:${server.port} in ${mode} mode, domain: ${PROJECT_DOMAIN}`
   );
-
-  // Start SSH auth server for dashboard access
-  const sshPort = parseInt(process.env.SSH_PORT || "2222", 10);
-  const dataDir = join(process.cwd(), "data");
-
-  try {
-    const sshServer = new SSHAuthServer({
-      port: sshPort,
-      hostKeyPath: join(dataDir, "host_key"),
-      authorizedKeysPath: join(dataDir, "authorized_keys"),
-      dashboardUrl: `https://admin.${PROJECT_DOMAIN}`
-    });
-    await sshServer.start();
-    info(`SSH auth server running on port ${sshPort}`);
-  } catch (err) {
-    info(`SSH auth server not started: ${err instanceof Error ? err.message : String(err)}`);
-  }
 
   // Execute server:after-start hook
   await executeHook("server:after-start", actionContext);

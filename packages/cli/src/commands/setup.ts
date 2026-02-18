@@ -3,7 +3,6 @@
 
 import { Command } from "commander";
 import { join, resolve } from "path";
-import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import chalk from "chalk";
 import inquirer from "inquirer";
@@ -38,9 +37,8 @@ interface SetupConfig {
   environment: "local" | "production";
   domain: string;
   httpPort: number;
-  sshPort: number;
   sitesDir: string;
-  sshPublicKey: string;
+  password: string;
 }
 
 /**
@@ -92,50 +90,16 @@ function validatePort(input: string): boolean | string {
 }
 
 /**
- * Validate SSH public key - accepts key content or file path
+ * Validate password meets minimum requirements
  */
-function validateSshKey(input: string): boolean | string {
+function validatePassword(input: string): boolean | string {
   if (!input || input.trim() === "") {
-    return "SSH public key is required for authentication";
+    return "Password is required";
   }
-
-  const trimmed = input.trim();
-
-  // Check if it's a file path
-  if (trimmed.startsWith("~") || trimmed.startsWith("/") || trimmed.startsWith("./")) {
-    const expandedPath = trimmed.startsWith("~")
-      ? trimmed.replace("~", homedir())
-      : resolve(trimmed);
-
-    if (!existsSync(expandedPath)) {
-      return `File not found: ${expandedPath}`;
-    }
-    return true;
+  if (input.length < 8) {
+    return "Password must be at least 8 characters";
   }
-
-  // Check if it looks like a valid SSH public key
-  if (trimmed.startsWith("ssh-") || trimmed.startsWith("ecdsa-") || trimmed.startsWith("sk-")) {
-    return true;
-  }
-
-  return "Please provide a valid SSH public key or path to key file (e.g., ~/.ssh/id_ed25519.pub)";
-}
-
-/**
- * Resolve SSH key - reads from file if path provided
- */
-function resolveSshKey(input: string): string {
-  const trimmed = input.trim();
-
-  if (trimmed.startsWith("~") || trimmed.startsWith("/") || trimmed.startsWith("./")) {
-    const expandedPath = trimmed.startsWith("~")
-      ? trimmed.replace("~", homedir())
-      : resolve(trimmed);
-
-    return readFileSync(expandedPath, "utf-8").trim();
-  }
-
-  return trimmed;
+  return true;
 }
 
 /**
@@ -171,25 +135,29 @@ async function collectConfig(): Promise<SetupConfig> {
     },
     {
       type: "input",
-      name: "sshPort",
-      message: "SSH port for authentication:",
-      default: "2222",
-      validate: validatePort,
-      filter: (input: string) => parseInt(input, 10)
-    },
-    {
-      type: "input",
       name: "sitesDir",
       message: "Where should sites be stored?",
       default: (answers: { environment: string }) =>
         answers.environment === "local" ? "./sites" : "/var/deploy/sites"
     },
     {
-      type: "input",
-      name: "sshPublicKey",
-      message: "SSH public key for authentication (paste key or path to file):",
-      default: "~/.ssh/id_ed25519.pub",
-      validate: validateSshKey
+      type: "password",
+      name: "password",
+      message: "Dashboard password (min 8 characters):",
+      mask: "*",
+      validate: validatePassword
+    },
+    {
+      type: "password",
+      name: "confirmPassword",
+      message: "Confirm password:",
+      mask: "*",
+      validate: (input: string, answers: { password: string }) => {
+        if (input !== answers.password) {
+          return "Passwords do not match";
+        }
+        return true;
+      }
     }
   ]);
 
@@ -221,7 +189,6 @@ async function createEnvFile(config: SetupConfig): Promise<void> {
 
   setEnvVar("PROJECT_DOMAIN", config.domain);
   setEnvVar("PORT", String(config.httpPort));
-  setEnvVar("SSH_PORT", String(config.sshPort));
   setEnvVar("SITES_DIR", config.sitesDir);
   setEnvVar("NODE_ENV", config.environment === "production" ? "production" : "development");
 
@@ -229,32 +196,12 @@ async function createEnvFile(config: SetupConfig): Promise<void> {
 }
 
 /**
- * Generate SSH host key if not exists
+ * Hash and store dashboard password in the settings table
  */
-async function generateHostKey(dataDir: string): Promise<boolean> {
-  const hostKeyPath = join(dataDir, "host_key");
-
-  if (existsSync(hostKeyPath)) {
-    return true;
-  }
-
-  const result = await execCommand(
-    "ssh-keygen",
-    ["-t", "ed25519", "-f", hostKeyPath, "-N", ""],
-    {},
-    undefined
-  );
-
-  return result.success;
-}
-
-/**
- * Save authorized_keys file
- */
-async function saveAuthorizedKeys(dataDir: string, publicKey: string): Promise<void> {
-  const authKeysPath = join(dataDir, "authorized_keys");
-  const resolvedKey = resolveSshKey(publicKey);
-  await Bun.write(authKeysPath, resolvedKey + "\n");
+async function setDashboardPassword(password: string): Promise<void> {
+  const { settingsModel } = await import("@keithk/deploy-core");
+  const hash = await Bun.password.hash(password, { algorithm: "argon2id" });
+  settingsModel.set("password_hash", hash);
 }
 
 /**
@@ -312,31 +259,7 @@ async function runInteractiveSetup(options: { skipCaddy?: boolean } = {}): Promi
     throw err;
   }
 
-  // Step 4: Generate SSH host key
-  spinner = ora("Generating SSH host key").start();
-  try {
-    const success = await generateHostKey(dataDir);
-    if (success) {
-      spinner.succeed(chalk.green("Generated SSH host key"));
-    } else {
-      spinner.warn(chalk.yellow("SSH host key already exists"));
-    }
-  } catch (err) {
-    spinner.fail(chalk.red("Failed to generate SSH host key"));
-    throw err;
-  }
-
-  // Step 5: Save authorized_keys
-  spinner = ora("Saving authorized_keys").start();
-  try {
-    await saveAuthorizedKeys(dataDir, config.sshPublicKey);
-    spinner.succeed(chalk.green("Saved authorized_keys"));
-  } catch (err) {
-    spinner.fail(chalk.red("Failed to save authorized_keys"));
-    throw err;
-  }
-
-  // Step 6: Create Caddyfile
+  // Step 4: Create Caddyfile
   spinner = ora("Creating Caddyfile").start();
   try {
     const caddyContent = generateSimpleCaddyfile(config.domain, config.httpPort);
@@ -357,7 +280,7 @@ async function runInteractiveSetup(options: { skipCaddy?: boolean } = {}): Promi
     throw err;
   }
 
-  // Step 8: Initialize database
+  // Step 6: Initialize database
   spinner = ora("Initializing database").start();
   try {
     await initializeDatabase(dataDir);
@@ -367,13 +290,13 @@ async function runInteractiveSetup(options: { skipCaddy?: boolean } = {}): Promi
     throw err;
   }
 
-  // Step 9: Run migrations
-  spinner = ora("Running migrations").start();
+  // Step 7: Set dashboard password
+  spinner = ora("Setting dashboard password").start();
   try {
-    // Already run in initializeDatabase
-    spinner.succeed(chalk.green("Ran migrations"));
+    await setDashboardPassword(config.password);
+    spinner.succeed(chalk.green("Set dashboard password"));
   } catch (err) {
-    spinner.fail(chalk.red("Failed to run migrations"));
+    spinner.fail(chalk.red("Failed to set dashboard password"));
     throw err;
   }
 
@@ -460,7 +383,7 @@ async function runInteractiveSetup(options: { skipCaddy?: boolean } = {}): Promi
   console.log(chalk.white("  deploy start"));
   console.log("");
   console.log(chalk.cyan("To access the dashboard:"));
-  console.log(chalk.white(`  ssh ${config.domain} -p ${config.sshPort}`));
+  console.log(chalk.white(`  https://admin.${config.domain}`));
   console.log("");
 
   if (config.environment === "production") {

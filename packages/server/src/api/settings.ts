@@ -2,22 +2,16 @@
 // ABOUTME: Provides domain configuration, GitHub token, and other server-level settings.
 
 import { settingsModel, updateCaddyConfig } from "@keithk/deploy-core";
-import { requireAuth } from "../middleware/auth";
 
 /**
  * Handle /api/settings requests
+ * Auth is handled centrally in handleApiRequest (handlers.ts).
  * Returns Response if handled, null if not a settings request
  */
 export async function handleSettingsApi(
   request: Request
 ): Promise<Response | null> {
   const method = request.method;
-
-  // Require authentication for all settings operations
-  const authResponse = requireAuth(request);
-  if (authResponse) {
-    return authResponse;
-  }
 
   // GET /api/settings - get all settings
   if (method === "GET") {

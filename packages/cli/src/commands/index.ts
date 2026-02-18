@@ -8,6 +8,7 @@ import { registerCaddyfileCommands } from "./caddyfile";
 import { registerSetupCommand } from "./setup";
 import { registerMigrateCommands } from "./migrate";
 import { registerAdminCommands } from "./admin";
+import { registerAuthCommands } from "./auth";
 
 // Legacy commands - disabled in favor of dashboard-based management
 // import { registerRunCommand } from "./run";
@@ -44,4 +45,5 @@ export function registerCommands(program: Command): void {
   // Admin/migration commands
   registerMigrateCommands(program);
   registerAdminCommands(program);
+  registerAuthCommands(program);
 }

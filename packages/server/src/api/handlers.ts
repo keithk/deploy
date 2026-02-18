@@ -13,6 +13,8 @@ import { handleGitHubApi } from "./github";
 import { handleActionsApi } from "./actions";
 import { handleDeploymentsApi } from "./deployments";
 import { handleSystemApi } from "./system";
+import { handleAuthApi } from "./auth";
+import { requireAuth } from "../middleware/auth";
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -348,6 +350,22 @@ export async function handleApiRequest(
   }
   const apiParts = pathParts.slice(1); // Remove 'api' and get remaining parts
   const firstPart = apiParts[0];
+
+  // Auth endpoints are unauthenticated (they handle authentication itself)
+  if (firstPart === "auth") {
+    return handleAuthApi(request, path);
+  }
+
+  // Domain validation is unauthenticated (called by Caddy)
+  if (path === "/api/validate-domain") {
+    return null; // Handled in createServer.ts before API routing
+  }
+
+  // All other API endpoints require authentication
+  const authResponse = requireAuth(request);
+  if (authResponse) {
+    return authResponse;
+  }
 
   // Route to settings API
   if (firstPart === "settings") {

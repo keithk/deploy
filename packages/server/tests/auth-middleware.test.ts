@@ -204,7 +204,7 @@ describe("createSessionCookie", () => {
     expect(cookie).toContain("session=my-token");
     expect(cookie).toContain("Path=/");
     expect(cookie).toContain("HttpOnly");
-    expect(cookie).toContain("SameSite=Strict");
+    expect(cookie).toContain("SameSite=Lax");
     expect(cookie).toContain("Expires=");
   });
 
