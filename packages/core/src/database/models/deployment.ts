@@ -132,7 +132,7 @@ export class DeploymentModel {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | null)[] = [];
 
     if (data.status !== undefined) {
       updates.push("status = ?");
@@ -216,16 +216,17 @@ export class DeploymentModel {
       return 0;
     }
 
-    const keepIdSet = keepIds.map((d) => `'${d.id}'`).join(",");
+    const ids = keepIds.map((d) => d.id);
+    const placeholders = ids.map(() => "?").join(",");
     const result = this.db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM deployments WHERE site_id = ? AND id NOT IN (${keepIdSet})`,
-      [siteId]
+      `SELECT COUNT(*) as count FROM deployments WHERE site_id = ? AND id NOT IN (${placeholders})`,
+      [siteId, ...ids]
     );
 
     const stmt = this.db.prepare(
-      `DELETE FROM deployments WHERE site_id = ? AND id NOT IN (${keepIdSet})`
+      `DELETE FROM deployments WHERE site_id = ? AND id NOT IN (${placeholders})`
     );
-    stmt.run(siteId);
+    stmt.run(siteId, ...ids);
 
     return result[0]?.count ?? 0;
   }

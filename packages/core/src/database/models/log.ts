@@ -110,16 +110,17 @@ export class LogModel {
       return 0;
     }
 
-    const keepIdSet = keepIds.map((l) => `'${l.id}'`).join(",");
+    const ids = keepIds.map((l) => l.id);
+    const placeholders = ids.map(() => "?").join(",");
     const result = this.db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM logs WHERE site_id = ? AND id NOT IN (${keepIdSet})`,
-      [siteId]
+      `SELECT COUNT(*) as count FROM logs WHERE site_id = ? AND id NOT IN (${placeholders})`,
+      [siteId, ...ids]
     );
 
     const stmt = this.db.prepare(
-      `DELETE FROM logs WHERE site_id = ? AND id NOT IN (${keepIdSet})`
+      `DELETE FROM logs WHERE site_id = ? AND id NOT IN (${placeholders})`
     );
-    stmt.run(siteId);
+    stmt.run(siteId, ...ids);
 
     return result[0]?.count ?? 0;
   }

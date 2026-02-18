@@ -1,8 +1,12 @@
 // ABOUTME: Site card component displaying individual site in a row
 // ABOUTME: Shows status dot, name, URL, action buttons, and dropdown menu
 
+import { showToast } from './toast.js';
+import { showConfirm } from './confirm-dialog.js';
+
 class DeploySiteCard extends HTMLElement {
   private dropdownOpen: boolean = false;
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
   static get observedAttributes() {
     return ['site-id', 'name', 'status', 'visibility', 'git-url', 'subdomain', 'domain', 'persistent-storage'];
@@ -48,12 +52,20 @@ class DeploySiteCard extends HTMLElement {
     this.render();
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
+    this.outsideClickHandler = (e: MouseEvent) => {
       if (!this.contains(e.target as Node) && this.dropdownOpen) {
         this.dropdownOpen = false;
         this.render();
       }
-    });
+    };
+    document.addEventListener('click', this.outsideClickHandler);
+  }
+
+  disconnectedCallback() {
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler);
+      this.outsideClickHandler = null;
+    }
   }
 
   async handleRedeploy() {
@@ -67,11 +79,11 @@ class DeploySiteCard extends HTMLElement {
         window.dispatchEvent(new CustomEvent('site-updated'));
       } else {
         const error = await response.json();
-        alert(`Failed to redeploy: ${error.message || 'Unknown error'}`);
+        showToast(`Failed to redeploy: ${error.message || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error('Redeploy failed:', error);
-      alert('Failed to redeploy site');
+      showToast('Failed to redeploy site', 'error');
     }
   }
 
@@ -95,9 +107,11 @@ class DeploySiteCard extends HTMLElement {
     const newValue = !this.persistentStorage;
     const action = newValue ? 'enable' : 'disable';
 
-    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage for ${this.siteName}? This requires a redeploy.`)) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'Persistent Storage',
+      `${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage for ${this.siteName}? This requires a redeploy.`
+    );
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/sites/${this.siteId}`, {
@@ -111,18 +125,21 @@ class DeploySiteCard extends HTMLElement {
         window.dispatchEvent(new CustomEvent('site-updated'));
       } else {
         const error = await response.json();
-        alert(`Failed to update: ${error.error || 'Unknown error'}`);
+        showToast(`Failed to update: ${error.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error('Toggle persistent storage failed:', error);
-      alert('Failed to update site');
+      showToast('Failed to update site', 'error');
     }
   }
 
   async handleDelete() {
-    if (!confirm(`Delete ${this.siteName}? This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'Delete Site',
+      `Delete ${this.siteName}? This cannot be undone.`,
+      { confirmText: 'Delete', destructive: true }
+    );
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/sites/${this.siteId}`, {
@@ -134,11 +151,11 @@ class DeploySiteCard extends HTMLElement {
         window.dispatchEvent(new CustomEvent('site-deleted'));
       } else {
         const error = await response.json();
-        alert(`Failed to delete: ${error.message || 'Unknown error'}`);
+        showToast(`Failed to delete: ${error.message || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error('Delete failed:', error);
-      alert('Failed to delete site');
+      showToast('Failed to delete site', 'error');
     }
   }
 

@@ -30,8 +30,9 @@ export async function handleSettingsApi(
 
   // PUT /api/settings - update settings
   if (method === "PUT" || method === "PATCH") {
+    let body: Record<string, any>;
     try {
-      const body = await request.json();
+      body = await request.json();
 
       // Handle github_token
       if (body.github_token !== undefined) {

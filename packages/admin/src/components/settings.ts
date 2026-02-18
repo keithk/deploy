@@ -1,6 +1,9 @@
 // ABOUTME: Settings page component for admin configuration
 // ABOUTME: Allows setting primary site for root domain and GitHub token
 
+import { showToast } from './toast.js';
+import { showConfirm } from './confirm-dialog.js';
+
 interface Site {
   id: string;
   name: string;
@@ -97,13 +100,11 @@ class DeploySettings extends HTMLElement {
   }
 
   async triggerUpdate() {
-    if (
-      !confirm(
-        "This will update the server to the latest version. The update uses rolling restarts for zero downtime. Continue?"
-      )
-    ) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'System Update',
+      'This will update the server to the latest version. The update uses rolling restarts for zero downtime. Continue?'
+    );
+    if (!confirmed) return;
 
     try {
       const response = await fetch("/api/system/update", {
@@ -120,11 +121,11 @@ class DeploySettings extends HTMLElement {
         this.pollUpdateStatus();
       } else {
         const error = await response.json();
-        alert(`Failed to start update: ${error.error || "Unknown error"}`);
+        showToast(`Failed to start update: ${error.error || "Unknown error"}`, 'error');
       }
     } catch (error) {
       console.error("Failed to trigger update:", error);
-      alert("Failed to start update");
+      showToast("Failed to start update", 'error');
     }
   }
 
@@ -199,16 +200,16 @@ class DeploySettings extends HTMLElement {
         this.settings.domain = domain;
 
         if (result.caddy_updated) {
-          alert(`Domain saved. ${result.caddy_updated}`);
+          showToast(`Domain saved. ${result.caddy_updated}`, 'success');
         } else {
-          alert("Domain saved.");
+          showToast("Domain saved.", 'success');
         }
       } else {
-        alert("Failed to save domain. Please try again.");
+        showToast("Failed to save domain. Please try again.", 'error');
       }
     } catch (error) {
       console.error("Failed to save domain:", error);
-      alert("Failed to save domain. Please try again.");
+      showToast("Failed to save domain. Please try again.", 'error');
     } finally {
       this.saving = false;
       this.render();
@@ -233,11 +234,11 @@ class DeploySettings extends HTMLElement {
         this.settings.build_io_class = result.build_io_class;
         this.settings.build_max_parallelism = result.build_max_parallelism;
       } else {
-        alert("Failed to save build settings. Please try again.");
+        showToast("Failed to save build settings. Please try again.", 'error');
       }
     } catch (error) {
       console.error("Failed to save build settings:", error);
-      alert("Failed to save build settings. Please try again.");
+      showToast("Failed to save build settings. Please try again.", 'error');
     } finally {
       this.saving = false;
       this.render();

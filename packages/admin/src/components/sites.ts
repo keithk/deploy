@@ -20,13 +20,20 @@ class DeploySites extends HTMLElement {
   private loading: boolean = true;
   private searchQuery: string = '';
   private showModal: boolean = false;
+  private handleSiteUpdated = () => this.loadSites();
+  private handleSiteDeleted = () => this.loadSites();
 
   connectedCallback() {
     this.render();
     this.loadSites();
     this.addEventListener('site-created', () => this.handleSiteCreated());
-    window.addEventListener('site-updated', () => this.loadSites());
-    window.addEventListener('site-deleted', () => this.loadSites());
+    window.addEventListener('site-updated', this.handleSiteUpdated);
+    window.addEventListener('site-deleted', this.handleSiteDeleted);
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener('site-updated', this.handleSiteUpdated);
+    window.removeEventListener('site-deleted', this.handleSiteDeleted);
   }
 
   async loadSites() {
