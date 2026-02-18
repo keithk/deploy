@@ -1,6 +1,10 @@
 // ABOUTME: Site detail page with tabs for logs, environment, and settings
 // ABOUTME: Shows site info header and tabbed content area
 
+import { showToast } from './toast.js';
+import { showConfirm } from './confirm-dialog.js';
+import { showInput } from './input-dialog.js';
+
 interface Site {
   id: string;
   name: string;
@@ -168,11 +172,11 @@ class DeploySiteDetail extends HTMLElement {
         this.render();
       } else {
         const error = await response.json();
-        alert(`Failed to redeploy: ${error.message || "Unknown error"}`);
+        showToast(`Failed to redeploy: ${error.message || "Unknown error"}`, 'error');
       }
     } catch (error) {
       console.error("Redeploy failed:", error);
-      alert("Failed to redeploy site");
+      showToast("Failed to redeploy site", 'error');
     }
   }
 
@@ -200,15 +204,11 @@ class DeploySiteDetail extends HTMLElement {
     const newValue = !this.site.persistent_storage;
     const action = newValue ? "enable" : "disable";
 
-    if (
-      !confirm(
-        `${
-          action.charAt(0).toUpperCase() + action.slice(1)
-        } persistent storage? This requires a redeploy.`
-      )
-    ) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'Persistent Storage',
+      `${action.charAt(0).toUpperCase() + action.slice(1)} persistent storage? This requires a redeploy.`
+    );
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/sites/${this.siteId}`, {
@@ -234,7 +234,7 @@ class DeploySiteDetail extends HTMLElement {
     const gitUrl = this.site.git_url || this.site.gitUrl;
 
     if (!gitUrl) {
-      alert("Cannot enable autodeploy: no git URL configured for this site.");
+      showToast("Cannot enable autodeploy: no git URL configured for this site.", 'error');
       return;
     }
 
@@ -245,14 +245,15 @@ class DeploySiteDetail extends HTMLElement {
       });
       const status = await statusResponse.json();
       if (!status.configured) {
-        alert(
-          "Cannot enable autodeploy: GitHub token not configured. Go to Settings to add your token."
+        showToast(
+          "Cannot enable autodeploy: GitHub token not configured. Go to Settings to add your token.",
+          'error'
         );
         return;
       }
     } catch (error) {
       console.error("Failed to check GitHub status:", error);
-      alert("Failed to check GitHub configuration.");
+      showToast("Failed to check GitHub configuration.", 'error');
       return;
     }
 
@@ -267,8 +268,9 @@ class DeploySiteDetail extends HTMLElement {
 
       if (!response.ok) {
         const error = await response.json();
-        alert(
-          `Failed to update autodeploy: ${error.message || "Unknown error"}`
+        showToast(
+          `Failed to update autodeploy: ${error.message || "Unknown error"}`,
+          'error'
         );
         return;
       }
@@ -291,10 +293,11 @@ class DeploySiteDetail extends HTMLElement {
           credentials: "include",
           body: JSON.stringify({ autodeploy: !newValue }),
         });
-        alert(
+        showToast(
           `Failed to ${newValue ? "create" : "delete"} webhook: ${
             error.error || "Unknown error"
-          }`
+          }`,
+          'error'
         );
         return;
       }
@@ -303,16 +306,19 @@ class DeploySiteDetail extends HTMLElement {
       this.render();
     } catch (error) {
       console.error("Failed to toggle autodeploy:", error);
-      alert("Failed to toggle autodeploy.");
+      showToast("Failed to toggle autodeploy.", 'error');
     }
   }
 
   async handleDelete() {
     if (!this.site) return;
 
-    if (!confirm(`Delete ${this.site.name}? This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'Delete Site',
+      `Delete ${this.site.name}? This cannot be undone.`,
+      { confirmText: 'Delete', destructive: true }
+    );
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/sites/${this.siteId}`, {
@@ -324,7 +330,7 @@ class DeploySiteDetail extends HTMLElement {
         window.location.href = "/";
       } else {
         const error = await response.json();
-        alert(`Failed to delete: ${error.message || "Unknown error"}`);
+        showToast(`Failed to delete: ${error.message || "Unknown error"}`, 'error');
       }
     } catch (error) {
       console.error("Delete failed:", error);
@@ -332,17 +338,18 @@ class DeploySiteDetail extends HTMLElement {
   }
 
   async handleAddEnvVar() {
-    const key = prompt("Variable name:");
+    const key = await showInput("Variable name:", { placeholder: "MY_VAR" });
     if (!key) return;
 
     if (!/^[A-Z_][A-Z0-9_]*$/i.test(key)) {
-      alert(
-        "Invalid variable name. Use letters, numbers, and underscores only."
+      showToast(
+        "Invalid variable name. Use letters, numbers, and underscores only.",
+        'error'
       );
       return;
     }
 
-    const value = prompt(`Value for ${key}:`);
+    const value = await showInput(`Value for ${key}:`, { placeholder: "value" });
     if (value === null) return;
 
     await this.saveEnvVar(key, value);
@@ -350,14 +357,21 @@ class DeploySiteDetail extends HTMLElement {
 
   async handleEditEnvVar(key: string) {
     const currentVar = this.userEnvVars.find((v) => v.key === key);
-    const value = prompt(`New value for ${key}:`, currentVar?.value || "");
+    const value = await showInput(`New value for ${key}:`, {
+      initialValue: currentVar?.value || "",
+    });
     if (value === null) return;
 
     await this.saveEnvVar(key, value);
   }
 
   async handleDeleteEnvVar(key: string) {
-    if (!confirm(`Delete environment variable "${key}"?`)) return;
+    const confirmed = await showConfirm(
+      'Delete Variable',
+      `Delete environment variable "${key}"?`,
+      { confirmText: 'Delete', destructive: true }
+    );
+    if (!confirmed) return;
 
     try {
       // Get current vars and remove the key
@@ -380,11 +394,11 @@ class DeploySiteDetail extends HTMLElement {
         this.render();
       } else {
         const error = await response.json();
-        alert(`Failed to delete variable: ${error.message || "Unknown error"}`);
+        showToast(`Failed to delete variable: ${error.message || "Unknown error"}`, 'error');
       }
     } catch (error) {
       console.error("Failed to delete env var:", error);
-      alert("Failed to delete environment variable");
+      showToast("Failed to delete environment variable", 'error');
     }
   }
 
@@ -402,18 +416,18 @@ class DeploySiteDetail extends HTMLElement {
         this.render();
       } else {
         const error = await response.json();
-        alert(`Failed to save variable: ${error.message || "Unknown error"}`);
+        showToast(`Failed to save variable: ${error.message || "Unknown error"}`, 'error');
       }
     } catch (error) {
       console.error("Failed to save env var:", error);
-      alert("Failed to save environment variable");
+      showToast("Failed to save environment variable", 'error');
     }
   }
 
   render() {
     if (this.loading) {
       this.innerHTML = `
-        <a href="/" class="back-link" data-route>← Back to Sites</a>
+        <a href="/" class="back-link" data-route>&larr; Back to Sites</a>
         <div class="empty-state">
           <p>Loading site...</p>
         </div>
@@ -423,7 +437,7 @@ class DeploySiteDetail extends HTMLElement {
 
     if (!this.site) {
       this.innerHTML = `
-        <a href="/" class="back-link" data-route>← Back to Sites</a>
+        <a href="/" class="back-link" data-route>&larr; Back to Sites</a>
         <div class="empty-state">
           <p class="empty-state-title">Site not found</p>
         </div>
@@ -437,7 +451,7 @@ class DeploySiteDetail extends HTMLElement {
     }.${domain}`;
 
     this.innerHTML = `
-      <a href="/" class="back-link" data-route>← Back to Sites</a>
+      <a href="/" class="back-link" data-route>&larr; Back to Sites</a>
 
       <div class="site-detail-header">
         <div class="site-detail-info">
@@ -610,7 +624,7 @@ class DeploySiteDetail extends HTMLElement {
                 (env) => `
               <div class="env-row">
                 <div class="env-cell env-key">${this.escapeHtml(env.key)}</div>
-                <div class="env-cell env-value">••••••••</div>
+                <div class="env-cell env-value">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</div>
                 <div class="env-cell">
                   <button class="btn btn-sm btn-ghost" data-edit-key="${this.escapeHtml(
                     env.key

@@ -1,6 +1,8 @@
 // ABOUTME: Actions component for displaying and running discovered actions
 // ABOUTME: Fetches actions from the API and allows manual execution
 
+import { showToast } from './toast.js';
+
 interface Action {
   id: string;
   name: string;
@@ -51,11 +53,11 @@ class DeployActions extends HTMLElement {
         await this.loadActions();
       } else {
         const error = await response.json();
-        alert(`Failed to run action: ${error.error || 'Unknown error'}`);
+        showToast(`Failed to run action: ${error.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error('Failed to run action:', error);
-      alert('Failed to run action');
+      showToast('Failed to run action', 'error');
     } finally {
       this.runningAction = null;
       this.render();

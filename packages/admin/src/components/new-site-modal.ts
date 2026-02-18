@@ -1,6 +1,8 @@
 // ABOUTME: Modal component for creating new sites
 // ABOUTME: Supports GitHub repo picker or manual git URL entry
 
+import { showToast } from './toast.js';
+
 interface GitHubRepo {
   name: string;
   full_name: string;
@@ -60,11 +62,11 @@ class DeployNewSiteModal extends HTMLElement {
         this.repos = await res.json();
       } else {
         const error = await res.json();
-        alert(error.error || 'Failed to load repos');
+        showToast(error.error || 'Failed to load repos', 'error');
       }
     } catch (error) {
       console.error('Failed to load repos:', error);
-      alert('Failed to load repos');
+      showToast('Failed to load repos', 'error');
     }
 
     this.loadingRepos = false;
@@ -114,7 +116,7 @@ class DeployNewSiteModal extends HTMLElement {
     e.preventDefault();
 
     if (!this.gitUrl || !this.subdomain) {
-      alert('Please fill in all fields');
+      showToast('Please fill in all fields', 'error');
       return;
     }
 
@@ -140,13 +142,13 @@ class DeployNewSiteModal extends HTMLElement {
         this.remove();
       } else {
         const error = await response.json();
-        alert(`Failed to create site: ${error.error || 'Unknown error'}`);
+        showToast(`Failed to create site: ${error.error || 'Unknown error'}`, 'error');
         this.submitting = false;
         this.render();
       }
     } catch (error) {
       console.error('Create site failed:', error);
-      alert('Failed to create site');
+      showToast('Failed to create site', 'error');
       this.submitting = false;
       this.render();
     }
@@ -201,7 +203,7 @@ class DeployNewSiteModal extends HTMLElement {
                     style="width: 100%"
                     ${this.submitting ? 'disabled' : ''}
                   >
-                    ${this.showRepoPicker ? '← Back to form' : 'Select from GitHub'}
+                    ${this.showRepoPicker ? '\u2190 Back to form' : 'Select from GitHub'}
                   </button>
                 </div>
               ` : ''}
@@ -226,7 +228,7 @@ class DeployNewSiteModal extends HTMLElement {
                       <div class="repo-name">${repo.name}</div>
                       ${repo.description ? `<div class="repo-description">${repo.description}</div>` : ''}
                       <div class="repo-meta">
-                        ${repo.private ? 'Private' : 'Public'} · ${new Date(repo.updated_at).toLocaleDateString()}
+                        ${repo.private ? 'Private' : 'Public'} \u00B7 ${new Date(repo.updated_at).toLocaleDateString()}
                       </div>
                     </div>
                   `).join('')}
