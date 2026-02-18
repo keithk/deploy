@@ -48,9 +48,8 @@ curl -fsSL https://railpack.dev/install.sh | bash
 ```bash
 git clone https://github.com/keithk/deploy.git
 cd deploy
-# Already on main branch after clone
 bun install
-bun run build
+bun run build:all
 ```
 
 ### 3. Interactive Setup
@@ -63,11 +62,10 @@ bun run deploy setup
 
 You'll be asked:
 - **Environment**: Production
-- **Domain**: Your domain (e.g., `keith.business`)
+- **Domain**: Your domain (e.g., `keith.is`)
 - **HTTP Port**: 3000 (default)
-- **SSH Port**: 2222 (default, or 22 if you want to use standard SSH)
 - **Sites Directory**: `/var/deploy/sites`
-- **SSH Public Key**: Paste your public key or path to `~/.ssh/id_ed25519.pub`
+- **Dashboard Password**: Min 8 characters (used to log into the admin dashboard)
 
 ### 4. DNS Configuration
 
@@ -82,40 +80,71 @@ Or if using Cloudflare/other DNS:
 - Root domain → droplet IP
 - Wildcard subdomain → droplet IP
 
-### 5. Start as Service
+### 5. Systemd Service
+
+Create `/etc/systemd/system/deploy.service`:
+
+```ini
+[Unit]
+Description=Deploy Server
+After=network.target docker.service caddy.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/home/deploy/deploy
+ExecStart=/usr/local/bin/bun packages/cli/src/index.ts start --foreground
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+Environment=NODE_ENV=production
+Environment=PROJECT_DOMAIN=keith.is
+Environment=ROOT_DIR=/var/deploy/sites
+Environment=PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=BUILDKIT_HOST=docker-container://buildkit
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start:
 
 ```bash
-# Copy service file
-sudo cp config/deploy.service /etc/systemd/system/
-
-# Enable and start
 sudo systemctl daemon-reload
 sudo systemctl enable deploy
 sudo systemctl start deploy
-
-# Check status
 sudo systemctl status deploy
 ```
 
-### 6. Start Caddy
+### 6. Caddy
+
+Copy the generated Caddyfile and restart Caddy:
 
 ```bash
-# Copy Caddyfile (generated during setup)
 sudo cp config/Caddyfile /etc/caddy/Caddyfile
-
-# Restart Caddy
 sudo systemctl restart caddy
 ```
 
 ## Accessing the Dashboard
 
-Once running, access the dashboard via SSH:
+Visit `https://admin.yourdomain.com` in your browser.
+
+- **First time**: You'll see a "Set Password" page. Create your admin password.
+- **After setup**: You'll see a login page. Enter your password.
+
+If you forget your password, reset it from the server:
 
 ```bash
-ssh your-domain.com -p 2222
+cd /home/deploy/deploy
+bun run deploy auth set-password
 ```
-
-This will display a login URL that you can open in your browser.
 
 ## File Structure
 
@@ -124,25 +153,24 @@ After setup, your deploy directory looks like:
 ```
 /home/deploy/deploy/
 ├── data/
-│   ├── deploy.db          # SQLite database
-│   └── host_key           # SSH host key
+│   └── dialup-deploy.db  # SQLite database
 ├── config/
-│   ├── Caddyfile          # Caddy configuration
-│   └── authorized_keys    # SSH public keys
+│   └── Caddyfile          # Caddy configuration
+├── logs/                   # Server logs
 ├── .env                   # Environment configuration
 └── sites/                 # (or /var/deploy/sites/)
 ```
 
 ## Environment Variables
 
-Created in `.env`:
+The systemd service sets environment variables directly. The `.env` file is also read:
 
 ```bash
-PROJECT_DOMAIN=keith.business
+PROJECT_DOMAIN=keith.is
 PORT=3000
-SSH_PORT=2222
 SITES_DIR=/var/deploy/sites
 NODE_ENV=production
+BUILDKIT_HOST=docker-container://buildkit
 ```
 
 ## Troubleshooting
@@ -160,23 +188,30 @@ sudo journalctl -u caddy -f
 docker logs deploy-sitename
 ```
 
-### SSH connection refused
-
-1. Check SSH server is running: `sudo systemctl status deploy`
-2. Check port is open: `sudo ufw status`
-3. Check firewall allows SSH port: `sudo ufw allow 2222/tcp`
-
 ### Sites not loading
 
 1. Check DNS is pointing correctly: `nslookup subdomain.yourdomain.com`
 2. Check Caddy is running: `sudo systemctl status caddy`
 3. Check site container: `docker ps | grep sitename`
 
+### Port already in use on restart
+
+If `systemctl restart deploy` fails with EADDRINUSE, the old process may not have released the port yet:
+
+```bash
+sudo systemctl stop deploy
+# Kill any orphaned bun processes
+sudo pkill -9 -u deploy bun
+sleep 3
+sudo systemctl start deploy
+```
+
 ### Database issues
 
 Reset database (warning: deletes all data):
+
 ```bash
-rm data/deploy.db
+rm data/dialup-deploy.db
 bun run deploy setup
 ```
 
@@ -186,6 +221,15 @@ bun run deploy setup
 cd /home/deploy/deploy
 git pull
 bun install
-bun run build
+bun run build:all
 sudo systemctl restart deploy
+```
+
+If the restart fails (port conflict from old process):
+
+```bash
+sudo systemctl stop deploy
+sudo pkill -9 -u deploy bun
+sleep 3
+sudo systemctl start deploy
 ```
