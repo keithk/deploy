@@ -25,7 +25,7 @@ import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
 import { isPasswordConfigured } from "./api/auth";
 import { validateSession, createSessionCookie, getSessionFromRequest } from "./middleware/auth";
 import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
-import { join, dirname } from "path";
+import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
 /**
@@ -57,7 +57,7 @@ function getAdminDir(): string {
  * Serves files from the admin dashboard
  */
 async function serveAdminFile(pathname: string): Promise<Response | null> {
-  const adminDir = getAdminDir();
+  const adminDir = resolve(getAdminDir());
 
   // Map paths to files
   let filePath: string;
@@ -65,7 +65,12 @@ async function serveAdminFile(pathname: string): Promise<Response | null> {
     filePath = join(adminDir, "index.html");
   } else {
     // Remove leading slash and serve the file
-    filePath = join(adminDir, pathname.slice(1));
+    filePath = resolve(adminDir, pathname.slice(1));
+  }
+
+  // Prevent path traversal outside the admin directory
+  if (!filePath.startsWith(adminDir)) {
+    return new Response("Forbidden", { status: 403 });
   }
 
   const file = Bun.file(filePath);

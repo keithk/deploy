@@ -43,7 +43,7 @@ export async function handleGetSites(
         (p) => p.site === site.subdomain
       );
       const runningProcess = siteProcesses.find(
-        (p: any) => p.status === "running"
+        (p) => p.status === "running"
       );
 
       return {
@@ -75,7 +75,16 @@ export async function handleCreateSite(
   context: ApiContext
 ): Promise<Response> {
   try {
-    const { name, type = "static", force = false } = await request.json();
+    let body: { name?: string; type?: string; force?: boolean };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const { name, type = "static", force = false } = body;
 
     if (!name) {
       return new Response(JSON.stringify({ error: "Site name is required" }), {
@@ -229,6 +238,13 @@ export async function handleBuildSite(
   siteName: string,
   context: ApiContext
 ): Promise<Response> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(siteName)) {
+    return new Response(JSON.stringify({ error: "Invalid site name" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     // Use the CLI command to build the site
     const proc = spawn(["bun", "run", "deploy", "build", siteName], {
@@ -264,12 +280,28 @@ export async function handleBuildSite(
 /**
  * Handle POST /api/sites/:name/run/:command - Run a command for a site
  */
+const ALLOWED_SITE_COMMANDS = ["start", "stop", "restart", "build", "install", "test", "lint"];
+
 export async function handleRunSiteCommand(
   request: Request,
   siteName: string,
   command: string,
   context: ApiContext
 ): Promise<Response> {
+  if (!ALLOWED_SITE_COMMANDS.includes(command)) {
+    return new Response(
+      JSON.stringify({ error: `Command not allowed: ${command}. Allowed: ${ALLOWED_SITE_COMMANDS.join(", ")}` }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(siteName)) {
+    return new Response(
+      JSON.stringify({ error: "Invalid site name" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     // Use the CLI command to run the site command
     const proc = spawn(["bun", "run", "deploy", "run", siteName, command], {

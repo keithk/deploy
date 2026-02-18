@@ -132,7 +132,7 @@ export class DeploymentModel {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | null)[] = [];
 
     if (data.status !== undefined) {
       updates.push("status = ?");

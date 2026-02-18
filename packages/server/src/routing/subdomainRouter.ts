@@ -8,7 +8,7 @@ interface WsProxyData {
 }
 import { siteModel } from "@keithk/deploy-core";
 import { ActionRegistry } from "../actions/registry";
-import { join } from "path";
+import { join, resolve } from "path";
 import { existsSync } from "fs";
 import { proxyRequest } from "../utils/proxy";
 import { checkSiteAccess } from "../middleware/auth";
@@ -78,7 +78,13 @@ async function handleSiteRequest(
   // Handle based on site type
   if (site.type === "static") {
     // Serve static files using Bun's built-in file serving
-    const filePath = join(site.path, new URL(request.url).pathname);
+    const baseDir = resolve(site.path);
+    const filePath = resolve(baseDir, new URL(request.url).pathname.slice(1));
+
+    if (!filePath.startsWith(baseDir)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
     const fileObj = Bun.file(filePath);
 
     if (await fileObj.exists()) {
@@ -96,8 +102,13 @@ async function handleSiteRequest(
     }
   } else if (site.type === "static-build") {
     // Serve static build files
-    const buildPath = join(site.path, site.buildDir || "dist");
-    const filePath = join(buildPath, new URL(request.url).pathname);
+    const baseDir = resolve(site.path, site.buildDir || "dist");
+    const filePath = resolve(baseDir, new URL(request.url).pathname.slice(1));
+
+    if (!filePath.startsWith(baseDir)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
     const fileObj = Bun.file(filePath);
 
     if (await fileObj.exists()) {
