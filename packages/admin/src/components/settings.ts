@@ -17,6 +17,8 @@ interface Settings {
   build_nice_level?: number;
   build_io_class?: "idle" | "best-effort" | "realtime";
   build_max_parallelism?: number;
+  sleep_enabled_default?: boolean;
+  sleep_after_minutes_default?: number;
 }
 
 interface VersionInfo {
@@ -245,6 +247,34 @@ class DeploySettings extends HTMLElement {
     }
   }
 
+  async saveSleepSetting(key: string, value: string | boolean | number) {
+    this.saving = true;
+    this.render();
+
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ [key]: value }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        this.settings.sleep_enabled_default = result.sleep_enabled_default;
+        this.settings.sleep_after_minutes_default = result.sleep_after_minutes_default;
+      } else {
+        showToast(`Failed to save setting. Please try again.`, 'error');
+      }
+    } catch (error) {
+      console.error(`Failed to save ${key}:`, error);
+      showToast(`Failed to save setting. Please try again.`, 'error');
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+
   render() {
     if (this.loading) {
       this.innerHTML = `
@@ -420,6 +450,43 @@ class DeploySettings extends HTMLElement {
         }>
           Save Build Settings
         </button>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Sleep / Wake</h3>
+        <p class="text-muted mb-4">
+          Sleeping sites stop their container after a period of inactivity and wake automatically on the next request.
+        </p>
+
+        <label class="form-checkbox">
+          <input
+            type="checkbox"
+            id="sleep-default-checkbox"
+            ${this.settings.sleep_enabled_default ? "checked" : ""}
+            ${this.saving ? "disabled" : ""}
+          >
+          <span>Enable sleep by default for new sites</span>
+        </label>
+
+        <div class="form-group mt-4">
+          <label class="form-label" for="sleep-default-threshold">
+            Default sleep after
+            <span class="form-hint">How long a site must be idle before sleeping</span>
+          </label>
+          <select id="sleep-default-threshold" class="form-select" ${
+            this.saving ? "disabled" : ""
+          }>
+            <option value="5" ${
+              this.settings.sleep_after_minutes_default === 5 ? "selected" : ""
+            }>5 minutes</option>
+            <option value="30" ${
+              !this.settings.sleep_after_minutes_default || this.settings.sleep_after_minutes_default === 30 ? "selected" : ""
+            }>30 minutes</option>
+            <option value="60" ${
+              this.settings.sleep_after_minutes_default === 60 ? "selected" : ""
+            }>1 hour</option>
+          </select>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -658,6 +725,23 @@ class DeploySettings extends HTMLElement {
             "idle") as Settings["build_io_class"],
           build_max_parallelism: parseInt(parallelismInput?.value || "2", 10),
         });
+      }
+    );
+
+    // Sleep settings
+    this.querySelector("#sleep-default-checkbox")?.addEventListener(
+      "change",
+      (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        this.saveSleepSetting("sleep_enabled_default", checked);
+      }
+    );
+
+    this.querySelector("#sleep-default-threshold")?.addEventListener(
+      "change",
+      (e) => {
+        const value = parseInt((e.target as HTMLSelectElement).value, 10);
+        this.saveSleepSetting("sleep_after_minutes_default", value);
       }
     );
 

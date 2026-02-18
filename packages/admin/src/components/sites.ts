@@ -8,7 +8,7 @@ interface Site {
   id: string;
   name: string;
   subdomain?: string;
-  status: 'running' | 'stopped' | 'building' | 'error';
+  status: 'running' | 'stopped' | 'building' | 'error' | 'sleeping';
   visibility?: 'public' | 'private';
   gitUrl?: string;
   url?: string;

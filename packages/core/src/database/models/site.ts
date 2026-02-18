@@ -17,6 +17,8 @@ export interface CreateSiteData {
   env_vars?: string;
   persistent_storage?: boolean;
   autodeploy?: boolean;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number | null;
 }
 
 /**
@@ -31,6 +33,8 @@ export interface UpdateSiteData {
   env_vars?: string;
   persistent_storage?: boolean;
   autodeploy?: boolean;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number | null;
 }
 
 /**
@@ -65,11 +69,14 @@ export class SiteModel {
       autodeploy: data.autodeploy ? 1 : 0,
       created_at: now,
       last_deployed_at: null,
+      sleep_enabled: data.sleep_enabled ? 1 : 0,
+      sleep_after_minutes: data.sleep_after_minutes ?? null,
+      last_request_at: null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -86,7 +93,10 @@ export class SiteModel {
       site.persistent_storage,
       site.autodeploy,
       site.created_at,
-      site.last_deployed_at
+      site.last_deployed_at,
+      site.sleep_enabled,
+      site.sleep_after_minutes,
+      site.last_request_at
     );
 
     return site;
@@ -204,6 +214,14 @@ export class SiteModel {
       updates.push("autodeploy = ?");
       values.push(data.autodeploy ? 1 : 0);
     }
+    if (data.sleep_enabled !== undefined) {
+      updates.push("sleep_enabled = ?");
+      values.push(data.sleep_enabled ? 1 : 0);
+    }
+    if (data.sleep_after_minutes !== undefined) {
+      updates.push("sleep_after_minutes = ?");
+      values.push(data.sleep_after_minutes);
+    }
 
     if (updates.length === 0) {
       return existing;
@@ -265,6 +283,31 @@ export class SiteModel {
       UPDATE sites SET last_deployed_at = datetime('now') WHERE id = ?
     `);
     stmt.run(id);
+  }
+
+  /**
+   * Update the last_request_at timestamp for a site
+   */
+  public updateLastRequest(siteId: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE sites SET last_request_at = datetime('now') WHERE id = ?
+    `);
+    stmt.run(siteId);
+  }
+
+  /**
+   * Find running sites with sleep enabled where last_request_at is past their threshold.
+   * Uses the site's sleep_after_minutes, falling back to the server default setting.
+   */
+  public findSleepEligible(): Site[] {
+    return this.db.query<Site>(`
+      SELECT s.* FROM sites s
+      LEFT JOIN settings st ON st.key = 'sleep_after_minutes_default'
+      WHERE s.status = 'running'
+        AND s.sleep_enabled = 1
+        AND s.last_request_at IS NOT NULL
+        AND datetime(s.last_request_at, '+' || COALESCE(s.sleep_after_minutes, CAST(COALESCE(st.value, '30') AS INTEGER)) || ' minutes') <= datetime('now')
+    `);
   }
 }
 

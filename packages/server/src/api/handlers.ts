@@ -2,7 +2,7 @@
 // ABOUTME: Routes requests to site discovery, process management, and server status handlers.
 
 import type { SiteConfig } from "@keithk/deploy-core";
-import { processModel } from "@keithk/deploy-core";
+import { processModel, siteModel } from "@keithk/deploy-core";
 import { processManager } from "../utils/process-manager";
 import { discoverSites } from "../discoverSites";
 import { spawn } from "bun";
@@ -15,6 +15,18 @@ import { handleDeploymentsApi } from "./deployments";
 import { handleSystemApi } from "./system";
 import { handleAuthApi } from "./auth";
 import { requireAuth } from "../middleware/auth";
+
+/**
+ * GET /api/sites/:name/status — public, no auth required.
+ * Used by the wake screen to poll site status.
+ */
+function handleSiteStatus(siteName: string): Response {
+  const site = siteModel.findByName(siteName);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+  return Response.json({ status: site.status });
+}
 
 interface ApiContext {
   sites: SiteConfig[];
@@ -391,6 +403,11 @@ export async function handleApiRequest(
   // Domain validation is unauthenticated (called by Caddy)
   if (path === "/api/validate-domain") {
     return null; // Handled in createServer.ts before API routing
+  }
+
+  // Site status endpoint is unauthenticated (called from public wake screen)
+  if (firstPart === "sites" && apiParts.length === 3 && apiParts[2] === "status" && method === "GET") {
+    return handleSiteStatus(apiParts[1]);
   }
 
   // All other API endpoints require authentication

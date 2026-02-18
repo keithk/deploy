@@ -9,12 +9,15 @@ interface Site {
   id: string;
   name: string;
   subdomain?: string;
-  status: "running" | "stopped" | "building" | "error";
+  status: "running" | "stopped" | "building" | "error" | "sleeping";
   visibility?: "public" | "private";
   gitUrl?: string;
   git_url?: string;
   persistent_storage?: number;
   autodeploy?: number;
+  sleep_enabled?: number;
+  sleep_after_minutes?: number | null;
+  last_request_at?: string | null;
 }
 
 interface LogEntry {
@@ -310,6 +313,78 @@ class DeploySiteDetail extends HTMLElement {
     }
   }
 
+  async handleSleepToggle() {
+    if (!this.site) return;
+
+    const newValue = !this.site.sleep_enabled;
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ sleep_enabled: newValue }),
+      });
+
+      if (response.ok) {
+        this.site.sleep_enabled = newValue ? 1 : 0;
+        this.render();
+      } else {
+        const error = await response.json();
+        showToast(`Failed to update sleep setting: ${error.message || "Unknown error"}`, 'error');
+      }
+    } catch (error) {
+      console.error("Failed to toggle sleep:", error);
+      showToast("Failed to update sleep setting", 'error');
+    }
+  }
+
+  async handleSleepThresholdChange(value: string) {
+    if (!this.site) return;
+
+    const minutes = value === "" ? null : parseInt(value, 10);
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ sleep_after_minutes: minutes }),
+      });
+
+      if (response.ok) {
+        this.site.sleep_after_minutes = minutes;
+        this.render();
+      } else {
+        const error = await response.json();
+        showToast(`Failed to update sleep threshold: ${error.message || "Unknown error"}`, 'error');
+      }
+    } catch (error) {
+      console.error("Failed to update sleep threshold:", error);
+      showToast("Failed to update sleep threshold", 'error');
+    }
+  }
+
+  async handleWakeNow() {
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}/deploy`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        showToast("Waking site...", 'success');
+        await this.loadSite();
+      } else {
+        const error = await response.json();
+        showToast(`Failed to wake site: ${error.message || "Unknown error"}`, 'error');
+      }
+    } catch (error) {
+      console.error("Wake failed:", error);
+      showToast("Failed to wake site", 'error');
+    }
+  }
+
   async handleDelete() {
     if (!this.site) return;
 
@@ -529,6 +604,15 @@ class DeploySiteDetail extends HTMLElement {
       this.querySelector("#storage-checkbox")?.addEventListener("change", () =>
         this.handleStorageToggle()
       );
+      this.querySelector("#sleep-checkbox")?.addEventListener("change", () =>
+        this.handleSleepToggle()
+      );
+      this.querySelector("#sleep-threshold")?.addEventListener("change", (e) => {
+        this.handleSleepThresholdChange((e.target as HTMLSelectElement).value);
+      });
+      this.querySelector("#wake-btn")?.addEventListener("click", () =>
+        this.handleWakeNow()
+      );
       this.querySelector("#delete-btn")?.addEventListener("click", () =>
         this.handleDelete()
       );
@@ -721,6 +805,50 @@ class DeploySiteDetail extends HTMLElement {
           <span>Enable persistent /data volume</span>
         </label>
         <p class="text-muted mt-4">When enabled, data written to /data will persist across redeploys.</p>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Sleep</h3>
+        <label class="form-checkbox">
+          <input type="checkbox" id="sleep-checkbox" ${
+            this.site?.sleep_enabled ? "checked" : ""
+          }>
+          <span>Put site to sleep after inactivity</span>
+        </label>
+        <p class="text-muted mt-4">Sleeping sites stop their container and wake automatically on the next request.</p>
+
+        <div class="form-group mt-4">
+          <label class="form-label" for="sleep-threshold">Sleep after</label>
+          <select id="sleep-threshold" class="form-select" ${
+            !this.site?.sleep_enabled ? "disabled" : ""
+          }>
+            <option value="" ${
+              this.site?.sleep_after_minutes == null ? "selected" : ""
+            }>Use server default</option>
+            <option value="5" ${
+              this.site?.sleep_after_minutes === 5 ? "selected" : ""
+            }>5 minutes</option>
+            <option value="30" ${
+              this.site?.sleep_after_minutes === 30 ? "selected" : ""
+            }>30 minutes</option>
+            <option value="60" ${
+              this.site?.sleep_after_minutes === 60 ? "selected" : ""
+            }>1 hour</option>
+          </select>
+        </div>
+
+        ${this.site?.status === "sleeping" ? `
+          <div class="sleep-status mt-4">
+            <span class="text-muted">This site is currently sleeping.</span>
+            <button class="btn btn-sm" id="wake-btn">Wake now</button>
+          </div>
+        ` : ""}
+
+        ${this.site?.last_request_at ? `
+          <p class="text-muted mt-4" style="font-size: var(--text-xs)">
+            Last request: ${new Date(this.site.last_request_at).toLocaleString()}
+          </p>
+        ` : ""}
       </div>
 
       <div class="settings-section danger">

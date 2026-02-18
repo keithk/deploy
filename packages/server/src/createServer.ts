@@ -28,6 +28,7 @@ import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { renderDeployScreen } from "./pages/deploy-screen";
+import { startSleepMonitor, stopSleepMonitor } from "./services/sleep-monitor";
 
 /**
  * Gets the admin dashboard directory path
@@ -746,9 +747,15 @@ export async function createServer({
   // Execute server:after-start hook
   await executeHook("server:after-start", actionContext);
 
+  // Start sleep monitor for idle site detection
+  startSleepMonitor();
+
   // Set up graceful shutdown
   const handleShutdown = async () => {
     info("Shutting down server and all managed processes...");
+
+    // Stop the sleep monitor
+    stopSleepMonitor();
 
     // Execute server:before-stop hook
     await executeHook("server:before-stop", actionContext);

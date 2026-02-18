@@ -13,6 +13,21 @@ import { existsSync } from "fs";
 import { proxyRequest } from "../utils/proxy";
 import { checkSiteAccess } from "../middleware/auth";
 import { renderDeployScreen } from "../pages/deploy-screen";
+import { wakeSite } from "../services/wake";
+
+// Throttle updateLastRequest to once per minute per site
+const lastRequestCache = new Map<string, number>();
+const LAST_REQUEST_THROTTLE_MS = 60_000;
+
+function throttledUpdateLastRequest(siteId: string): void {
+  const now = Date.now();
+  const lastUpdate = lastRequestCache.get(siteId);
+  if (lastUpdate && now - lastUpdate < LAST_REQUEST_THROTTLE_MS) {
+    return;
+  }
+  lastRequestCache.set(siteId, now);
+  siteModel.updateLastRequest(siteId);
+}
 
 // Type definition for the routing configuration
 export interface RoutingConfig {
@@ -334,8 +349,25 @@ export async function handleSubdomainRequest(
   // Handle based on site status
   // Proxy to container if running, or building (for blue-green deployment where old container still serves)
   if ((site.status === "running" || site.status === "building") && site.port) {
+    // Track last request time for sleep scheduling
+    if (site.status === "running") {
+      throttledUpdateLastRequest(site.id);
+    }
     // Proxy to the running container
     return proxyRequest(request, site.port, server);
+  }
+
+  // Wake sleeping sites — fire and forget, show wake screen with polling
+  if (site.status === "sleeping") {
+    wakeSite(site.id).catch(() => {});
+    const pollUrl = `/api/sites/${encodeURIComponent(site.name)}/status`;
+    return new Response(renderDeployScreen(site.name, "waking up...", pollUrl), {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": "5",
+      },
+    });
   }
 
   // Show status page for non-running sites

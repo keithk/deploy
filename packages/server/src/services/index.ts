@@ -11,3 +11,4 @@ export {
   type ContainerInfo,
 } from "./container";
 export { deploySite, stopSite } from "./deploy";
+export { startSleepMonitor, stopSleepMonitor, checkForSleep } from "./sleep-monitor";

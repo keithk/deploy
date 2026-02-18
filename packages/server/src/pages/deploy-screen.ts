@@ -5,8 +5,9 @@
  * Generates the black hole deploy screen HTML.
  * Used as the status page for sites that are building/deploying or waking from sleep.
  * Includes the full interactive debug panel so users can play with the physics while waiting.
+ * When pollUrl is provided, injects a polling script that reloads on status === 'running'.
  */
-export function renderDeployScreen(siteName: string, statusText: string): string {
+export function renderDeployScreen(siteName: string, statusText: string, pollUrl?: string): string {
   const safeName = escapeHtml(siteName);
   const safeStatus = escapeHtml(statusText);
 
@@ -253,6 +254,7 @@ export function renderDeployScreen(siteName: string, statusText: string): string
     '<script>',
     DEPLOY_SCREEN_JS,
     '</script>',
+    pollUrl ? buildPollScript(pollUrl) : '',
     '</body>',
     '</html>',
   ].join('\n');
@@ -682,6 +684,39 @@ function drawDiskParticles(particles) {
 draw();
 window.addEventListener('resize', resize);
 `;
+
+/**
+ * Build a script tag that polls a status URL and reloads when the site is running.
+ */
+function buildPollScript(pollUrl: string): string {
+  const safeUrl = escapeHtml(pollUrl);
+  return [
+    '<script>',
+    '(function() {',
+    '  var attempts = 0;',
+    '  var maxAttempts = 30;',
+    '  var statusEl = document.querySelector(".status span");',
+    '  setTimeout(function poll() {',
+    '    attempts++;',
+    '    if (attempts > maxAttempts) {',
+    '      if (statusEl) statusEl.textContent = "wake failed - refresh to retry";',
+    '      return;',
+    '    }',
+    `    fetch("${safeUrl}")`,
+    '      .then(function(r) { return r.json(); })',
+    '      .then(function(data) {',
+    '        if (data.status === "running") {',
+    '          window.location.reload();',
+    '        } else {',
+    '          setTimeout(poll, 2000);',
+    '        }',
+    '      })',
+    '      .catch(function() { setTimeout(poll, 2000); });',
+    '  }, 3000);',
+    '})();',
+    '</script>',
+  ].join('\n');
+}
 
 function escapeHtml(str: string): string {
   return str

@@ -112,7 +112,12 @@ function handleListSites(): Response {
  * POST /api/sites - Create a new site
  */
 async function handleCreateSite(request: Request): Promise<Response> {
-  let body: { git_url?: string; name?: string };
+  let body: {
+    git_url?: string;
+    name?: string;
+    sleep_enabled?: boolean;
+    sleep_after_minutes?: number;
+  };
   try {
     body = await request.json();
   } catch {
@@ -140,6 +145,8 @@ async function handleCreateSite(request: Request): Promise<Response> {
     name: body.name,
     git_url: body.git_url,
     type: "auto",
+    sleep_enabled: body.sleep_enabled,
+    sleep_after_minutes: body.sleep_after_minutes ?? null,
   });
 
   return Response.json(site, { status: 201 });

@@ -167,15 +167,17 @@ class DeploySiteCard extends HTMLElement {
 
   render() {
     const showPublicBadge = this.visibility === 'public';
+    const isSleeping = this.status === 'sleeping';
 
     this.innerHTML = `
-      <div class="site-row">
+      <div class="site-row${isSleeping ? ' site-row-sleeping' : ''}">
         <div class="site-status ${this.status}"></div>
 
         <div class="site-info">
           <div class="site-name-row">
             <a href="/sites/${this.siteId}" class="site-name" data-route>${this.siteName}</a>
             ${showPublicBadge ? '<span class="site-badge">Public</span>' : ''}
+            ${isSleeping ? '<span class="site-badge site-badge-sleeping">zzz</span>' : ''}
           </div>
           <div class="site-url">${this.siteUrl}</div>
         </div>

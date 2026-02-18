@@ -36,6 +36,7 @@
   --status-stopped: #ef4444;
   --status-building: #f59e0b;
   --status-error: #ef4444;
+  --status-sleeping: #8b8b8b;
 }
 
 /* Light theme (default) */
@@ -384,6 +385,11 @@ body {
   background: var(--status-error);
 }
 
+.site-status.sleeping {
+  background: var(--status-sleeping);
+  opacity: 0.6;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -419,6 +425,19 @@ body {
   letter-spacing: 0.05em;
   border: 1px solid var(--status-running);
   color: var(--status-running);
+}
+
+.site-badge-sleeping {
+  border-color: var(--status-sleeping);
+  color: var(--status-sleeping);
+}
+
+.site-row-sleeping {
+  opacity: 0.6;
+}
+
+.site-row-sleeping:hover {
+  opacity: 1;
 }
 
 .site-url {
@@ -822,6 +841,30 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: var(--space-4);
+}
+
+.settings-section .form-select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  max-width: 300px;
+}
+
+.settings-section .form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sleep-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
 }
 
 .settings-section.danger {

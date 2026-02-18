@@ -24,6 +24,9 @@ export async function handleSettingsApi(
       build_nice_level: parseInt(settings.build_nice_level || process.env.BUILD_NICE_LEVEL || "10", 10),
       build_io_class: settings.build_io_class || process.env.BUILD_IO_CLASS || "idle",
       build_max_parallelism: parseInt(settings.build_max_parallelism || process.env.BUILD_MAX_PARALLELISM || "2", 10),
+      // Sleep/wake defaults
+      sleep_enabled_default: settings.sleep_enabled_default === "1",
+      sleep_after_minutes_default: parseInt(settings.sleep_after_minutes_default || "30", 10),
       // Don't expose the actual token
     });
   }
@@ -92,6 +95,18 @@ export async function handleSettingsApi(
         }
       }
 
+      // Handle sleep/wake defaults
+      if (body.sleep_enabled_default !== undefined) {
+        settingsModel.set("sleep_enabled_default", body.sleep_enabled_default ? "1" : "0");
+      }
+
+      if (body.sleep_after_minutes_default !== undefined) {
+        const minutes = parseInt(body.sleep_after_minutes_default, 10);
+        if ([5, 30, 60].includes(minutes)) {
+          settingsModel.set("sleep_after_minutes_default", String(minutes));
+        }
+      }
+
       return Response.json({
         success: true,
         domain: settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "localhost",
@@ -100,6 +115,8 @@ export async function handleSettingsApi(
         build_nice_level: parseInt(settingsModel.get("build_nice_level") || "10", 10),
         build_io_class: settingsModel.get("build_io_class") || "idle",
         build_max_parallelism: parseInt(settingsModel.get("build_max_parallelism") || "2", 10),
+        sleep_enabled_default: settingsModel.get("sleep_enabled_default") === "1",
+        sleep_after_minutes_default: parseInt(settingsModel.get("sleep_after_minutes_default") || "30", 10),
         caddy_updated: caddyMessage,
       });
     } catch (error) {

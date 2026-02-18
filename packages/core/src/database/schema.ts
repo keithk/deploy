@@ -11,7 +11,7 @@ export interface Site {
   branch: string;         // default: main
   type: 'auto' | 'passthrough';
   visibility: 'public' | 'private';
-  status: 'running' | 'stopped' | 'building' | 'error';
+  status: 'running' | 'stopped' | 'building' | 'error' | 'sleeping';
   container_id: string | null;
   port: number | null;
   env_vars: string;       // JSON, encrypted
@@ -19,6 +19,9 @@ export interface Site {
   autodeploy: number;          // SQLite boolean: 0 = false, 1 = true
   created_at: string;
   last_deployed_at: string | null;
+  sleep_enabled: number;              // SQLite boolean: 0 = false, 1 = true
+  sleep_after_minutes: number | null; // null = use server default
+  last_request_at: string | null;
 }
 
 /**

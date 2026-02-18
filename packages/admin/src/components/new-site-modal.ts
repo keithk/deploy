@@ -22,6 +22,8 @@ class DeployNewSiteModal extends HTMLElement {
   private loadingRepos: boolean = false;
   private showRepoPicker: boolean = false;
   private repoFilter: string = '';
+  private sleepEnabled: boolean = true;
+  private sleepAfterMinutes: string = '';
 
   async connectedCallback() {
     await this.loadSettings();
@@ -129,7 +131,9 @@ class DeployNewSiteModal extends HTMLElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           git_url: this.gitUrl,
-          name: this.subdomain
+          name: this.subdomain,
+          sleep_enabled: this.sleepEnabled,
+          sleep_after_minutes: this.sleepAfterMinutes === '' ? null : parseInt(this.sleepAfterMinutes, 10)
         })
       });
 
@@ -266,6 +270,32 @@ class DeployNewSiteModal extends HTMLElement {
                     Lowercase letters, numbers, and hyphens only
                   </p>
                 </div>
+
+                <div class="form-group">
+                  <label class="form-checkbox">
+                    <input
+                      type="checkbox"
+                      id="sleep-enabled"
+                      ${this.sleepEnabled ? 'checked' : ''}
+                      ${this.submitting ? 'disabled' : ''}
+                    />
+                    <span>Enable sleep after inactivity</span>
+                  </label>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="sleep-after">Sleep after</label>
+                  <select
+                    id="sleep-after"
+                    class="form-select"
+                    ${!this.sleepEnabled || this.submitting ? 'disabled' : ''}
+                  >
+                    <option value="" ${this.sleepAfterMinutes === '' ? 'selected' : ''}>Use server default</option>
+                    <option value="5" ${this.sleepAfterMinutes === '5' ? 'selected' : ''}>5 minutes</option>
+                    <option value="30" ${this.sleepAfterMinutes === '30' ? 'selected' : ''}>30 minutes</option>
+                    <option value="60" ${this.sleepAfterMinutes === '60' ? 'selected' : ''}>1 hour</option>
+                  </select>
+                </div>
               `}
             </div>
 
@@ -335,6 +365,19 @@ class DeployNewSiteModal extends HTMLElement {
         .repo-item:hover .repo-meta {
           color: rgba(255, 255, 255, 0.7);
         }
+        .form-select {
+          padding: var(--space-2) var(--space-3);
+          border: 1px solid var(--border);
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--font-mono);
+          font-size: var(--text-sm);
+          width: 100%;
+        }
+        .form-select:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
         .subdomain-row {
           display: flex;
           align-items: center;
@@ -360,6 +403,15 @@ class DeployNewSiteModal extends HTMLElement {
 
     this.querySelector('#subdomain')?.addEventListener('input', (e) => {
       this.handleSubdomainChange((e.target as HTMLInputElement).value);
+    });
+
+    this.querySelector('#sleep-enabled')?.addEventListener('change', (e) => {
+      this.sleepEnabled = (e.target as HTMLInputElement).checked;
+      this.render();
+    });
+
+    this.querySelector('#sleep-after')?.addEventListener('change', (e) => {
+      this.sleepAfterMinutes = (e.target as HTMLSelectElement).value;
     });
 
     this.querySelector('#cancel-btn')?.addEventListener('click', () => this.handleCancel());
