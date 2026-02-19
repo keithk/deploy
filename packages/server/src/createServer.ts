@@ -545,8 +545,10 @@ export async function createServer({
           return response;
         }
         
-        // Handle API requests
-        if (url.pathname.startsWith('/api/')) {
+        const host = request.headers.get("host") || "";
+
+        // Handle API requests (only for admin subdomain, not deployed sites)
+        if (isAdminSubdomain(host, PROJECT_DOMAIN) && url.pathname.startsWith('/api/')) {
           const apiContext = {
             sites,
             rootDir: resolvedRootDir,
@@ -558,7 +560,7 @@ export async function createServer({
             return apiResponse;
           }
         }
-        
+
         // Handle autodeploy webhook (per-site GitHub webhooks)
         const autodeployResponse = await handleAutodeployWebhook(request);
         if (autodeployResponse) {
@@ -581,8 +583,6 @@ export async function createServer({
           logger.logResponse(request, response, loggerStart);
           return response;
         }
-
-        const host = request.headers.get("host") || "";
 
         // Serve admin dashboard for admin subdomain
         if (isAdminSubdomain(host, PROJECT_DOMAIN)) {
