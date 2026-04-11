@@ -247,6 +247,46 @@ class DeploySettings extends HTMLElement {
     }
   }
 
+  async saveGitHubToken(token: string) {
+    this.saving = true;
+    this.render();
+
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ github_token: token }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        this.settings.github_configured = result.github_configured;
+        showToast(
+          token ? "GitHub token saved." : "GitHub token cleared.",
+          'success'
+        );
+      } else {
+        showToast("Failed to save GitHub token. Please try again.", 'error');
+      }
+    } catch (error) {
+      console.error("Failed to save GitHub token:", error);
+      showToast("Failed to save GitHub token. Please try again.", 'error');
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+
+  async clearGitHubToken() {
+    const confirmed = await showConfirm(
+      'Clear GitHub Token',
+      'Remove the stored GitHub token? Private repository access and webhook management will stop working until a new token is added.'
+    );
+    if (!confirmed) return;
+    await this.saveGitHubToken("");
+  }
+
   async saveSleepSetting(key: string, value: string | boolean | number) {
     this.saving = true;
     this.render();
@@ -364,13 +404,36 @@ class DeploySettings extends HTMLElement {
 
       <div class="settings-section">
         <h3 class="settings-section-title">GitHub Integration</h3>
-        <p class="text-muted">
+        <p class="text-muted mb-4">
           ${
             this.settings.github_configured
-              ? "GitHub token is configured for private repository access."
-              : "No GitHub token configured. Private repositories will not be accessible."
+              ? "GitHub token is configured for private repository access. Enter a new token to replace it."
+              : "Enter a GitHub personal access token to enable private repository access."
           }
         </p>
+        <div class="domain-input-row">
+          <input
+            type="password"
+            id="github-token-input"
+            class="form-input"
+            value=""
+            placeholder="${this.settings.github_configured ? "••••••••••• (configured)" : "ghp_..."}"
+            autocomplete="off"
+            ${this.saving ? "disabled" : ""}
+          >
+          <button id="save-github-token-btn" class="btn btn-primary" ${
+            this.saving ? "disabled" : ""
+          }>
+            Save
+          </button>
+          ${
+            this.settings.github_configured
+              ? `<button id="clear-github-token-btn" class="btn" ${
+                  this.saving ? "disabled" : ""
+                }>Clear</button>`
+              : ""
+          }
+        </div>
       </div>
 
       <div class="settings-section">
@@ -686,6 +749,20 @@ class DeploySettings extends HTMLElement {
       if (input?.value) {
         this.saveDomain(input.value);
       }
+    });
+
+    this.querySelector("#save-github-token-btn")?.addEventListener("click", () => {
+      const input = this.querySelector("#github-token-input") as HTMLInputElement;
+      const value = input?.value.trim();
+      if (value) {
+        this.saveGitHubToken(value);
+      } else {
+        showToast("Enter a token to save.", 'error');
+      }
+    });
+
+    this.querySelector("#clear-github-token-btn")?.addEventListener("click", () => {
+      this.clearGitHubToken();
     });
 
     // Build settings: update displayed value on range change
