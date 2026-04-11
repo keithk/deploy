@@ -51,7 +51,7 @@ export async function cloneSite(
 
   if (existsSync(sitePath)) {
     info(`Site ${name} already exists, pulling latest changes`);
-    await pullSite(name, branch);
+    await pullSite(name, branch, gitUrl);
     return sitePath;
   }
 
@@ -73,10 +73,14 @@ export async function cloneSite(
  * Pull the latest changes for an existing site
  * @param name The site name
  * @param branch The branch to pull (defaults to "main")
+ * @param gitUrl Canonical repo URL. When provided, the origin remote is
+ *   rewritten with the current token from settings before fetching — this
+ *   lets rotated tokens take effect on sites cloned with an older token.
  */
 export async function pullSite(
   name: string,
-  branch: string = "main"
+  branch: string = "main",
+  gitUrl?: string
 ): Promise<void> {
   const sitePath = getSitePath(name);
 
@@ -87,6 +91,10 @@ export async function pullSite(
   info(`Pulling latest changes for ${name} (branch: ${branch})`);
 
   try {
+    if (gitUrl) {
+      const authUrl = getAuthenticatedUrl(gitUrl);
+      await $`git -C ${sitePath} remote set-url origin ${authUrl}`.quiet();
+    }
     // Fetch and reset to handle force pushes
     await $`git -C ${sitePath} fetch origin ${branch}`.quiet();
     await $`git -C ${sitePath} reset --hard origin/${branch}`.quiet();
