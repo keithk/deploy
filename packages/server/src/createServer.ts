@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, deploymentModel, Database } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
@@ -410,6 +410,16 @@ export async function createServer({
   // Run database migrations on startup
   const db = Database.getInstance();
   await db.runMigrations();
+
+  // Sweep abandoned deployments from prior runs. If the server is just now
+  // booting, anything still in a non-terminal status was abandoned by the
+  // previous process and will never finalize on its own.
+  const sweptCount = deploymentModel.markStaleAsFailed(
+    "Abandoned: server restarted before deployment finished"
+  );
+  if (sweptCount > 0) {
+    info(`Marked ${sweptCount} stale deployment(s) as failed during startup`);
+  }
 
   const actionContext: import("@keithk/deploy-core").ActionContext = {
     rootDir: resolvedRootDir,

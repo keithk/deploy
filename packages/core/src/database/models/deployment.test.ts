@@ -4,6 +4,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "../database";
 import { DeploymentModel } from "./deployment";
+import { SiteModel } from "./site";
 import { rmSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -12,6 +13,18 @@ const TEST_DATA_DIR = join(import.meta.dir, "..", "..", "..", "test-data-deploym
 describe("DeploymentModel", () => {
   let db: Database;
   let deploymentModel: DeploymentModel;
+  let siteModel: SiteModel;
+
+  // Sites table has a FK that deployments.site_id must reference, so each
+  // test that creates a deployment first needs a real site row.
+  const makeSite = (suffix = ""): string => {
+    const site = siteModel.create({
+      name: `test-site${suffix}`,
+      git_url: `https://example.test/repo${suffix}.git`,
+      type: "auto"
+    });
+    return site.id;
+  };
 
   beforeEach(async () => {
     if (existsSync(TEST_DATA_DIR)) {
@@ -24,6 +37,7 @@ describe("DeploymentModel", () => {
     await db.runMigrations();
 
     deploymentModel = new DeploymentModel();
+    siteModel = new SiteModel();
   });
 
   afterEach(() => {
@@ -32,6 +46,63 @@ describe("DeploymentModel", () => {
     if (existsSync(TEST_DATA_DIR)) {
       rmSync(TEST_DATA_DIR, { recursive: true });
     }
+  });
+
+  describe("markStaleAsFailed", () => {
+    test("returns 0 when no deployments exist", () => {
+      expect(deploymentModel.markStaleAsFailed("test")).toBe(0);
+    });
+
+    test("marks every non-terminal deployment as failed", () => {
+      const siteId = makeSite();
+      const stuck = deploymentModel.create({ site_id: siteId });
+      // bypass `complete`/`fail` so we exercise the raw update path
+      deploymentModel.update(stuck.id, { status: "building" });
+
+      const swept = deploymentModel.markStaleAsFailed("server restarted");
+      expect(swept).toBe(1);
+
+      const after = deploymentModel.findById(stuck.id);
+      expect(after?.status).toBe("failed");
+      expect(after?.error_message).toBe("server restarted");
+      expect(after?.completed_at).toBeTruthy();
+    });
+
+    test("ignores deployments already in terminal states", () => {
+      const siteId = makeSite();
+      const done = deploymentModel.create({ site_id: siteId });
+      deploymentModel.complete(done.id, "container-1", 8001);
+      const failed = deploymentModel.create({ site_id: siteId });
+      deploymentModel.fail(failed.id, "earlier failure");
+      const rolled = deploymentModel.create({ site_id: siteId });
+      deploymentModel.update(rolled.id, { status: "rolled_back" });
+
+      expect(deploymentModel.markStaleAsFailed("sweep")).toBe(0);
+
+      // existing error_message on the already-failed row must not be overwritten
+      expect(deploymentModel.findById(failed.id)?.error_message).toBe(
+        "earlier failure"
+      );
+    });
+
+    test("sweeps all non-terminal statuses (pending, cloning, building, starting, healthy, switching)", () => {
+      const siteId = makeSite();
+      const statuses = [
+        "pending",
+        "cloning",
+        "building",
+        "starting",
+        "healthy",
+        "switching"
+      ] as const;
+
+      for (const status of statuses) {
+        const d = deploymentModel.create({ site_id: siteId });
+        deploymentModel.update(d.id, { status });
+      }
+
+      expect(deploymentModel.markStaleAsFailed("boot")).toBe(statuses.length);
+    });
   });
 
   describe("pruneOld", () => {

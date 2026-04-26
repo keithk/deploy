@@ -204,6 +204,24 @@ export class DeploymentModel {
   }
 
   /**
+   * Mark every in-progress deployment as failed.
+   * Called once on server boot: any deployment in a non-terminal status when
+   * a fresh process starts up was abandoned by the previous process and will
+   * never finalize on its own.
+   */
+  public markStaleAsFailed(errorMessage: string): number {
+    const stmt = this.db.prepare(
+      `UPDATE deployments
+       SET status = 'failed',
+           completed_at = ?,
+           error_message = ?
+       WHERE status NOT IN ('completed', 'failed', 'rolled_back')`
+    );
+    const result = stmt.run(new Date().toISOString(), errorMessage);
+    return Number(result.changes ?? 0);
+  }
+
+  /**
    * Delete old deployments for a site (keep last N)
    */
   public pruneOld(siteId: string, keepCount: number = 50): number {
