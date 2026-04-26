@@ -659,7 +659,7 @@ class DeploySettings extends HTMLElement {
         .form-hint {
           font-weight: 400;
           font-size: 0.85em;
-          color: var(--text-muted);
+          color: var(--muted);
         }
         .form-range {
           width: 100%;
@@ -668,13 +668,12 @@ class DeploySettings extends HTMLElement {
         .range-value {
           font-family: var(--font-mono);
           font-size: 0.9em;
-          color: var(--text-muted);
+          color: var(--muted);
         }
         .form-select {
           padding: var(--space-2) var(--space-3);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-md);
-          background: var(--bg-primary);
+          border: 1px solid var(--border);
+          background: var(--bg);
           font-size: 1rem;
           max-width: 300px;
         }
@@ -687,8 +686,8 @@ class DeploySettings extends HTMLElement {
         }
         .update-available {
           padding: var(--space-3);
-          background: var(--bg-warning, #fff3cd);
-          border-radius: var(--radius-md);
+          background: color-mix(in oklch, var(--state-building) 10%, var(--bg));
+          border: 1px solid var(--state-building);
           margin-bottom: var(--space-3);
         }
         .update-progress {
@@ -696,15 +695,15 @@ class DeploySettings extends HTMLElement {
           align-items: center;
           gap: var(--space-3);
           padding: var(--space-3);
-          background: var(--bg-secondary);
-          border-radius: var(--radius-md);
+          background: var(--surface);
+          border: 1px solid var(--border);
           margin-bottom: var(--space-3);
         }
         .update-spinner {
           width: 20px;
           height: 20px;
-          border: 2px solid var(--border-color);
-          border-top-color: var(--text-primary);
+          border: 2px solid var(--border);
+          border-top-color: var(--text);
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
@@ -713,23 +712,22 @@ class DeploySettings extends HTMLElement {
         }
         .update-success {
           padding: var(--space-3);
-          background: var(--bg-success, #d4edda);
-          border-radius: var(--radius-md);
+          background: color-mix(in oklch, var(--state-running) 10%, var(--bg));
+          border: 1px solid var(--state-running);
           margin-bottom: var(--space-3);
-          color: var(--text-success, #155724);
+          color: var(--state-running);
         }
         .update-error {
           padding: var(--space-3);
-          background: var(--bg-danger, #f8d7da);
-          border-radius: var(--radius-md);
+          background: color-mix(in oklch, var(--state-error) 8%, var(--bg));
+          border: 1px solid var(--state-error);
           margin-bottom: var(--space-3);
-          color: var(--text-danger, #721c24);
+          color: var(--state-error);
         }
         code {
           font-family: var(--font-mono);
-          background: var(--bg-secondary);
+          background: var(--surface);
           padding: 2px 6px;
-          border-radius: 3px;
         }
       </style>
     `;

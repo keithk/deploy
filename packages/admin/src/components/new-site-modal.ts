@@ -331,7 +331,7 @@ class DeployNewSiteModal extends HTMLElement {
         .repo-empty {
           padding: var(--space-5);
           text-align: center;
-          color: var(--text-muted);
+          color: var(--muted);
         }
         .repo-item {
           padding: var(--space-3) var(--space-4);
@@ -351,7 +351,7 @@ class DeployNewSiteModal extends HTMLElement {
         }
         .repo-description {
           font-size: var(--text-xs);
-          color: var(--text-muted);
+          color: var(--muted);
           margin-top: var(--space-1);
         }
         .repo-item:hover .repo-description {
@@ -359,7 +359,7 @@ class DeployNewSiteModal extends HTMLElement {
         }
         .repo-meta {
           font-size: var(--text-xs);
-          color: var(--text-faint);
+          color: var(--faint);
           margin-top: var(--space-1);
         }
         .repo-item:hover .repo-meta {
@@ -387,7 +387,7 @@ class DeployNewSiteModal extends HTMLElement {
           flex: 1;
         }
         .subdomain-suffix {
-          color: var(--text-muted);
+          color: var(--muted);
           white-space: nowrap;
         }
       </style>

@@ -1,15 +1,52 @@
 /* ABOUTME: Main stylesheet for Deploy admin dashboard */
-/* ABOUTME: Utilitarian design with JetBrains Mono, light/dark themes, and hot pink accent */
+/* ABOUTME: Monaspace Argon + Departure Mono, OKLCH palette, hard borders, light/dark themes */
+
+/* ============================================
+   Fonts
+   ============================================ */
+
+@font-face {
+  font-family: "Monaspace Argon";
+  src: url("/fonts/MonaspaceArgon-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Monaspace Argon";
+  src: url("/fonts/MonaspaceArgon-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Monaspace Argon";
+  src: url("/fonts/MonaspaceArgon-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Departure Mono";
+  src: url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ============================================
    CSS Custom Properties (Theme System)
    ============================================ */
 
 :root {
-  /* Font */
-  --font-mono: "JetBrains Mono", monospace;
+  /* Fonts */
+  --font-mono: "Monaspace Argon", ui-monospace, monospace;
+  --font-display: "Departure Mono", "Monaspace Argon", monospace;
 
-  /* Spacing scale */
+  /* Spacing scale (4pt base) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -18,50 +55,71 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 64px;
+  --space-9: 96px;
 
-  /* Font sizes */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 14px;
-  --text-lg: 16px;
-  --text-xl: 20px;
-  --text-2xl: 24px;
+  /* Type scale */
+  --text-xs:      11px;
+  --text-sm:      12px;
+  --text-base:    14px;
+  --text-lg:      16px;
+  --text-xl:      20px;
+  --text-2xl:     28px;
+  --text-3xl:     40px;
+  --text-display: clamp(48px, 8vw, 96px);
 
-  /* Signature accent */
-  --accent: #e91e8c;
-  --accent-hover: #d11a7a;
+  /* Brand palette */
+  --brand-magenta: oklch(63% 0.26 0);
+  --brand-cyan:    oklch(76% 0.14 210);
+  --brand-yellow:  oklch(86% 0.16 88);
 
-  /* Status colors */
-  --status-running: #22c55e;
-  --status-stopped: #ef4444;
-  --status-building: #f59e0b;
-  --status-error: #ef4444;
-  --status-sleeping: #8b8b8b;
+  /* State colors */
+  --state-running:  oklch(72% 0.13 145);
+  --state-building: oklch(86% 0.16 88);
+  --state-sleeping: oklch(72% 0.05 305);
+  --state-error:    oklch(60% 0.18 25);
+
+  /* Accent aliases */
+  --accent:       var(--brand-magenta);
+  --accent-hover: oklch(57% 0.26 0);
 }
 
 /* Light theme (default) */
 :root,
 [data-theme="light"] {
-  --bg: #ffffff;
-  --bg-surface: #f8f8f8;
-  --bg-hover: #f0f0f0;
-  --border: #e0e0e0;
-  --border-hover: #c0c0c0;
-  --text: #1a1a1a;
-  --text-muted: #6b6b6b;
-  --text-faint: #999999;
+  --bg:           oklch(99% 0.003 350);
+  --surface:      oklch(97% 0.006 350);
+  --hover:        oklch(95% 0.008 350);
+  --border:       oklch(92% 0.008 350);
+  --border-strong: oklch(82% 0.012 350);
+  --text:         oklch(20% 0.01  350);
+  --muted:        oklch(50% 0.012 350);
+  --faint:        oklch(70% 0.008 350);
+
+  /* Legacy aliases — components that haven't been updated yet */
+  --bg-surface:   var(--surface);
+  --bg-hover:     var(--hover);
+  --border-hover: var(--border-strong);
+  --text-muted:   var(--muted);
+  --text-faint:   var(--faint);
 }
 
 /* Dark theme */
 [data-theme="dark"] {
-  --bg: #0a0a0a;
-  --bg-surface: #141414;
-  --bg-hover: #1a1a1a;
-  --border: #2a2a2a;
-  --border-hover: #3a3a3a;
-  --text: #f0f0f0;
-  --text-muted: #888888;
-  --text-faint: #555555;
+  --bg:           oklch(13% 0.005 350);
+  --surface:      oklch(17% 0.008 350);
+  --hover:        oklch(22% 0.01  350);
+  --border:       oklch(28% 0.012 350);
+  --border-strong: oklch(40% 0.015 350);
+  --text:         oklch(95% 0.005 350);
+  --muted:        oklch(65% 0.012 350);
+  --faint:        oklch(45% 0.012 350);
+
+  /* Legacy aliases */
+  --bg-surface:   var(--surface);
+  --bg-hover:     var(--hover);
+  --border-hover: var(--border-strong);
+  --text-muted:   var(--muted);
+  --text-faint:   var(--faint);
 }
 
 /* ============================================
@@ -138,7 +196,7 @@ body {
 
 .header-brand-domain {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .header-nav {
@@ -148,7 +206,7 @@ body {
 
 .nav-link {
   padding: var(--space-2) var(--space-3);
-  color: var(--text-muted);
+  color: var(--muted);
   text-decoration: none;
   font-size: var(--text-sm);
   font-weight: 500;
@@ -158,13 +216,13 @@ body {
 
 .nav-link:hover {
   color: var(--text);
-  background: var(--bg-hover);
+  background: var(--hover);
 }
 
 .nav-link.active {
   color: var(--accent);
   border-color: var(--border);
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .header-right {
@@ -192,7 +250,7 @@ body {
   gap: var(--space-1);
   padding: var(--space-1);
   border: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .theme-btn {
@@ -203,7 +261,7 @@ body {
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--muted);
   cursor: pointer;
   font-size: var(--text-sm);
   transition: all 0.15s ease;
@@ -211,7 +269,7 @@ body {
 
 .theme-btn:hover {
   color: var(--text);
-  background: var(--bg-hover);
+  background: var(--hover);
 }
 
 .theme-btn.active {
@@ -232,8 +290,9 @@ body {
 }
 
 .page-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 400;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -259,12 +318,12 @@ body {
 }
 
 .search-input::placeholder {
-  color: var(--text-faint);
+  color: var(--faint);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: var(--border-hover);
+  border-color: var(--border-strong);
 }
 
 /* ============================================
@@ -290,8 +349,8 @@ body {
 }
 
 .btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+  background: var(--hover);
+  border-color: var(--border-strong);
 }
 
 .btn:disabled {
@@ -321,17 +380,17 @@ body {
 }
 
 .btn-ghost:hover {
-  background: var(--bg-hover);
+  background: var(--hover);
   border-color: transparent;
 }
 
 .btn-danger {
-  color: var(--status-error);
-  border-color: var(--status-error);
+  color: var(--state-error);
+  border-color: var(--state-error);
 }
 
 .btn-danger:hover {
-  background: var(--status-error);
+  background: var(--state-error);
   color: #ffffff;
 }
 
@@ -357,7 +416,7 @@ body {
 }
 
 .site-row:hover {
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .site-status {
@@ -368,25 +427,25 @@ body {
 }
 
 .site-status.running {
-  background: var(--status-running);
-  box-shadow: 0 0 8px var(--status-running);
+  background: var(--state-running);
+  box-shadow: 0 0 8px var(--state-running);
 }
 
 .site-status.stopped {
-  background: var(--status-stopped);
+  background: var(--state-error);
 }
 
 .site-status.building {
-  background: var(--status-building);
+  background: var(--state-building);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .site-status.error {
-  background: var(--status-error);
+  background: var(--state-error);
 }
 
 .site-status.sleeping {
-  background: var(--status-sleeping);
+  background: var(--state-sleeping);
   opacity: 0.6;
 }
 
@@ -423,13 +482,13 @@ body {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border: 1px solid var(--status-running);
-  color: var(--status-running);
+  border: 1px solid var(--state-running);
+  color: var(--state-running);
 }
 
 .site-badge-sleeping {
-  border-color: var(--status-sleeping);
-  color: var(--status-sleeping);
+  border-color: var(--state-sleeping);
+  color: var(--state-sleeping);
 }
 
 .site-row-sleeping {
@@ -442,7 +501,7 @@ body {
 
 .site-url {
   font-size: var(--text-sm);
-  color: var(--text-muted);
+  color: var(--muted);
   margin-top: var(--space-1);
 }
 
@@ -468,14 +527,14 @@ body {
   justify-content: center;
   border: 1px solid var(--border);
   background: var(--bg);
-  color: var(--text-muted);
+  color: var(--muted);
   cursor: pointer;
   font-size: var(--text-base);
   transition: all 0.15s ease;
 }
 
 .dropdown-trigger:hover {
-  background: var(--bg-hover);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -509,11 +568,11 @@ body {
 }
 
 .dropdown-item:hover {
-  background: var(--bg-hover);
+  background: var(--hover);
 }
 
 .dropdown-item.danger {
-  color: var(--status-error);
+  color: var(--state-error);
 }
 
 .dropdown-divider {
@@ -542,8 +601,9 @@ body {
 }
 
 .site-detail-title {
-  font-size: var(--text-xl);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 400;
 }
 
 .site-detail-meta {
@@ -554,7 +614,7 @@ body {
 }
 
 .site-detail-meta a {
-  color: var(--text-muted);
+  color: var(--muted);
   text-decoration: none;
   font-size: var(--text-sm);
 }
@@ -583,7 +643,7 @@ body {
   padding: var(--space-3) var(--space-4);
   border: none;
   background: none;
-  color: var(--text-muted);
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -618,11 +678,11 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .logs-container {
-  background: var(--bg-surface);
+  background: var(--surface);
   border: 1px solid var(--border);
   padding: var(--space-4);
   max-height: 500px;
@@ -642,7 +702,7 @@ body {
 }
 
 .log-time {
-  color: var(--text-faint);
+  color: var(--faint);
   flex-shrink: 0;
   font-size: var(--text-xs);
 }
@@ -653,11 +713,11 @@ body {
 }
 
 .log-line.error .log-content {
-  color: var(--status-error);
+  color: var(--state-error);
 }
 
 .log-line.success .log-content {
-  color: var(--status-running);
+  color: var(--state-running);
 }
 
 /* ============================================
@@ -673,7 +733,7 @@ body {
   margin-bottom: var(--space-2);
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -694,7 +754,7 @@ body {
 }
 
 .form-input::placeholder {
-  color: var(--text-faint);
+  color: var(--faint);
 }
 
 .form-radio-group {
@@ -770,7 +830,7 @@ body {
   justify-content: center;
   border: none;
   background: none;
-  color: var(--text-muted);
+  color: var(--muted);
   cursor: pointer;
   font-size: var(--text-lg);
 }
@@ -817,12 +877,12 @@ body {
 
 .env-key {
   font-weight: 600;
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .env-value {
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 /* ============================================
@@ -863,16 +923,16 @@ body {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3);
-  background: var(--bg-surface);
+  background: var(--surface);
   border: 1px solid var(--border);
 }
 
 .settings-section.danger {
-  border-color: var(--status-error);
+  border-color: var(--state-error);
 }
 
 .settings-section.danger .settings-section-title {
-  color: var(--status-error);
+  color: var(--state-error);
 }
 
 /* ============================================
@@ -881,12 +941,14 @@ body {
 
 .empty-state {
   text-align: center;
-  padding: var(--space-8);
-  color: var(--text-muted);
+  padding: var(--space-9);
+  color: var(--muted);
 }
 
 .empty-state-title {
-  font-size: var(--text-lg);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 400;
   margin-bottom: var(--space-2);
 }
 
@@ -898,7 +960,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--text-muted);
+  color: var(--muted);
   text-decoration: none;
   font-size: var(--text-sm);
   margin-bottom: var(--space-5);
@@ -924,15 +986,15 @@ body {
 }
 
 .text-muted {
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .text-error {
-  color: var(--status-error);
+  color: var(--state-error);
 }
 
 .text-success {
-  color: var(--status-running);
+  color: var(--state-running);
 }
 
 .mt-4 {
@@ -980,22 +1042,22 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .badge-success {
-  border-color: var(--status-running);
-  color: var(--status-running);
+  border-color: var(--state-running);
+  color: var(--state-running);
 }
 
 .badge-error {
-  border-color: var(--status-error);
-  color: var(--status-error);
+  border-color: var(--state-error);
+  color: var(--state-error);
 }
 
 .badge-warning {
-  border-color: var(--status-building);
-  color: var(--status-building);
+  border-color: var(--state-building);
+  color: var(--state-building);
 }
 
 /* ============================================
@@ -1008,8 +1070,8 @@ body {
 
 .deployments-section.deployments-active {
   padding: var(--space-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--status-building);
+  background: var(--surface);
+  border: 1px solid var(--state-building);
 }
 
 .section-title {
@@ -1017,7 +1079,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-bottom: var(--space-4);
 }
 
@@ -1043,7 +1105,7 @@ body {
 }
 
 .deployment-row:hover {
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 .deployment-row.deployment-active {
@@ -1051,7 +1113,7 @@ body {
 }
 
 .deployment-row.deployment-active:hover {
-  background: var(--bg-hover);
+  background: var(--hover);
 }
 
 .deployment-info {
@@ -1082,11 +1144,11 @@ body {
   align-items: center;
   gap: var(--space-4);
   font-size: var(--text-sm);
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .deployment-time {
-  color: var(--text-faint);
+  color: var(--faint);
 }
 
 .deployment-duration {
@@ -1096,16 +1158,16 @@ body {
 .deployment-commit {
   font-family: var(--font-mono);
   padding: var(--space-1) var(--space-2);
-  background: var(--bg-hover);
+  background: var(--hover);
   font-size: var(--text-xs);
 }
 
 .deployment-error {
   margin-top: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: rgba(239, 68, 68, 0.1);
-  border-left: 2px solid var(--status-error);
-  color: var(--status-error);
+  background: color-mix(in oklch, var(--state-error) 8%, var(--bg));
+  border: 1px solid var(--state-error);
+  color: var(--state-error);
   font-size: var(--text-sm);
 }
 
@@ -1113,7 +1175,7 @@ body {
   width: 14px;
   height: 14px;
   border: 2px solid var(--border);
-  border-top-color: var(--status-building);
+  border-top-color: var(--state-building);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

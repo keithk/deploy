@@ -41,13 +41,13 @@ class DeployToast extends HTMLElement {
 
   render() {
     const borderColor =
-      this.type === 'error' ? 'var(--status-error)' :
-      this.type === 'success' ? 'var(--status-running)' :
+      this.type === 'error' ? 'var(--state-error)' :
+      this.type === 'success' ? 'var(--state-running)' :
       'var(--accent)';
 
     const textColor =
-      this.type === 'error' ? 'var(--status-error)' :
-      this.type === 'success' ? 'var(--status-running)' :
+      this.type === 'error' ? 'var(--state-error)' :
+      this.type === 'success' ? 'var(--state-running)' :
       'var(--text)';
 
     this.innerHTML = `
@@ -63,7 +63,6 @@ class DeployToast extends HTMLElement {
           padding: var(--space-3) var(--space-4);
           background: var(--bg);
           border: 1px solid ${borderColor};
-          border-left: 3px solid ${borderColor};
           color: ${textColor};
           font-family: var(--font-mono);
           font-size: var(--text-sm);
@@ -84,7 +83,7 @@ class DeployToast extends HTMLElement {
         .toast-close {
           border: none;
           background: none;
-          color: var(--text-muted);
+          color: var(--muted);
           cursor: pointer;
           font-size: var(--text-lg);
           padding: 0;

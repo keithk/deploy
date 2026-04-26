@@ -156,14 +156,14 @@ class DeployActions extends HTMLElement {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: var(--text-faint);
+          background: var(--faint);
           flex-shrink: 0;
         }
         .action-status.success {
-          background: var(--status-running);
+          background: var(--state-running);
         }
         .action-status.error {
-          background: var(--status-error);
+          background: var(--state-error);
         }
         .action-info {
           flex: 1;
@@ -180,17 +180,16 @@ class DeployActions extends HTMLElement {
         }
         .action-type {
           font-size: var(--text-xs);
-          color: var(--text-muted);
+          color: var(--muted);
           padding: 2px 6px;
           background: var(--surface);
-          border-radius: 2px;
         }
         .action-meta {
           display: flex;
           gap: var(--space-4);
           margin-top: var(--space-1);
           font-size: var(--text-xs);
-          color: var(--text-muted);
+          color: var(--muted);
         }
         .action-actions {
           display: flex;
@@ -198,18 +197,19 @@ class DeployActions extends HTMLElement {
         }
         .action-message {
           font-size: var(--text-xs);
-          color: var(--text-muted);
+          color: var(--muted);
           margin-top: var(--space-2);
           padding: var(--space-2) var(--space-3);
           background: var(--surface);
-          border-radius: 4px;
-          border-left: 2px solid var(--border);
+          border: 1px solid var(--border);
         }
         .action-message.success {
-          border-left-color: var(--status-running);
+          border-color: var(--state-running);
+          color: var(--state-running);
         }
         .action-message.error {
-          border-left-color: var(--status-error);
+          border-color: var(--state-error);
+          color: var(--state-error);
         }
       </style>
     `;
