@@ -24,3 +24,5 @@ export type { CreateActionData } from "./action";
 
 export { DeploymentModel, deploymentModel } from "./deployment";
 export type { CreateDeploymentData, UpdateDeploymentData } from "./deployment";
+
+export { DeploymentStepModel, deploymentStepModel } from "./deployment-step";

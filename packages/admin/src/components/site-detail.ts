@@ -37,7 +37,7 @@ class DeploySiteDetail extends HTMLElement {
   private siteId: string = "";
   private site: Site | null = null;
   private loading: boolean = true;
-  private activeTab: "build" | "runtime" | "environment" | "settings" = "build";
+  private activeTab: "deploys" | "build" | "runtime" | "environment" | "settings" = "deploys";
   private logs: LogEntry[] = [];
   private userEnvVars: EnvVar[] = [];
   private systemEnvVars: EnvVar[] = [];
@@ -59,7 +59,13 @@ class DeploySiteDetail extends HTMLElement {
     // Check for tab query param
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
-    if (tab === "environment" || tab === "settings" || tab === "runtime") {
+    if (
+      tab === "deploys" ||
+      tab === "build" ||
+      tab === "runtime" ||
+      tab === "environment" ||
+      tab === "settings"
+    ) {
       this.activeTab = tab;
     }
 
@@ -140,7 +146,9 @@ class DeploySiteDetail extends HTMLElement {
     }
   }
 
-  async switchTab(tab: "build" | "runtime" | "environment" | "settings") {
+  async switchTab(
+    tab: "deploys" | "build" | "runtime" | "environment" | "settings"
+  ) {
     this.activeTab = tab;
     await this.loadTabData();
     this.render();
@@ -170,8 +178,7 @@ class DeploySiteDetail extends HTMLElement {
       });
 
       if (response.ok) {
-        this.activeTab = "build";
-        await this.loadLogs();
+        this.activeTab = "deploys";
         this.render();
       } else {
         const error = await response.json();
@@ -551,6 +558,9 @@ class DeploySiteDetail extends HTMLElement {
 
       <div class="tabs">
         <button class="tab ${
+          this.activeTab === "deploys" ? "active" : ""
+        }" data-tab="deploys">Deploys</button>
+        <button class="tab ${
           this.activeTab === "build" ? "active" : ""
         }" data-tab="build">Build Logs</button>
         <button class="tab ${
@@ -639,6 +649,8 @@ class DeploySiteDetail extends HTMLElement {
 
   renderTabContent(): string {
     switch (this.activeTab) {
+      case "deploys":
+        return this.renderDeploysTab();
       case "build":
       case "runtime":
         return this.renderLogsTab();
@@ -649,6 +661,10 @@ class DeploySiteDetail extends HTMLElement {
       default:
         return "";
     }
+  }
+
+  renderDeploysTab(): string {
+    return `<deploy-site-deploys site-id="${this.siteId}"></deploy-site-deploys>`;
   }
 
   renderLogsTab(): string {

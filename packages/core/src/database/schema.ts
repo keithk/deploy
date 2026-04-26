@@ -101,3 +101,27 @@ export interface Deployment {
   commit_message: string | null;
   error_message: string | null;
 }
+
+/**
+ * Names of the timed phases inside a deployment, used by the deploy waterfall view.
+ */
+export type DeploymentStepName =
+  | 'clone'
+  | 'build'
+  | 'start'
+  | 'health_check'
+  | 'switch'
+  | 'register_actions';
+
+/**
+ * Represents a single timed phase of a deployment.
+ */
+export interface DeploymentStep {
+  id: string;
+  deployment_id: string;
+  name: DeploymentStepName;
+  status: 'running' | 'completed' | 'failed';
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}

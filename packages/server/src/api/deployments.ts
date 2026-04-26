@@ -1,7 +1,11 @@
 // ABOUTME: REST API endpoint for deployment tracking.
 // ABOUTME: Provides access to in-progress and historical deployments.
 
-import { deploymentModel, siteModel } from "@keithk/deploy-core";
+import {
+  deploymentModel,
+  deploymentStepModel,
+  siteModel,
+} from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 
 /**
@@ -110,7 +114,7 @@ async function handleGetActiveDeployments(request: Request): Promise<Response> {
 }
 
 /**
- * GET /api/deployments/:id - Get a specific deployment
+ * GET /api/deployments/:id - Get a specific deployment (with steps)
  */
 async function handleGetDeployment(
   request: Request,
@@ -130,10 +134,12 @@ async function handleGetDeployment(
     }
 
     const site = siteModel.findById(deployment.site_id);
+    const steps = deploymentStepModel.findByDeploymentId(deploymentId);
 
     return Response.json({
       ...deployment,
       site_name: site?.name || "Unknown",
+      steps,
     });
   } catch (error) {
     console.error("Error getting deployment:", error);
@@ -142,7 +148,7 @@ async function handleGetDeployment(
 }
 
 /**
- * GET /api/sites/:id/deployments - Get deployments for a specific site
+ * GET /api/sites/:id/deployments - Get deployments for a specific site (with steps)
  */
 async function handleGetSiteDeployments(
   request: Request,
@@ -164,11 +170,16 @@ async function handleGetSiteDeployments(
     }
 
     const deployments = deploymentModel.findBySiteId(siteId, limit);
+    // Batch-fetch steps so this is a single extra query, not N+1.
+    const stepsByDeployment = deploymentStepModel.findManyByDeploymentIds(
+      deployments.map((d) => d.id)
+    );
 
     return Response.json(
       deployments.map((d) => ({
         ...d,
         site_name: site.name,
+        steps: stepsByDeployment.get(d.id) ?? [],
       }))
     );
   } catch (error) {

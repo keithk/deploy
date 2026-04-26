@@ -9,6 +9,7 @@ import {
   logModel,
   actionModel,
   deploymentModel,
+  deploymentStepModel,
 } from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
@@ -61,6 +62,9 @@ export async function deploySite(
   const hasExistingContainer = site.status === "running" && site.container_id;
 
   let deployment: ReturnType<typeof deploymentModel.create> | null = null;
+  // Tracks the currently-running step row so the catch block can mark it failed.
+  // We null this out the moment a step is closed (success or handled failure).
+  let currentStepId: string | null = null;
 
   try {
     // Create a deployment record to track progress
@@ -76,12 +80,16 @@ export async function deploySite(
     }
 
     // Step 1: Clone or pull the repository
+    currentStepId = deploymentStepModel.startStep(deployment.id, "clone").id;
     deploymentModel.updateStatus(deployment.id, "cloning");
     log(`Cloning repository from ${site.git_url}...`);
     const sitePath = await cloneSite(site.git_url, site.name, site.branch);
     log(`Repository cloned to ${sitePath}`);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
 
     // Step 2: Build with Railpack
+    currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
     deploymentModel.updateStatus(deployment.id, "building");
     log(`Building with Railpack...`);
     const buildResult = await buildWithRailpacks(sitePath, site.name);
@@ -89,9 +97,12 @@ export async function deploySite(
       throw new Error(buildResult.error || "Build failed");
     }
     log(`Build complete: ${buildResult.imageName}`);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
 
     // Step 3: Start the container with environment variables
     // Use blue-green deployment if there's an existing container
+    currentStepId = deploymentStepModel.startStep(deployment.id, "start").id;
     deploymentModel.updateStatus(deployment.id, "starting");
     log(
       `Starting container${
@@ -109,8 +120,11 @@ export async function deploySite(
       }
     );
     log(`Container started on port ${containerInfo.port}`);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
 
     // Step 4: Wait for the new container to be healthy before switching
+    currentStepId = deploymentStepModel.startStep(deployment.id, "health_check").id;
     deploymentModel.updateStatus(deployment.id, "healthy");
     log(`Waiting for container to be healthy...`);
     const containerName = containerInfo.isBlueGreen
@@ -118,6 +132,14 @@ export async function deploySite(
       : `deploy-${site.name}`;
     const isHealthy = await waitForContainerHealth(containerInfo.port, 120000);
     if (!isHealthy) {
+      // Close the health_check step now so its duration reflects time-to-failure,
+      // not time-spent-on-recovery work below.
+      deploymentStepModel.completeStep(
+        currentStepId,
+        "Container failed health check"
+      );
+      currentStepId = null;
+
       // Capture container logs to help debug the failure
       log(`Container failed health check. Capturing logs...`);
       try {
@@ -155,12 +177,17 @@ export async function deploySite(
       throw new Error("Container failed health check");
     }
     log(`Container is healthy`);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
 
     // Step 5: Complete blue-green deployment (stop old container, rename new)
     if (containerInfo.isBlueGreen) {
+      currentStepId = deploymentStepModel.startStep(deployment.id, "switch").id;
       deploymentModel.updateStatus(deployment.id, "switching");
       log(`Completing blue-green deployment...`);
       await completeBlueGreenDeployment(site.name);
+      deploymentStepModel.completeStep(currentStepId);
+      currentStepId = null;
     }
 
     // Step 6: Update status to running with new container info
@@ -173,6 +200,10 @@ export async function deploySite(
     siteModel.markDeployed(siteId);
 
     // Step 7: Discover and register actions from the site
+    currentStepId = deploymentStepModel.startStep(
+      deployment.id,
+      "register_actions"
+    ).id;
     log(`Discovering actions...`);
     const actions = await discoverSiteActions(sitePath, siteId);
     if (actions.length > 0) {
@@ -191,6 +222,8 @@ export async function deploySite(
         log(`Registered action: ${action.id} (${action.type})`);
       }
     }
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
 
     // Mark deployment as completed
     deploymentModel.complete(
@@ -205,6 +238,11 @@ export async function deploySite(
     const message = err instanceof Error ? err.message : String(err);
     error(`Deployment failed for ${site.name}: ${message}`);
     logModel.append(siteId, "build", `ERROR: ${message}`);
+
+    // Close the active step (if any) as failed.
+    if (currentStepId) {
+      deploymentStepModel.completeStep(currentStepId, message);
+    }
 
     // Mark deployment as failed (if we managed to create one)
     if (deployment) {
