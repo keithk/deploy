@@ -13,8 +13,6 @@ import { getSiteDataPath } from "./container";
 const SITES_BASE_PATH = process.env.SITES_DIR || "/var/deploy/sites";
 
 const COMPOSE_FILENAME = "docker-compose.yml";
-const OVERRIDE_FILENAME = "docker-compose.override.yml";
-const ENV_FILENAME = ".env.deploy";
 
 /**
  * The compose project name for a site. Used as `docker compose -p <name>`.
@@ -35,41 +33,75 @@ export function composeProjectDir(siteName: string): string {
  * The `-f` arguments passed to every `docker compose` invocation for a site.
  */
 export function composeFilesArgs(siteName: string): string[] {
-  const dir = composeProjectDir(siteName);
-  return ["-f", join(dir, COMPOSE_FILENAME), "-f", join(dir, OVERRIDE_FILENAME)];
+  return ["-f", join(composeProjectDir(siteName), COMPOSE_FILENAME)];
 }
 
 interface ComposeServiceMap {
   [name: string]: Record<string, unknown>;
 }
 
-interface OverrideOptions {
+interface PrepareOptions {
   primaryService: string;
   primaryPort: number;
   allocatedPort: number;
   persistentStorage: boolean;
-  envFileName: string;
+  envVars: Record<string, string>;
+  siteName: string;
 }
 
 /**
- * Build a docker-compose override file that:
- *   - clears `ports:` on every service in the user's compose (replace-merge with [])
- *   - re-adds a single 127.0.0.1:<allocatedPort>:<primaryPort> binding on the primary service
- *   - mounts /var/deploy/data/<name>:/data on the primary when persistent_storage=1
- *   - injects a `.env.deploy` file via env_file on the primary service
- *
- * Returns the override YAML as a string.
+ * Normalize compose's `environment:` field — accepts both list form (`KEY=VALUE`)
+ * and map form, returns a map.
  */
-export function buildOverride(
+function normalizeEnvironment(env: unknown): Record<string, string> {
+  if (!env) return {};
+  if (Array.isArray(env)) {
+    const map: Record<string, string> = {};
+    for (const entry of env) {
+      if (typeof entry !== "string") continue;
+      const eq = entry.indexOf("=");
+      if (eq === -1) {
+        map[entry] = "";
+      } else {
+        map[entry.slice(0, eq)] = entry.slice(eq + 1);
+      }
+    }
+    return map;
+  }
+  if (typeof env === "object") {
+    const map: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+      map[k] = v == null ? "" : String(v);
+    }
+    return map;
+  }
+  return {};
+}
+
+/**
+ * Take the user's compose YAML and return a deploy-ready version that:
+ *   - strips `ports:` from every service (we won't let any service publish on the host)
+ *   - on the primary service: adds a single `127.0.0.1:<allocatedPort>:<primaryPort>` binding
+ *   - on the primary service: merges our env vars into `environment:` (ours win on conflicts)
+ *   - on the primary service: appends `/var/deploy/data/<name>:/data` to `volumes:` when
+ *     persistent storage is enabled
+ *
+ * We rewrite the file in place rather than emit a docker-compose.override.yml because
+ * compose's merge semantics for `ports:` is *append*, and `environment:` always overrides
+ * `env_file:` — both make override-based isolation hard to get right. Rewriting is
+ * simpler and predictable. The user's original YAML is preserved verbatim in the DB
+ * (`sites.compose_yaml`); the on-disk file is a generated deploy artifact.
+ */
+export function prepareDeployCompose(
   composeYaml: string,
-  siteName: string,
-  options: OverrideOptions
+  options: PrepareOptions
 ): string {
   const parsed = parseYaml(composeYaml);
   assertSafeCompose(parsed);
 
-  const services = (parsed as { services: ComposeServiceMap }).services;
-  const { primaryService, primaryPort, allocatedPort, persistentStorage, envFileName } = options;
+  const root = parsed as { services: ComposeServiceMap };
+  const services = root.services;
+  const { primaryService, primaryPort, allocatedPort, persistentStorage, envVars, siteName } = options;
 
   if (!services[primaryService]) {
     throw new Error(
@@ -77,64 +109,51 @@ export function buildOverride(
     );
   }
 
-  // Override services map. For every service we set ports: [] to suppress any host
-  // port bindings the user asked for. The primary service then re-declares its single
-  // allowed binding via the merged-but-replace semantics of compose's `ports` key.
-  const overrideServices: ComposeServiceMap = {};
-
+  // 1. Strip ports from every service — no service may publish on the host.
   for (const name of Object.keys(services)) {
-    overrideServices[name] = { ports: [] as string[] };
+    const svc = services[name];
+    if (svc && typeof svc === "object" && "ports" in svc) {
+      delete svc.ports;
+    }
   }
 
-  const primaryOverride: Record<string, unknown> = {
-    ports: [`127.0.0.1:${allocatedPort}:${primaryPort}`],
-    env_file: [`./${envFileName}`],
+  // 2. Primary service: add our single host binding.
+  const primary = services[primaryService];
+  primary.ports = [`127.0.0.1:${allocatedPort}:${primaryPort}`];
+
+  // 3. Primary service: merge env vars (ours win).
+  const merged = {
+    ...normalizeEnvironment(primary.environment),
+    ...envVars,
   };
+  if (persistentStorage && merged.DATA_DIR === undefined) {
+    merged.DATA_DIR = "/data";
+  }
+  primary.environment = merged;
 
+  // 4. Primary service: append /data mount when persistent storage is on.
   if (persistentStorage) {
-    primaryOverride.volumes = [`${getSiteDataPath(siteName)}:/data`];
+    const existingVolumes = Array.isArray(primary.volumes)
+      ? [...(primary.volumes as unknown[])]
+      : [];
+    existingVolumes.push(`${getSiteDataPath(siteName)}:/data`);
+    primary.volumes = existingVolumes;
   }
 
-  overrideServices[primaryService] = primaryOverride;
-
-  const override = { services: overrideServices };
-  return stringifyYaml(override);
+  return stringifyYaml(root);
 }
 
-/**
- * Render a `KEY=VALUE` env file from a parsed env-vars map.
- * Lines whose values contain whitespace, quotes, or backslashes are double-quoted with escapes.
- */
-export function renderEnvFile(envVars: Record<string, string>): string {
-  const lines: string[] = [];
-  for (const [key, raw] of Object.entries(envVars)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      // skip keys that aren't valid env-var names
-      debug(`Skipping invalid env var key: ${key}`);
-      continue;
-    }
-    const value = String(raw ?? "");
-    if (/[\s"\\$`]/.test(value)) {
-      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      lines.push(`${key}="${escaped}"`);
-    } else {
-      lines.push(`${key}=${value}`);
-    }
-  }
-  return lines.join("\n") + (lines.length ? "\n" : "");
-}
-
-interface PrepareOptions {
+interface WriteOptions {
   allocatedPort: number;
   envVars: Record<string, string>;
   persistentStorage: boolean;
 }
 
 /**
- * Write the compose project files to disk in the site's working directory.
+ * Write the deploy-ready docker-compose.yml to disk.
  * Creates the directory if missing. Overwrites existing files.
  */
-export function writeComposeProject(site: Site, options: PrepareOptions): void {
+export function writeComposeProject(site: Site, options: WriteOptions): void {
   if (!site.compose_yaml || !site.primary_service || site.primary_port == null) {
     throw new Error(
       `Site ${site.name} is type='compose' but missing compose_yaml/primary_service/primary_port`
@@ -147,24 +166,17 @@ export function writeComposeProject(site: Site, options: PrepareOptions): void {
     info(`Created compose project dir: ${dir}`);
   }
 
-  const envVars = { ...options.envVars };
-  if (options.persistentStorage && envVars.DATA_DIR === undefined) {
-    envVars.DATA_DIR = "/data";
-  }
-  const envFileBody = renderEnvFile(envVars);
-
-  const overrideYaml = buildOverride(site.compose_yaml, site.name, {
+  const composeYaml = prepareDeployCompose(site.compose_yaml, {
     primaryService: site.primary_service,
     primaryPort: site.primary_port,
     allocatedPort: options.allocatedPort,
     persistentStorage: options.persistentStorage,
-    envFileName: ENV_FILENAME,
+    envVars: options.envVars,
+    siteName: site.name,
   });
 
-  writeFileSync(join(dir, COMPOSE_FILENAME), site.compose_yaml);
-  writeFileSync(join(dir, OVERRIDE_FILENAME), overrideYaml);
-  writeFileSync(join(dir, ENV_FILENAME), envFileBody, { mode: 0o600 });
-  debug(`Wrote compose project files for ${site.name}`);
+  writeFileSync(join(dir, COMPOSE_FILENAME), composeYaml);
+  debug(`Wrote compose project file for ${site.name}`);
 }
 
 /**
