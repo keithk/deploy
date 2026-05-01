@@ -177,6 +177,14 @@ export async function proxyRequest(
     headers.delete("content-length");
     headers.delete("content-encoding");
 
+    // TEMP DEBUG: dump headers + body shape so we can see what's reaching the upstream
+    if (hasBody && bodyBuffer) {
+      const preview = new TextDecoder().decode(bodyBuffer.slice(0, 200));
+      const allHeaders: Record<string, string> = {};
+      headers.forEach((v, k) => { allHeaders[k] = v; });
+      info(`[proxy-debug] ${request.method} ${targetUrl} bytes=${bodyBuffer.byteLength} headers=${JSON.stringify(allHeaders)} preview=${JSON.stringify(preview)}`);
+    }
+
     const proxyReq = new Request(targetUrl, {
       method: request.method,
       headers: headers,
