@@ -167,16 +167,21 @@ export async function proxyRequest(
 
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
-    // Bun's fetch requires `duplex: 'half'` when sending a streamed body. Without it,
-    // a streamed Request body is silently dropped — receivers see an empty POST.
-    // Cast through `RequestInit & { duplex?: ... }` because the TS dom lib doesn't
-    // know about duplex yet but Bun does.
+    // Buffer the body into memory before forwarding. Streaming a Request body via
+    // Bun fetch silently drops it for some content shapes; reading to a Buffer is
+    // boring and reliable. API request bodies are tiny — this is fine.
+    const bodyBuffer = hasBody ? await request.arrayBuffer() : undefined;
+
+    // The original Content-Length / Content-Encoding belongs to the source request;
+    // fetch will set them correctly from the buffered body.
+    headers.delete("content-length");
+    headers.delete("content-encoding");
+
     const proxyReq = new Request(targetUrl, {
       method: request.method,
       headers: headers,
-      body: hasBody ? request.clone().body : undefined,
-      ...(hasBody ? { duplex: "half" } : {}),
-    } as RequestInit & { duplex?: "half" });
+      body: bodyBuffer,
+    });
 
     const response = await fetch(proxyReq, { redirect: "manual" });
 
