@@ -182,7 +182,13 @@ export async function proxyRequest(
       const preview = new TextDecoder().decode(bodyBuffer.slice(0, 200));
       const allHeaders: Record<string, string> = {};
       headers.forEach((v, k) => { allHeaders[k] = v; });
-      info(`[proxy-debug] ${request.method} ${targetUrl} bytes=${bodyBuffer.byteLength} headers=${JSON.stringify(allHeaders)} preview=${JSON.stringify(preview)}`);
+      const inHeaders: Record<string, string> = {};
+      request.headers.forEach((v, k) => { inHeaders[k] = v; });
+      // warn() because the default LogLevel for server/utils/logging is WARN
+      warn(`[proxy-debug] ${request.method} ${targetUrl} bytes=${bodyBuffer.byteLength}`);
+      warn(`[proxy-debug] inHeaders=${JSON.stringify(inHeaders)}`);
+      warn(`[proxy-debug] outHeaders=${JSON.stringify(allHeaders)}`);
+      warn(`[proxy-debug] preview=${JSON.stringify(preview)}`);
     }
 
     const proxyReq = new Request(targetUrl, {
