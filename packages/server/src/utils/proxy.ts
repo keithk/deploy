@@ -165,14 +165,18 @@ export async function proxyRequest(
 
     headers.set("Host", "localhost:" + targetPort);
 
+    const hasBody = request.method !== "GET" && request.method !== "HEAD";
+
+    // Bun's fetch requires `duplex: 'half'` when sending a streamed body. Without it,
+    // a streamed Request body is silently dropped — receivers see an empty POST.
+    // Cast through `RequestInit & { duplex?: ... }` because the TS dom lib doesn't
+    // know about duplex yet but Bun does.
     const proxyReq = new Request(targetUrl, {
       method: request.method,
       headers: headers,
-      body:
-        request.method !== "GET" && request.method !== "HEAD"
-          ? request.clone().body
-          : undefined,
-    });
+      body: hasBody ? request.clone().body : undefined,
+      ...(hasBody ? { duplex: "half" } : {}),
+    } as RequestInit & { duplex?: "half" });
 
     const response = await fetch(proxyReq, { redirect: "manual" });
 
