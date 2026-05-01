@@ -21,6 +21,22 @@ export function isWebSocketUpgrade(request: Request): boolean {
 }
 
 /**
+ * X-Forwarded-For should be a comma-separated list of bare IPs. Some upstream
+ * proxies (Caddy's `{remote}` placeholder) include the ephemeral client port —
+ * `192.0.2.1:60527`. Strict upstream parsers (Cobalt) reject those, so strip
+ * any trailing port. Handles bare IPv4, IPv4:port, and bracketed IPv6 forms.
+ */
+export function stripIpPort(raw: string): string {
+  const first = raw.split(",")[0].trim();
+  if (first.startsWith("[")) {
+    const end = first.indexOf("]");
+    return end > 0 ? first.slice(1, end) : first;
+  }
+  // IPv4:port has exactly one colon. Bare IPv6 has many colons; leave alone.
+  return first.split(":").length === 2 ? first.split(":")[0] : first;
+}
+
+/**
  * Creates WebSocket handlers for the server.
  * This should be passed to Bun.serve websocket option.
  */
@@ -153,11 +169,13 @@ export async function proxyRequest(
       headers.set("X-Forwarded-Host", originalHost);
     }
 
-    const clientIp =
+    const clientIp = stripIpPort(
       request.headers.get("X-Forwarded-For") ||
-      request.headers.get("X-Real-IP") ||
-      "127.0.0.1";
+        request.headers.get("X-Real-IP") ||
+        "127.0.0.1"
+    );
     headers.set("X-Forwarded-For", clientIp);
+    headers.set("X-Real-IP", clientIp);
     headers.set(
       "X-Forwarded-Proto",
       request.headers.get("X-Forwarded-Proto") || "https"
@@ -176,20 +194,6 @@ export async function proxyRequest(
     // fetch will set them correctly from the buffered body.
     headers.delete("content-length");
     headers.delete("content-encoding");
-
-    // TEMP DEBUG: dump headers + body shape so we can see what's reaching the upstream
-    if (hasBody && bodyBuffer) {
-      const preview = new TextDecoder().decode(bodyBuffer.slice(0, 200));
-      const allHeaders: Record<string, string> = {};
-      headers.forEach((v, k) => { allHeaders[k] = v; });
-      const inHeaders: Record<string, string> = {};
-      request.headers.forEach((v, k) => { inHeaders[k] = v; });
-      // warn() because the default LogLevel for server/utils/logging is WARN
-      warn(`[proxy-debug] ${request.method} ${targetUrl} bytes=${bodyBuffer.byteLength}`);
-      warn(`[proxy-debug] inHeaders=${JSON.stringify(inHeaders)}`);
-      warn(`[proxy-debug] outHeaders=${JSON.stringify(allHeaders)}`);
-      warn(`[proxy-debug] preview=${JSON.stringify(preview)}`);
-    }
 
     const proxyReq = new Request(targetUrl, {
       method: request.method,
