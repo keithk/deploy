@@ -155,7 +155,7 @@ export async function handleAutodeployWebhook(
 
   try {
     // Pull the latest code
-    await pullSite(site.name, site.branch, site.git_url);
+    await pullSite(site.name, site.branch, site.git_url ?? undefined);
 
     // Redeploy the site
     const result = await deploySite(site.id);

@@ -135,14 +135,6 @@ export function parseEnvText(envText: string): Record<string, string> {
   return out;
 }
 
-interface CreateGithubBody {
-  source_type?: "github";
-  git_url: string;
-  name: string;
-  sleep_enabled?: boolean;
-  sleep_after_minutes?: number | null;
-}
-
 interface CreateComposeBody {
   source_type: "compose";
   name: string;
@@ -156,11 +148,25 @@ interface CreateComposeBody {
   sleep_after_minutes?: number | null;
 }
 
+// Permissive shape for the JSON body; narrowed to one of the structured types after parse.
+interface RawCreateBody {
+  source_type?: string;
+  name?: string;
+  git_url?: string | null;
+  compose_yaml?: string;
+  primary_service?: string;
+  primary_port?: number;
+  env_text?: string;
+  persistent_storage?: boolean;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number | null;
+}
+
 /**
  * POST /api/sites - Create a new site (github or compose source).
  */
 async function handleCreateSite(request: Request): Promise<Response> {
-  let body: Partial<CreateGithubBody & CreateComposeBody>;
+  let body: RawCreateBody;
   try {
     body = await request.json();
   } catch {
@@ -181,7 +187,18 @@ async function handleCreateSite(request: Request): Promise<Response> {
   }
 
   if (body.source_type === "compose") {
-    return handleCreateComposeSite(body as CreateComposeBody);
+    return handleCreateComposeSite({
+      source_type: "compose",
+      name: body.name,
+      compose_yaml: body.compose_yaml ?? "",
+      primary_service: body.primary_service ?? "",
+      primary_port: body.primary_port as number,
+      env_text: body.env_text,
+      persistent_storage: body.persistent_storage,
+      git_url: body.git_url ?? null,
+      sleep_enabled: body.sleep_enabled,
+      sleep_after_minutes: body.sleep_after_minutes ?? null,
+    });
   }
 
   // Default to github source

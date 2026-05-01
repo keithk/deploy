@@ -174,7 +174,7 @@ export class SiteModel {
     const allSites = this.findAll();
 
     for (const site of allSites) {
-      if (this.normalizeGitUrl(site.git_url) === normalizedSearch) {
+      if (site.git_url && this.normalizeGitUrl(site.git_url) === normalizedSearch) {
         return site;
       }
     }
