@@ -56,6 +56,25 @@ export class Database {
         error(`Failed to initialize in-memory database: ${fallbackErr}`);
       }
     }
+
+    this.applyConnectionPragmas();
+  }
+
+  /**
+   * WAL lets readers and writers proceed without blocking each other; busy_timeout
+   * makes concurrent writers wait for the lock instead of failing immediately
+   * (which is what produced "database is locked" errors when the metrics poller
+   * collided with deploy/log writes).
+   */
+  private applyConnectionPragmas(): void {
+    if (!this.db) return;
+    try {
+      this.db.run("PRAGMA journal_mode = WAL");
+      this.db.run("PRAGMA busy_timeout = 5000");
+      this.db.run("PRAGMA synchronous = NORMAL");
+    } catch (err) {
+      error(`Failed to apply connection pragmas: ${err}`);
+    }
   }
 
   /**
