@@ -53,7 +53,7 @@ async function getUsedPorts(): Promise<Set<number>> {
  * @param siteName The site name for port lookup
  * @param forceNew If true, always allocate a new port (for blue-green deployments)
  */
-async function getNextPort(
+export async function getNextPort(
   siteName: string,
   forceNew: boolean = false
 ): Promise<number> {

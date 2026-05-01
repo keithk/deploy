@@ -20,6 +20,7 @@ import {
   rollbackBlueGreenDeployment,
   waitForContainerHealth,
   getContainerLogs,
+  getNextPort,
 } from "./container";
 import {
   writeComposeProject,
@@ -320,25 +321,6 @@ export async function stopSite(siteId: string): Promise<void> {
 }
 
 /**
- * Allocate a host port for a compose site. Mirrors container.ts logic but lives here so
- * compose deploys don't need access to internals of container.ts.
- */
-async function allocateComposePort(site: Site): Promise<number> {
-  if (site.port) return site.port;
-  // Use the same port pool as container deploys — both backends share the host:
-  // we re-import the live used-ports from existing site rows + running docker.
-  const allSites = siteModel.findAll();
-  const used = new Set<number>();
-  for (const s of allSites) {
-    if (s.id !== site.id && s.port) used.add(s.port);
-  }
-  const base = parseInt(process.env.CONTAINER_BASE_PORT || "8000", 10);
-  let port = base;
-  while (used.has(port)) port++;
-  return port;
-}
-
-/**
  * Deploy a compose-type site: write project files -> pull images -> up -> health check -> mark deployed.
  * No blue-green for v1 (`up -d` recreates only changed services; brief downtime acceptable).
  */
@@ -371,10 +353,12 @@ async function deployComposeSite(
     });
     siteModel.updateStatus(site.id, "building");
 
-    // Step 1: prepare — write compose.yml, override.yml, .env.deploy
+    // Step 1: prepare — write compose.yml
     currentStepId = deploymentStepModel.startStep(deployment.id, "prepare").id;
     deploymentModel.updateStatus(deployment.id, "starting");
-    const allocatedPort = await allocateComposePort(site);
+    // Use the shared port allocator: checks both the DB AND `docker ps` so we don't
+    // collide with running containers from other sites (the deploy-resume site bug).
+    const allocatedPort = await getNextPort(site.name);
     log(`Allocated host port ${allocatedPort} for primary service ${site.primary_service}`);
     log(`Writing compose project files...`);
     writeComposeProject(site, {
