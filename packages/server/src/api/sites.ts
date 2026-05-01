@@ -10,11 +10,8 @@ import {
 } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
-import {
-  stopContainer,
-  removeSiteDataDirectory,
-  getContainerLogs,
-} from "../services/container";
+import { teardownSite, getSiteLogs } from "../services/site-ops";
+import { parseComposeFile, ComposeError } from "./compose";
 
 /**
  * Handle all /api/sites/* requests
@@ -109,30 +106,72 @@ function handleListSites(): Response {
 }
 
 /**
- * POST /api/sites - Create a new site
+ * Parse a multi-line `KEY=VALUE` text blob into a JSON-encoded env-vars string.
+ * Skips blank lines and `#` comments; first `=` splits key from value; trims surrounding whitespace.
+ * Invalid keys (not matching `[A-Za-z_][A-Za-z0-9_]*`) are silently dropped — they wouldn't be
+ * usable env vars anyway.
+ */
+export function parseEnvText(envText: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!envText) return out;
+  for (const rawLine of envText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    // Strip matching surrounding quotes if present (single or double)
+    if (value.length >= 2) {
+      const first = value[0];
+      const last = value[value.length - 1];
+      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+        value = value.slice(1, -1);
+      }
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+interface CreateGithubBody {
+  source_type?: "github";
+  git_url: string;
+  name: string;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number | null;
+}
+
+interface CreateComposeBody {
+  source_type: "compose";
+  name: string;
+  compose_yaml: string;
+  primary_service: string;
+  primary_port: number;
+  env_text?: string;
+  persistent_storage?: boolean;
+  git_url?: string | null;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number | null;
+}
+
+/**
+ * POST /api/sites - Create a new site (github or compose source).
  */
 async function handleCreateSite(request: Request): Promise<Response> {
-  let body: {
-    git_url?: string;
-    name?: string;
-    sleep_enabled?: boolean;
-    sleep_after_minutes?: number;
-  };
+  let body: Partial<CreateGithubBody & CreateComposeBody>;
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!body.git_url) {
-    return Response.json({ error: "git_url is required" }, { status: 400 });
-  }
-
   if (!body.name) {
     return Response.json({ error: "name is required" }, { status: 400 });
   }
 
-  // Check for duplicate name
+  // Check for duplicate name (applies to both source types)
   const existing = siteModel.findByName(body.name);
   if (existing) {
     return Response.json(
@@ -141,12 +180,91 @@ async function handleCreateSite(request: Request): Promise<Response> {
     );
   }
 
+  if (body.source_type === "compose") {
+    return handleCreateComposeSite(body as CreateComposeBody);
+  }
+
+  // Default to github source
+  if (!body.git_url) {
+    return Response.json({ error: "git_url is required" }, { status: 400 });
+  }
+
   const site = siteModel.create({
     name: body.name,
     git_url: body.git_url,
     type: "auto",
     sleep_enabled: body.sleep_enabled,
     sleep_after_minutes: body.sleep_after_minutes ?? null,
+  });
+
+  return Response.json(site, { status: 201 });
+}
+
+type ValidationResult =
+  | { ok: true }
+  | { ok: false; error: string; code?: string };
+
+/**
+ * Validate the inputs for a compose-source create request.
+ * Pure function — no DB or filesystem access. Exposed for unit tests.
+ */
+export function validateCreateComposeBody(body: CreateComposeBody): ValidationResult {
+  if (!body.compose_yaml || !body.primary_service || body.primary_port == null) {
+    return {
+      ok: false,
+      error: "compose_yaml, primary_service, and primary_port are all required",
+    };
+  }
+  let parsed: ReturnType<typeof parseComposeFile>;
+  try {
+    parsed = parseComposeFile(body.compose_yaml);
+  } catch (err) {
+    if (err instanceof ComposeError) {
+      return { ok: false, error: err.message, code: err.code };
+    }
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Invalid compose file",
+    };
+  }
+  const primary = parsed.services.find((s) => s.name === body.primary_service);
+  if (!primary) {
+    return {
+      ok: false,
+      error: `Primary service "${body.primary_service}" is not present in the compose file`,
+    };
+  }
+  if (!primary.ports.includes(body.primary_port)) {
+    return {
+      ok: false,
+      error: `Primary service "${body.primary_service}" does not declare port ${body.primary_port}. Available: ${primary.ports.join(", ") || "none"}`,
+    };
+  }
+  return { ok: true };
+}
+
+function handleCreateComposeSite(body: CreateComposeBody): Response {
+  const v = validateCreateComposeBody(body);
+  if (!v.ok) {
+    return Response.json(
+      v.code ? { error: v.error, code: v.code } : { error: v.error },
+      { status: 400 }
+    );
+  }
+
+  const envVars = parseEnvText(body.env_text ?? "");
+
+  const site = siteModel.create({
+    name: body.name,
+    git_url: body.git_url ?? null,
+    type: "compose",
+    env_vars: JSON.stringify(envVars),
+    persistent_storage: body.persistent_storage ?? false,
+    sleep_enabled: body.sleep_enabled,
+    sleep_after_minutes: body.sleep_after_minutes ?? null,
+    compose_yaml: body.compose_yaml,
+    primary_service: body.primary_service,
+    primary_port: body.primary_port,
   });
 
   return Response.json(site, { status: 201 });
@@ -194,25 +312,21 @@ async function handleDeleteSite(siteId: string): Promise<Response> {
     return Response.json({ error: "Site not found" }, { status: 404 });
   }
 
-  // Stop container if running
-  if (site.status === "running") {
-    try {
-      await stopContainer(site.name);
-      info(`Stopped container for ${site.name}`);
-    } catch (err) {
-      // Container might not exist, continue with deletion
-    }
+  // Tear down runtime + on-disk artifacts. teardownSite handles container/compose-project cleanup
+  // plus the data directory. We always run it, even if status !== running, so leftover containers
+  // from a previously stopped site get cleaned up too.
+  try {
+    await teardownSite(site);
+    info(`Teardown complete for ${site.name}`);
+  } catch (err) {
+    // Continue with DB deletion even if teardown had partial failures
+    info(`Teardown for ${site.name} reported: ${err}`);
   }
 
   // Delete site from database
   const deleted = siteModel.delete(siteId);
   if (!deleted) {
     return Response.json({ error: "Failed to delete site" }, { status: 500 });
-  }
-
-  // Remove persistent data directory if it existed
-  if (site.persistent_storage) {
-    removeSiteDataDirectory(site.name);
   }
 
   return new Response(null, { status: 204 });
@@ -241,7 +355,7 @@ async function handleGetLogs(
       return Response.json([]);
     }
     try {
-      const dockerLogs = await getContainerLogs(site.name, limit);
+      const dockerLogs = await getSiteLogs(site, limit);
       // Format as log entries for consistent frontend handling
       const lines = dockerLogs.split("\n").filter((line) => line.trim());
       const logs = lines.map((line, i) => ({

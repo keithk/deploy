@@ -179,4 +179,49 @@ describe("Database Migrations", () => {
     expect(sites.length).toBe(1);
     expect(sites[0].name).toBe("my-site");
   });
+
+  test("compose sites can be inserted with null git_url and compose fields", async () => {
+    await db.runMigrations();
+
+    const columns = db.query<{ name: string }>(`PRAGMA table_info(sites)`).map(c => c.name);
+    expect(columns).toContain("compose_yaml");
+    expect(columns).toContain("primary_service");
+    expect(columns).toContain("primary_port");
+
+    db.run(
+      `INSERT INTO sites (id, name, git_url, type, env_vars, compose_yaml, primary_service, primary_port)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "compose-id",
+        "cobalt",
+        null,
+        "compose",
+        "{}",
+        "services:\n  cobalt:\n    image: ghcr.io/imputnet/cobalt:11\n",
+        "cobalt",
+        9000,
+      ]
+    );
+
+    const rows = db.query<{ name: string; type: string; primary_service: string | null; primary_port: number | null; git_url: string | null }>(
+      `SELECT name, type, primary_service, primary_port, git_url FROM sites WHERE id = ?`,
+      ["compose-id"]
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].type).toBe("compose");
+    expect(rows[0].primary_service).toBe("cobalt");
+    expect(rows[0].primary_port).toBe(9000);
+    expect(rows[0].git_url).toBeNull();
+  });
+
+  test("type CHECK rejects values outside the allowed set", async () => {
+    await db.runMigrations();
+
+    expect(() => {
+      db.run(
+        `INSERT INTO sites (id, name, git_url, type, env_vars) VALUES (?, ?, ?, ?, ?)`,
+        ["bad-id", "bad-site", "https://x", "not-a-real-type", "{}"]
+      );
+    }).toThrow();
+  });
 });

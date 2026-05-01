@@ -21,7 +21,16 @@ import {
   waitForContainerHealth,
   getContainerLogs,
 } from "./container";
+import {
+  writeComposeProject,
+  pullCompose,
+  upCompose,
+  downCompose,
+  getPrimaryContainerId,
+  getComposeLogs,
+} from "./compose";
 import { discoverSiteActions } from "./actions";
+import type { Site } from "@keithk/deploy-core";
 
 /**
  * Deploy a site: clone/pull -> build -> start container -> update status
@@ -46,6 +55,10 @@ export async function deploySite(
     const message = `Site not found: ${siteId}`;
     error(message);
     return { success: false, error: message };
+  }
+
+  if (site.type === "compose") {
+    return deployComposeSite(site);
   }
 
   info(`Starting deployment for site: ${site.name}`);
@@ -80,6 +93,9 @@ export async function deploySite(
     }
 
     // Step 1: Clone or pull the repository
+    if (!site.git_url) {
+      throw new Error(`Site ${site.name} has no git_url to clone`);
+    }
     currentStepId = deploymentStepModel.startStep(deployment.id, "clone").id;
     deploymentModel.updateStatus(deployment.id, "cloning");
     log(`Cloning repository from ${site.git_url}...`);
@@ -268,8 +284,7 @@ export async function deploySite(
 }
 
 /**
- * Stop a running site
- * @param siteId The ID of the site to stop
+ * Stop a running site (full container removal — caller redeploys to bring it back).
  */
 export async function stopSite(siteId: string): Promise<void> {
   let site;
@@ -289,13 +304,162 @@ export async function stopSite(siteId: string): Promise<void> {
   info(`Stopping site: ${site.name}`);
 
   try {
-    await stopContainer(site.name);
+    if (site.type === "compose") {
+      // `down` (without -v) stops + removes containers, preserves volumes/data dir
+      await downCompose(site.name, false);
+    } else {
+      await stopContainer(site.name);
+    }
     siteModel.updateStatus(siteId, "stopped");
     info(`Successfully stopped site: ${site.name}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     error(`Failed to stop site ${site.name}: ${message}`);
     throw new Error(`Failed to stop site: ${message}`);
+  }
+}
+
+/**
+ * Allocate a host port for a compose site. Mirrors container.ts logic but lives here so
+ * compose deploys don't need access to internals of container.ts.
+ */
+async function allocateComposePort(site: Site): Promise<number> {
+  if (site.port) return site.port;
+  // Use the same port pool as container deploys — both backends share the host:
+  // we re-import the live used-ports from existing site rows + running docker.
+  const allSites = siteModel.findAll();
+  const used = new Set<number>();
+  for (const s of allSites) {
+    if (s.id !== site.id && s.port) used.add(s.port);
+  }
+  const base = parseInt(process.env.CONTAINER_BASE_PORT || "8000", 10);
+  let port = base;
+  while (used.has(port)) port++;
+  return port;
+}
+
+/**
+ * Deploy a compose-type site: write project files -> pull images -> up -> health check -> mark deployed.
+ * No blue-green for v1 (`up -d` recreates only changed services; brief downtime acceptable).
+ */
+async function deployComposeSite(
+  site: Site
+): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
+  const log = (message: string) => {
+    info(message);
+    logModel.append(site.id, "build", message);
+  };
+
+  log(`Starting compose deployment for ${site.name}`);
+
+  if (!site.compose_yaml || !site.primary_service || site.primary_port == null) {
+    const message = `Compose site ${site.name} is missing compose_yaml/primary_service/primary_port`;
+    error(message);
+    logModel.append(site.id, "build", `ERROR: ${message}`);
+    siteModel.updateStatus(site.id, "error");
+    return { success: false, error: message };
+  }
+
+  let deployment: ReturnType<typeof deploymentModel.create> | null = null;
+  let currentStepId: string | null = null;
+
+  try {
+    deployment = deploymentModel.create({
+      site_id: site.id,
+      old_container_id: site.container_id,
+      old_port: site.port,
+    });
+    siteModel.updateStatus(site.id, "building");
+
+    // Step 1: prepare — write compose.yml, override.yml, .env.deploy
+    currentStepId = deploymentStepModel.startStep(deployment.id, "prepare").id;
+    deploymentModel.updateStatus(deployment.id, "starting");
+    const allocatedPort = await allocateComposePort(site);
+    log(`Allocated host port ${allocatedPort} for primary service ${site.primary_service}`);
+    log(`Writing compose project files...`);
+    writeComposeProject(site, {
+      allocatedPort,
+      envVars: parseEnvVars(site.env_vars),
+      persistentStorage: site.persistent_storage === 1,
+    });
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
+
+    // Step 2: pull
+    currentStepId = deploymentStepModel.startStep(deployment.id, "pull").id;
+    log(`Pulling images...`);
+    try {
+      await pullCompose(site.name);
+    } catch (pullErr) {
+      // Warn but don't fail — service may use `build:` directives
+      log(`docker compose pull warned: ${pullErr instanceof Error ? pullErr.message : String(pullErr)}`);
+    }
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
+
+    // Step 3: start (compose up)
+    currentStepId = deploymentStepModel.startStep(deployment.id, "start").id;
+    log(`Starting compose project...`);
+    await upCompose(site.name);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
+
+    // Step 4: health check
+    currentStepId = deploymentStepModel.startStep(deployment.id, "health_check").id;
+    deploymentModel.updateStatus(deployment.id, "healthy");
+    log(`Waiting for primary service to become healthy on port ${allocatedPort}...`);
+    const isHealthy = await waitForContainerHealth(allocatedPort, 120000);
+    if (!isHealthy) {
+      deploymentStepModel.completeStep(currentStepId, "Primary service failed health check");
+      currentStepId = null;
+
+      log(`Primary service failed health check. Capturing logs...`);
+      try {
+        const composeLogs = await getComposeLogs(site.name, 50);
+        if (composeLogs) {
+          log(`--- Compose Logs ---`);
+          for (const line of composeLogs.split("\n")) {
+            if (line.trim()) log(line);
+          }
+          log(`--- End Compose Logs ---`);
+        }
+      } catch (logErr) {
+        log(`Could not capture compose logs: ${logErr}`);
+      }
+
+      throw new Error("Primary service failed health check");
+    }
+    log(`Primary service is healthy`);
+    deploymentStepModel.completeStep(currentStepId);
+    currentStepId = null;
+
+    // Step 5: mark deployed — resolve primary container ID for metrics + status row
+    const primaryContainerId = await getPrimaryContainerId(site.name, site.primary_service);
+    siteModel.updateStatus(
+      site.id,
+      "running",
+      primaryContainerId ?? undefined,
+      allocatedPort
+    );
+    siteModel.markDeployed(site.id);
+
+    deploymentModel.complete(deployment.id, primaryContainerId ?? "", allocatedPort);
+
+    log(`Compose deployment complete!`);
+    return { success: true, deploymentId: deployment.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    error(`Compose deployment failed for ${site.name}: ${message}`);
+    logModel.append(site.id, "build", `ERROR: ${message}`);
+
+    if (currentStepId) {
+      deploymentStepModel.completeStep(currentStepId, message);
+    }
+    if (deployment) {
+      deploymentModel.fail(deployment.id, message);
+    }
+    siteModel.updateStatus(site.id, "error");
+    return { success: false, error: message, deploymentId: deployment?.id };
   }
 }
 

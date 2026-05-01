@@ -15,6 +15,7 @@ import { handleDeploymentsApi } from "./deployments";
 import { handleMetricsApi } from "./metrics";
 import { handleSystemApi } from "./system";
 import { handleAuthApi } from "./auth";
+import { handleComposeApi } from "./compose";
 import { requireAuth } from "../middleware/auth";
 
 /**
@@ -440,6 +441,12 @@ export async function handleApiRequest(
   // Route to deployments API
   if (firstPart === "deployments") {
     return handleDeploymentsApi(request, path);
+  }
+
+  // Route to compose API (POST /api/compose/parse)
+  if (firstPart === "compose") {
+    const composeResponse = await handleComposeApi(request, path);
+    if (composeResponse) return composeResponse;
   }
 
   // Route to sites API for database-backed operations

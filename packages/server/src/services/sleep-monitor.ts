@@ -1,8 +1,8 @@
 // ABOUTME: Background service that monitors idle sites and puts them to sleep.
 // ABOUTME: Runs a 60-second interval check, stopping containers that exceed their inactivity threshold.
 
-import { $ } from "bun";
 import { info, debug, error, siteModel } from "@keithk/deploy-core";
+import { stopSiteContainer } from "./site-ops";
 
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -41,10 +41,10 @@ export async function checkForSleep(): Promise<void> {
       info(`Sleep monitor: putting ${site.name} to sleep`);
 
       try {
-        await $`docker stop deploy-${site.name}`.quiet();
-        debug(`Sleep monitor: stopped container deploy-${site.name}`);
+        await stopSiteContainer(site);
+        debug(`Sleep monitor: stopped runtime for ${site.name}`);
       } catch (err) {
-        error(`Sleep monitor: failed to stop container deploy-${site.name}: ${err}`);
+        error(`Sleep monitor: failed to stop runtime for ${site.name}: ${err}`);
         continue;
       }
 

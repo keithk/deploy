@@ -12,7 +12,8 @@
   "dependencies": {
     "@keithk/deploy-actions": "workspace:*",
     "@keithk/deploy-core": "workspace:*",
-    "croner": "^9.0.0"
+    "croner": "^9.0.0",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "bun-types": "latest"

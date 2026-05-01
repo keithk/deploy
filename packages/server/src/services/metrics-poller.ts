@@ -3,6 +3,7 @@
 
 import { $ } from "bun";
 import { info, debug, error, siteModel, containerMetricModel } from "@keithk/deploy-core";
+import { getPrimaryContainerName } from "./site-ops";
 
 const POLL_INTERVAL_MS = 5_000;
 const RETENTION_DAYS = 7;
@@ -108,7 +109,13 @@ export async function tick(): Promise<void> {
   }
 
   for (const site of runningSites) {
-    const containerName = `deploy-${site.name}`;
+    let containerName: string;
+    try {
+      containerName = await getPrimaryContainerName(site);
+    } catch (err) {
+      debug(`MetricsPoller: could not resolve container name for ${site.name}: ${err}`);
+      continue;
+    }
     try {
       const sample = await sampleContainer(containerName);
       if (!sample) {

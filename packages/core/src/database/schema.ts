@@ -2,14 +2,16 @@
 // ABOUTME: Defines interfaces for sites, actions, share links, logs, sessions, and settings.
 
 /**
- * Represents a deployed site (git-based deployment)
+ * Represents a deployed site. Sources:
+ *   - 'auto' / 'passthrough': git-based, built by railpack and run as a single container
+ *   - 'compose': docker-compose file (paste or fetched URL); primary service exposed via subdomain
  */
 export interface Site {
   id: string;
   name: string;           // subdomain
-  git_url: string;
+  git_url: string | null; // null for compose sites with no fetch provenance
   branch: string;         // default: main
-  type: 'auto' | 'passthrough';
+  type: 'auto' | 'passthrough' | 'compose';
   visibility: 'public' | 'private';
   status: 'running' | 'stopped' | 'building' | 'error' | 'sleeping';
   container_id: string | null;
@@ -22,6 +24,9 @@ export interface Site {
   sleep_enabled: number;              // SQLite boolean: 0 = false, 1 = true
   sleep_after_minutes: number | null; // null = use server default
   last_request_at: string | null;
+  compose_yaml: string | null;        // raw compose file for type='compose'
+  primary_service: string | null;     // service name to expose via subdomain
+  primary_port: number | null;        // internal container port of primary service
 }
 
 /**
@@ -125,7 +130,9 @@ export type DeploymentStepName =
   | 'start'
   | 'health_check'
   | 'switch'
-  | 'register_actions';
+  | 'register_actions'
+  | 'prepare'
+  | 'pull';
 
 /**
  * Represents a single timed phase of a deployment.

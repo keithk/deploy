@@ -1,9 +1,9 @@
 // ABOUTME: Wakes sleeping sites by starting their stopped Docker containers.
 // ABOUTME: Guards against duplicate wake attempts with an in-memory set.
 
-import { $ } from "bun";
 import { info, error, siteModel } from "@keithk/deploy-core";
 import { waitForContainerHealth } from "./container";
+import { startSiteContainer } from "./site-ops";
 
 /** Sites currently being woken — prevents duplicate wake calls */
 const wakeInProgress = new Set<string>();
@@ -26,8 +26,7 @@ export async function wakeSite(siteId: string): Promise<void> {
   const startTime = Date.now();
 
   try {
-    const containerName = `deploy-${site.name}`;
-    await $`docker start ${containerName}`.quiet();
+    await startSiteContainer(site);
 
     if (!site.port) {
       error(`Site ${site.name} has no port assigned, cannot health-check`);

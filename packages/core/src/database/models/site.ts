@@ -10,8 +10,8 @@ import type { Site } from "../schema";
  */
 export interface CreateSiteData {
   name: string;
-  git_url: string;
-  type: "auto" | "passthrough";
+  git_url?: string | null;
+  type: "auto" | "passthrough" | "compose";
   branch?: string;
   visibility?: "public" | "private";
   env_vars?: string;
@@ -19,6 +19,9 @@ export interface CreateSiteData {
   autodeploy?: boolean;
   sleep_enabled?: boolean;
   sleep_after_minutes?: number | null;
+  compose_yaml?: string | null;
+  primary_service?: string | null;
+  primary_port?: number | null;
 }
 
 /**
@@ -26,8 +29,8 @@ export interface CreateSiteData {
  */
 export interface UpdateSiteData {
   name?: string;
-  git_url?: string;
-  type?: "auto" | "passthrough";
+  git_url?: string | null;
+  type?: "auto" | "passthrough" | "compose";
   branch?: string;
   visibility?: "public" | "private";
   env_vars?: string;
@@ -35,6 +38,9 @@ export interface UpdateSiteData {
   autodeploy?: boolean;
   sleep_enabled?: boolean;
   sleep_after_minutes?: number | null;
+  compose_yaml?: string | null;
+  primary_service?: string | null;
+  primary_port?: number | null;
 }
 
 /**
@@ -57,7 +63,7 @@ export class SiteModel {
     const site: Site = {
       id,
       name: data.name,
-      git_url: data.git_url,
+      git_url: data.git_url ?? null,
       branch: data.branch ?? "main",
       type: data.type,
       visibility: data.visibility ?? "private",
@@ -72,11 +78,14 @@ export class SiteModel {
       sleep_enabled: data.sleep_enabled ? 1 : 0,
       sleep_after_minutes: data.sleep_after_minutes ?? null,
       last_request_at: null,
+      compose_yaml: data.compose_yaml ?? null,
+      primary_service: data.primary_service ?? null,
+      primary_port: data.primary_port ?? null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -96,7 +105,10 @@ export class SiteModel {
       site.last_deployed_at,
       site.sleep_enabled,
       site.sleep_after_minutes,
-      site.last_request_at
+      site.last_request_at,
+      site.compose_yaml,
+      site.primary_service,
+      site.primary_port
     );
 
     return site;
@@ -221,6 +233,18 @@ export class SiteModel {
     if (data.sleep_after_minutes !== undefined) {
       updates.push("sleep_after_minutes = ?");
       values.push(data.sleep_after_minutes);
+    }
+    if (data.compose_yaml !== undefined) {
+      updates.push("compose_yaml = ?");
+      values.push(data.compose_yaml);
+    }
+    if (data.primary_service !== undefined) {
+      updates.push("primary_service = ?");
+      values.push(data.primary_service);
+    }
+    if (data.primary_port !== undefined) {
+      updates.push("primary_port = ?");
+      values.push(data.primary_port);
     }
 
     if (updates.length === 0) {
