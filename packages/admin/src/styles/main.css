@@ -1422,3 +1422,129 @@ body {
   font-size: var(--text-sm);
   font-style: italic;
 }
+
+/* ============================================
+   Site Metrics (live container charts)
+   ============================================ */
+
+:root {
+  /* Metrics chart series colours — distinct hues, same lightness/chroma family */
+  --metrics-cpu:    oklch(78% 0.15  88);   /* amber — matches step-build */
+  --metrics-mem:    oklch(72% 0.14 145);   /* green — matches step-start */
+  --metrics-rx:     var(--state-running);  /* green */
+  --metrics-tx:     var(--accent);         /* magenta */
+}
+
+.metrics-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.metrics-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.metrics-window-group {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.metrics-window-btn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.metrics-window-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.metrics-window-btn.active {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.metrics-time-range {
+  font-size: var(--text-xs);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--space-3) var(--space-4);
+}
+
+.metrics-panel-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: var(--space-2);
+}
+
+.metrics-legend {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.metrics-legend-rx::before {
+  content: "— ";
+  color: var(--metrics-rx);
+}
+
+.metrics-legend-tx::before {
+  content: "— ";
+  color: var(--metrics-tx);
+}
+
+/* The SVG fills the panel width; height is fixed by the viewBox aspect ratio */
+.metrics-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Area fills — low-opacity fill, full-opacity stroke */
+.metrics-area-cpu  { fill: color-mix(in oklch, var(--metrics-cpu) 18%, transparent); }
+.metrics-area-mem  { fill: color-mix(in oklch, var(--metrics-mem) 18%, transparent); }
+
+.metrics-line-cpu { stroke: var(--metrics-cpu); stroke-width: 1.5; }
+.metrics-line-mem { stroke: var(--metrics-mem); stroke-width: 1.5; }
+.metrics-line-rx  { stroke: var(--metrics-rx);  stroke-width: 1.5; }
+.metrics-line-tx  { stroke: var(--metrics-tx);  stroke-width: 1.5; }
+
+.metrics-axis-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--faint);
+}
+
+/* Empty / loading state */
+.metrics-empty {
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+}
+
+.metrics-empty-msg {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}

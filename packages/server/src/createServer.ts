@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, deploymentModel, Database } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
@@ -29,6 +29,7 @@ import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { renderDeployScreen } from "./pages/deploy-screen";
 import { startSleepMonitor, stopSleepMonitor } from "./services/sleep-monitor";
+import { startMetricsPoller, stopMetricsPoller } from "./services/metrics-poller";
 
 /**
  * Gets the admin dashboard directory path
@@ -411,16 +412,6 @@ export async function createServer({
   const db = Database.getInstance();
   await db.runMigrations();
 
-  // Sweep abandoned deployments from prior runs. If the server is just now
-  // booting, anything still in a non-terminal status was abandoned by the
-  // previous process and will never finalize on its own.
-  const sweptCount = deploymentModel.markStaleAsFailed(
-    "Abandoned: server restarted before deployment finished"
-  );
-  if (sweptCount > 0) {
-    info(`Marked ${sweptCount} stale deployment(s) as failed during startup`);
-  }
-
   const actionContext: import("@keithk/deploy-core").ActionContext = {
     rootDir: resolvedRootDir,
     mode,
@@ -760,12 +751,18 @@ export async function createServer({
   // Start sleep monitor for idle site detection
   startSleepMonitor();
 
+  // Start container metrics poller
+  startMetricsPoller();
+
   // Set up graceful shutdown
   const handleShutdown = async () => {
     info("Shutting down server and all managed processes...");
 
     // Stop the sleep monitor
     stopSleepMonitor();
+
+    // Stop the metrics poller
+    stopMetricsPoller();
 
     // Execute server:before-stop hook
     await executeHook("server:before-stop", actionContext);

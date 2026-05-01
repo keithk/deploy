@@ -8,6 +8,7 @@ import './components/actions.js';
 import './components/settings.js';
 import './components/site-detail.js';
 import './components/site-deploys.js';
+import './components/site-metrics.js';
 import './components/deployments.js';
 import './components/toast.js';
 import './components/confirm-dialog.js';

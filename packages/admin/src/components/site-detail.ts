@@ -37,7 +37,7 @@ class DeploySiteDetail extends HTMLElement {
   private siteId: string = "";
   private site: Site | null = null;
   private loading: boolean = true;
-  private activeTab: "deploys" | "build" | "runtime" | "environment" | "settings" = "deploys";
+  private activeTab: "deploys" | "build" | "runtime" | "environment" | "settings" | "metrics" = "deploys";
   private logs: LogEntry[] = [];
   private userEnvVars: EnvVar[] = [];
   private systemEnvVars: EnvVar[] = [];
@@ -64,7 +64,8 @@ class DeploySiteDetail extends HTMLElement {
       tab === "build" ||
       tab === "runtime" ||
       tab === "environment" ||
-      tab === "settings"
+      tab === "settings" ||
+      tab === "metrics"
     ) {
       this.activeTab = tab;
     }
@@ -147,7 +148,7 @@ class DeploySiteDetail extends HTMLElement {
   }
 
   async switchTab(
-    tab: "deploys" | "build" | "runtime" | "environment" | "settings"
+    tab: "deploys" | "build" | "runtime" | "environment" | "settings" | "metrics"
   ) {
     this.activeTab = tab;
     await this.loadTabData();
@@ -572,6 +573,9 @@ class DeploySiteDetail extends HTMLElement {
         <button class="tab ${
           this.activeTab === "settings" ? "active" : ""
         }" data-tab="settings">Settings</button>
+        <button class="tab ${
+          this.activeTab === "metrics" ? "active" : ""
+        }" data-tab="metrics">Metrics</button>
       </div>
 
       <div class="tab-content">
@@ -658,9 +662,16 @@ class DeploySiteDetail extends HTMLElement {
         return this.renderEnvironmentTab();
       case "settings":
         return this.renderSettingsTab();
+      case "metrics":
+        return this.renderMetricsTab();
       default:
         return "";
     }
+  }
+
+  renderMetricsTab(): string {
+    const status = this.site?.status ?? "";
+    return `<deploy-site-metrics site-id="${this.siteId}" site-status="${status}"></deploy-site-metrics>`;
   }
 
   renderDeploysTab(): string {

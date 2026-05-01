@@ -103,6 +103,20 @@ export interface Deployment {
 }
 
 /**
+ * Represents a single sampled metrics row for a running container.
+ */
+export interface ContainerMetric {
+  id: string;
+  site_id: string;
+  recorded_at: string;
+  cpu_pct: number;
+  mem_bytes: number;
+  mem_limit_bytes: number;
+  net_rx_bytes: number;
+  net_tx_bytes: number;
+}
+
+/**
  * Names of the timed phases inside a deployment, used by the deploy waterfall view.
  */
 export type DeploymentStepName =

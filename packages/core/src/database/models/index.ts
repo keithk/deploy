@@ -26,3 +26,6 @@ export { DeploymentModel, deploymentModel } from "./deployment";
 export type { CreateDeploymentData, UpdateDeploymentData } from "./deployment";
 
 export { DeploymentStepModel, deploymentStepModel } from "./deployment-step";
+
+export { ContainerMetricModel, containerMetricModel } from "./container-metric";
+export type { InsertContainerMetricData } from "./container-metric";

@@ -12,6 +12,7 @@ import { handleSettingsApi } from "./settings";
 import { handleGitHubApi } from "./github";
 import { handleActionsApi } from "./actions";
 import { handleDeploymentsApi } from "./deployments";
+import { handleMetricsApi } from "./metrics";
 import { handleSystemApi } from "./system";
 import { handleAuthApi } from "./auth";
 import { requireAuth } from "../middleware/auth";
@@ -446,6 +447,11 @@ export async function handleApiRequest(
     // Check for site deployments endpoint: /api/sites/:id/deployments
     if (apiParts.length === 3 && apiParts[2] === "deployments") {
       return handleDeploymentsApi(request, path);
+    }
+
+    // Check for site metrics endpoint: /api/sites/:id/metrics
+    if (apiParts.length === 3 && apiParts[2] === "metrics") {
+      return handleMetricsApi(request, path);
     }
 
     // Try database-backed sites API first
