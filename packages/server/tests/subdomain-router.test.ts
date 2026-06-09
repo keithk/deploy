@@ -1,5 +1,5 @@
 // ABOUTME: Tests for the database-backed subdomain router.
-// ABOUTME: Validates site lookup, access control, proxying, and status pages.
+// ABOUTME: Validates site lookup, access control, proxying, status pages, and the deploy-screen status endpoint.
 
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import type { Site } from "@keithk/deploy-core";
@@ -49,6 +49,21 @@ const mockBuildingSite: Site = {
   last_deployed_at: null,
 };
 
+const mockSleepingSite: Site = {
+  id: "site-sleeping-id",
+  name: "sleeping-site",
+  git_url: "https://github.com/test/repo",
+  branch: "main",
+  type: "auto",
+  visibility: "public",
+  status: "sleeping",
+  container_id: "ghi789",
+  port: null,
+  env_vars: "{}",
+  created_at: new Date().toISOString(),
+  last_deployed_at: new Date().toISOString(),
+};
+
 const mockPrivateSite: Site = {
   id: "site-private-id",
   name: "private-site",
@@ -64,19 +79,18 @@ const mockPrivateSite: Site = {
   last_deployed_at: new Date().toISOString(),
 };
 
-let mockSiteFindByName: ReturnType<typeof mock>;
-let mockCheckSiteAccess: ReturnType<typeof mock>;
-let mockProxyRequest: ReturnType<typeof mock>;
+const sitesByName: Record<string, Site> = {
+  "running-site": mockRunningSite,
+  "stopped-site": mockStoppedSite,
+  "building-site": mockBuildingSite,
+  "sleeping-site": mockSleepingSite,
+  "private-site": mockPrivateSite,
+};
 
-mockSiteFindByName = mock((name: string) => {
-  if (name === "running-site") return mockRunningSite;
-  if (name === "stopped-site") return mockStoppedSite;
-  if (name === "building-site") return mockBuildingSite;
-  if (name === "private-site") return mockPrivateSite;
-  return null;
-});
+const mockSiteFindByName = mock((name: string) => sitesByName[name] || null);
+const mockUpdateLastRequest = mock(() => {});
 
-mockCheckSiteAccess = mock((_req: Request, siteName: string) => {
+const mockCheckSiteAccess = mock((_req: Request, siteName: string) => {
   // Private sites require authentication
   const site = mockSiteFindByName(siteName);
   if (site && site.visibility === "private") {
@@ -85,13 +99,16 @@ mockCheckSiteAccess = mock((_req: Request, siteName: string) => {
   return true;
 });
 
-mockProxyRequest = mock((_req: Request, _port: number) => {
+const mockProxyRequest = mock(() => {
   return new Response("Proxied content", { status: 200 });
 });
+
+const mockWakeSite = mock(() => Promise.resolve());
 
 mock.module("@keithk/deploy-core", () => ({
   siteModel: {
     findByName: mockSiteFindByName,
+    updateLastRequest: mockUpdateLastRequest,
   },
   info: () => {},
   debug: () => {},
@@ -107,12 +124,22 @@ mock.module("../src/utils/proxy", () => ({
   proxyRequest: mockProxyRequest,
 }));
 
+mock.module("../src/services/wake", () => ({
+  wakeSite: mockWakeSite,
+}));
+
 const { handleSubdomainRequest } = await import(
   "../src/routing/subdomainRouter"
 );
 
-function createRequest(subdomain: string, domain = "dev.flexi"): Request {
-  return new Request(`http://${subdomain}.${domain}/`, {
+const mockServer = {} as any;
+
+function createRequest(
+  subdomain: string,
+  path = "/",
+  domain = "dev.flexi"
+): Request {
+  return new Request(`http://${subdomain}.${domain}${path}`, {
     headers: { host: `${subdomain}.${domain}` },
   });
 }
@@ -122,11 +149,16 @@ describe("handleSubdomainRequest", () => {
     mockProxyRequest.mockClear();
     mockCheckSiteAccess.mockClear();
     mockSiteFindByName.mockClear();
+    mockWakeSite.mockClear();
   });
 
   test("returns 404 for non-existent site", async () => {
     const request = createRequest("nonexistent");
-    const response = await handleSubdomainRequest(request, "dev.flexi");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
 
     expect(response.status).toBe(404);
     const text = await response.text();
@@ -135,35 +167,120 @@ describe("handleSubdomainRequest", () => {
 
   test("proxies running site to container port", async () => {
     const request = createRequest("running-site");
-    const response = await handleSubdomainRequest(request, "dev.flexi");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
 
     expect(response.status).toBe(200);
-    expect(mockProxyRequest).toHaveBeenCalledWith(request, 8080);
+    expect(mockProxyRequest).toHaveBeenCalledWith(request, 8080, mockServer);
   });
 
   test("shows status page for stopped site", async () => {
     const request = createRequest("stopped-site");
-    const response = await handleSubdomainRequest(request, "dev.flexi");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
 
     expect(response.status).toBe(503);
     const text = await response.text();
     expect(text).toContain("stopped");
   });
 
-  test("shows status page for building site", async () => {
+  test("shows deploy screen with polling for building site", async () => {
     const request = createRequest("building-site");
-    const response = await handleSubdomainRequest(request, "dev.flexi");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
 
     expect(response.status).toBe(503);
     const text = await response.text();
-    expect(text).toContain("building");
+    expect(text).toContain("deploying");
+    expect(text).toContain("/__deploy/status");
+    expect(text).toContain("refresh automatically");
+  });
+
+  test("shows wake screen with polling and triggers wake for sleeping site", async () => {
+    const request = createRequest("sleeping-site");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
+
+    expect(response.status).toBe(503);
+    expect(mockWakeSite).toHaveBeenCalledWith("site-sleeping-id");
+    const text = await response.text();
+    expect(text).toContain("waking up");
+    expect(text).toContain("/__deploy/status");
+    expect(text).toContain("refresh automatically");
   });
 
   test("returns 403 for private site without auth", async () => {
     const request = createRequest("private-site");
-    const response = await handleSubdomainRequest(request, "dev.flexi");
+    const response = await handleSubdomainRequest(
+      mockServer,
+      request,
+      "dev.flexi"
+    );
 
     expect(response.status).toBe(403);
     expect(mockCheckSiteAccess).toHaveBeenCalled();
+  });
+
+  describe("/__deploy/status endpoint", () => {
+    test("returns JSON status for building site", async () => {
+      const request = createRequest("building-site", "/__deploy/status");
+      const response = await handleSubdomainRequest(
+        mockServer,
+        request,
+        "dev.flexi"
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "building" });
+    });
+
+    test("returns JSON status for sleeping site without re-triggering wake", async () => {
+      const request = createRequest("sleeping-site", "/__deploy/status");
+      const response = await handleSubdomainRequest(
+        mockServer,
+        request,
+        "dev.flexi"
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "sleeping" });
+      expect(mockWakeSite).not.toHaveBeenCalled();
+    });
+
+    test("returns JSON status for running site instead of proxying", async () => {
+      const request = createRequest("running-site", "/__deploy/status");
+      const response = await handleSubdomainRequest(
+        mockServer,
+        request,
+        "dev.flexi"
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "running" });
+      expect(mockProxyRequest).not.toHaveBeenCalled();
+    });
+
+    test("requires auth for private sites", async () => {
+      const request = createRequest("private-site", "/__deploy/status");
+      const response = await handleSubdomainRequest(
+        mockServer,
+        request,
+        "dev.flexi"
+      );
+
+      expect(response.status).toBe(403);
+    });
   });
 });

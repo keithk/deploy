@@ -236,7 +236,7 @@ function extractSubdomain(host: string, projectDomain: string): string | null {
 function generateStatusPage(site: Site): Response {
   // Building sites get the black hole animation
   if (site.status === "building") {
-    return new Response(renderDeployScreen(site.name, "deploying..."), {
+    return new Response(renderDeployScreen(site.name, "deploying...", "/__deploy/status"), {
       status: 503,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -346,6 +346,12 @@ export async function handleSubdomainRequest(
     return new Response("Access denied", { status: 403 });
   }
 
+  // Reserved status endpoint polled by the deploy screen. Must come before
+  // proxying so it answers on the site's own subdomain in every state.
+  if (new URL(request.url).pathname === "/__deploy/status") {
+    return Response.json({ status: site.status });
+  }
+
   // Handle based on site status
   // Proxy to container if running, or building (for blue-green deployment where old container still serves)
   if ((site.status === "running" || site.status === "building") && site.port) {
@@ -360,8 +366,7 @@ export async function handleSubdomainRequest(
   // Wake sleeping sites — fire and forget, show wake screen with polling
   if (site.status === "sleeping") {
     wakeSite(site.id).catch(() => {});
-    const pollUrl = `/api/sites/${encodeURIComponent(site.name)}/status`;
-    return new Response(renderDeployScreen(site.name, "waking up...", pollUrl), {
+    return new Response(renderDeployScreen(site.name, "waking up...", "/__deploy/status"), {
       status: 503,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
