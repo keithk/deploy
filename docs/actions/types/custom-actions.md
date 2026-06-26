@@ -5,8 +5,8 @@ Combine multiple capabilities in a single action.
 ## Basic Configuration
 
 ```typescript
-// sites/mysite/.dialup/actions/multi-purpose.ts
-import { defineAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/multi-purpose.ts
+import { defineAction } from "@keithk/deploy-actions";
 
 export default defineAction({
   id: "multi-purpose",
@@ -103,8 +103,8 @@ async handler(payload, context) {
 ## Example: Monitoring Action
 
 ```typescript
-// sites/mysite/.dialup/actions/system-monitor.ts
-import { defineAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/system-monitor.ts
+import { defineAction } from "@keithk/deploy-actions";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import os from "os";
@@ -222,8 +222,8 @@ async function collectSystemStats() {
 ## Example: Content Sync Action
 
 ```typescript
-// sites/mysite/.dialup/actions/content-sync.ts
-import { defineAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/content-sync.ts
+import { defineAction } from "@keithk/deploy-actions";
 import { writeFile, readFile } from "fs/promises";
 import { join } from "path";
 

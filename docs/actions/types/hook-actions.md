@@ -5,8 +5,8 @@ Execute code at specific points in the server lifecycle.
 ## Basic Configuration
 
 ```typescript
-// sites/mysite/.dialup/actions/startup.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/startup.ts
+import { defineHookAction } from "@keithk/deploy-actions";
 
 export default defineHookAction({
   id: "startup",
@@ -49,8 +49,8 @@ Hook actions are useful for a variety of scenarios:
 ## Example: Server Startup/Shutdown
 
 ```typescript
-// sites/mysite/.dialup/actions/server-lifecycle.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/server-lifecycle.ts
+import { defineHookAction } from "@keithk/deploy-actions";
 import { connect, disconnect } from "./database";
 
 export default defineHookAction({
@@ -95,8 +95,8 @@ export default defineHookAction({
 ## Example: Request Logging
 
 ```typescript
-// sites/mysite/.dialup/actions/request-logger.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/request-logger.ts
+import { defineHookAction } from "@keithk/deploy-actions";
 import { appendFile } from "fs/promises";
 import { join } from "path";
 
@@ -154,8 +154,8 @@ export default defineHookAction({
 ## Example: Build Hooks
 
 ```typescript
-// sites/mysite/.dialup/actions/build-notifications.ts
-import { defineHookAction } from "@dialup-deploy/actions";
+// sites/mysite/.deploy/actions/build-notifications.ts
+import { defineHookAction } from "@keithk/deploy-actions";
 
 export default defineHookAction({
   id: "build-notifications",

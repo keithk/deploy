@@ -27,7 +27,7 @@ https://your-domain.com/webhook/github
 Create a custom webhook handler:
 
 ```typescript
-// sites/mysite/.dialup/actions/stripe-webhook.ts
+// sites/mysite/.deploy/actions/stripe-webhook.ts
 import { defineWebhookAction } from "@keithk/deploy-actions";
 
 export default defineWebhookAction({
@@ -61,7 +61,7 @@ When setting up webhooks, it's important to implement proper security measures:
 ## Example: GitHub Webhook Handler
 
 ```typescript
-// sites/mysite/.dialup/actions/github-webhook.ts
+// sites/mysite/.deploy/actions/github-webhook.ts
 import { defineWebhookAction } from "@keithk/deploy-actions";
 import { createHmac } from "crypto";
 
@@ -124,7 +124,7 @@ export default defineWebhookAction({
 ## Example: Stripe Webhook Handler
 
 ```typescript
-// sites/mysite/.dialup/actions/stripe-webhook.ts
+// sites/mysite/.deploy/actions/stripe-webhook.ts
 import { defineWebhookAction } from "@keithk/deploy-actions";
 import Stripe from "stripe";
 

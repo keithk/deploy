@@ -10,8 +10,8 @@ You can create sites that are primarily or entirely driven by actions. This appr
 ## Example: API-Only Site
 
 ```typescript
-// sites/api-site/.dialup/actions/api-endpoints.ts
-import { defineRouteAction } from "@dialup-deploy/actions";
+// sites/api-site/.deploy/actions/api-endpoints.ts
+import { defineRouteAction } from "@keithk/deploy-actions";
 
 export default defineRouteAction({
   id: "api-endpoints",
@@ -54,8 +54,8 @@ export default defineRouteAction({
 ## Example: Data Processing Site
 
 ```typescript
-// sites/data-processor/.dialup/actions/process-data.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+// sites/data-processor/.deploy/actions/process-data.ts
+import { defineScheduledAction } from "@keithk/deploy-actions";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -98,8 +98,8 @@ export default defineScheduledAction({
 ## Example: Integration Hub
 
 ```typescript
-// sites/integration-hub/.dialup/actions/github-to-slack.ts
-import { defineWebhookAction } from "@dialup-deploy/actions";
+// sites/integration-hub/.deploy/actions/github-to-slack.ts
+import { defineWebhookAction } from "@keithk/deploy-actions";
 
 export default defineWebhookAction({
   id: "github-to-slack",
@@ -221,8 +221,8 @@ export default defineWebhookAction({
 ## Example: Scheduled Report Generator
 
 ```typescript
-// sites/reports/.dialup/actions/weekly-report.ts
-import { defineScheduledAction } from "@dialup-deploy/actions";
+// sites/reports/.deploy/actions/weekly-report.ts
+import { defineScheduledAction } from "@keithk/deploy-actions";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import nodemailer from "nodemailer";

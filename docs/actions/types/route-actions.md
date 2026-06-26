@@ -5,7 +5,7 @@ Expose custom HTTP endpoints for your site.
 ## Basic Configuration
 
 ```typescript
-// sites/mysite/.dialup/actions/api-routes.ts
+// sites/mysite/.deploy/actions/api-routes.ts
 import { defineRouteAction } from "@keithk/deploy-actions";
 
 export default defineRouteAction({
@@ -46,10 +46,7 @@ Each route in a route action can be configured with the following options:
 | `path`      | `string`                          | The URL path for the route (e.g., `/api/users`)      |
 | `method`    | `"GET" \| "POST" \| "PUT" \| ...` | The HTTP method for the route                        |
 | `handler`   | `(request, context) => Response`  | The function that handles the request                |
-| `auth`      | `boolean \| AuthOptions`          | (Optional) Authentication requirements for the route |
-| `cors`      | `boolean \| CorsOptions`          | (Optional) CORS configuration for the route          |
-| `cache`     | `boolean \| CacheOptions`         | (Optional) Caching configuration for the route       |
-| `rateLimit` | `boolean \| RateLimitOptions`     | (Optional) Rate limiting configuration for the route |
+| `middleware`| `((request, context) => Request \| Response)[]` | (Optional) Middleware functions run before the handler |
 
 ## Working with Requests and Responses
 
@@ -84,13 +81,45 @@ async (request, context) => {
 };
 ```
 
-## Authentication
+## Middleware
 
-You can add authentication to your routes:
+Use the `middleware` array to run logic before the handler — for authentication,
+CORS, logging, or any other pre-processing. Each middleware receives the request
+and context, and can either return a modified `Request` (to pass to the next
+middleware or handler) or a `Response` (to short-circuit):
 
 ```typescript
-// sites/mysite/.dialup/actions/protected-routes.ts
+// sites/mysite/.deploy/actions/protected-routes.ts
 import { defineRouteAction } from "@keithk/deploy-actions";
+
+// Example: token-checking middleware
+function requireToken(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return new Response(
+      JSON.stringify({ error: "Missing or invalid Authorization header" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return req; // Pass through to the handler
+}
+
+// Example: CORS middleware
+function setCorsHeaders(req: Request) {
+  // Attach headers by returning a new request — the handler will set
+  // response headers, but you can also short-circuit OPTIONS here.
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+      }
+    });
+  }
+  return req;
+}
 
 export default defineRouteAction({
   id: "protected-routes",
@@ -98,113 +127,12 @@ export default defineRouteAction({
     {
       path: "/api/protected",
       method: "GET",
-      // Simple authentication check
-      auth: true, // Uses default authentication
+      middleware: [setCorsHeaders, requireToken],
       handler: async (request, context) => {
-        // The request has already been authenticated
-        const user = context.user;
-
         return new Response(
-          JSON.stringify({
-            message: `Hello, ${user.name}!`,
-            user
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" }
-          }
+          JSON.stringify({ message: "Authenticated request" }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
         );
-      }
-    },
-    {
-      path: "/api/custom-auth",
-      method: "GET",
-      // Custom authentication
-      auth: {
-        // Custom authentication logic
-        handler: async (request, context) => {
-          const authHeader = request.headers.get("Authorization");
-
-          if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return {
-              authenticated: false,
-              error: "Missing or invalid Authorization header"
-            };
-          }
-
-          const token = authHeader.split(" ")[1];
-
-          // Validate the token (example)
-          if (token === context.env?.API_TOKEN) {
-            return {
-              authenticated: true,
-              user: { id: "system", name: "System" }
-            };
-          }
-
-          return {
-            authenticated: false,
-            error: "Invalid token"
-          };
-        }
-      },
-      handler: async (request, context) => {
-        // The request has been authenticated by the custom auth handler
-        return new Response(
-          JSON.stringify({
-            message: "Custom auth successful"
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" }
-          }
-        );
-      }
-    }
-  ]
-});
-```
-
-## CORS Configuration
-
-Enable Cross-Origin Resource Sharing (CORS) for your routes:
-
-```typescript
-// sites/mysite/.dialup/actions/cors-routes.ts
-import { defineRouteAction } from "@keithk/deploy-actions";
-
-export default defineRouteAction({
-  id: "cors-routes",
-  routes: [
-    {
-      path: "/api/public",
-      method: "GET",
-      // Simple CORS configuration
-      cors: true, // Enables CORS with default settings
-      handler: async (request, context) => {
-        return new Response(JSON.stringify({ message: "Public API" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
-    },
-    {
-      path: "/api/restricted",
-      method: "GET",
-      // Custom CORS configuration
-      cors: {
-        origin: ["https://allowed-domain.com", "https://another-domain.com"],
-        methods: ["GET", "POST"],
-        allowHeaders: ["Content-Type", "Authorization"],
-        exposeHeaders: ["X-Custom-Header"],
-        credentials: true,
-        maxAge: 86400 // 24 hours
-      },
-      handler: async (request, context) => {
-        return new Response(JSON.stringify({ message: "Restricted API" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        });
       }
     }
   ]
@@ -214,7 +142,7 @@ export default defineRouteAction({
 ## Example: REST API
 
 ```typescript
-// sites/mysite/.dialup/actions/users-api.ts
+// sites/mysite/.deploy/actions/users-api.ts
 import { defineRouteAction } from "@keithk/deploy-actions";
 
 // Mock database

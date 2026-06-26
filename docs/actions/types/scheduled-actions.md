@@ -4,10 +4,10 @@ Run code on a schedule (nightly builds, content sync, etc.).
 
 ## TypeScript Configuration
 
-Create a file in your site's `.dialup/actions` directory:
+Create a file in your site's `.deploy/actions` directory:
 
 ```typescript
-// sites/mysite/.dialup/actions/nightly-build.ts
+// sites/mysite/.deploy/actions/nightly-build.ts
 import { defineScheduledAction, executeCommand, buildSite } from "@keithk/deploy-actions";
 
 export default defineScheduledAction({
@@ -70,7 +70,7 @@ Scheduled actions use cron syntax to define when they should run:
 ## Example: Data Backup Action
 
 ```typescript
-// sites/mysite/.dialup/actions/backup.ts
+// sites/mysite/.deploy/actions/backup.ts
 import { defineScheduledAction } from "@keithk/deploy-actions";
 import { join } from "path";
 import { writeFile } from "fs/promises";

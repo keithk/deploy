@@ -95,7 +95,7 @@ Type=simple
 User=deploy
 Group=deploy
 WorkingDirectory=/home/deploy/deploy
-ExecStart=/usr/local/bin/bun packages/cli/src/index.ts start --foreground
+ExecStart=/usr/local/bin/bun packages/cli/dist/index.js start --foreground
 Restart=on-failure
 RestartSec=10
 
