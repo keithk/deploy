@@ -37,4 +37,12 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 config/caddy-data/*
 
+# TLS private keys and certificates — generated locally per environment
+config/ssl/*.key
+config/ssl/*.crt
+
+# Machine-specific Caddyfiles — generated from *.example during setup
+config/Caddyfile
+.deploy/caddy/Caddyfile
+
 CLAUDE.md

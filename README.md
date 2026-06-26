@@ -27,7 +27,7 @@ sudo -u deploy bun run deploy setup
 
 You'll be asked for:
 - **Domain**: e.g., `yourdomain.com`
-- **SSH public key**: For dashboard authentication
+- **Dashboard password**: A password for logging into the admin dashboard (stored as an argon2id hash)
 
 ### 3. Start the server
 
@@ -37,11 +37,7 @@ sudo systemctl start deploy
 
 ### 4. Access your dashboard
 
-```bash
-ssh yourdomain.com -p 2222
-```
-
-This prints a magic login link. Open it in your browser—you're in.
+Open `https://admin.yourdomain.com` in your browser and log in with the password you set during `deploy setup`.
 
 ---
 
@@ -82,24 +78,13 @@ This prints a magic login link. Open it in your browser—you're in.
 
 ## Authentication
 
-Deploy uses SSH key authentication. If your public key is in the server's `authorized_keys`, you can SSH to get a dashboard session:
+Deploy uses password-based authentication. During `deploy setup` you choose a dashboard password, which is stored as an argon2id hash in the database. Log in at:
 
-```bash
-ssh yourdomain.com -p 2222
+```
+https://admin.yourdomain.com
 ```
 
-You'll see:
-```
-╔══════════════════════════════════════════╗
-║         Welcome to Deploy                ║
-╚══════════════════════════════════════════╝
-
-Dashboard: https://admin.yourdomain.com?token=abc123
-
-This link is valid for 7 days.
-```
-
-Open that link—you're authenticated. The token is stored as a cookie.
+Enter your password. On success, you receive a session cookie valid for 7 days. The cookie is required for all API calls to the admin and API subdomains.
 
 ---
 

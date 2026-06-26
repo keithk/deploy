@@ -2,7 +2,9 @@
 // ABOUTME: Handles starting, stopping, and monitoring containers with port allocation.
 
 import { $ } from "bun";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { info, debug, error, siteModel } from "@keithk/deploy-core";
 
 // Base path for persistent site data on host
@@ -156,23 +158,26 @@ export async function startContainer(
 
   info(`Starting container ${containerName} from ${imageName} on port ${port}`);
 
-  // Build environment variable arguments
-  const envArgs: string[] = [];
-  for (const [key, value] of Object.entries(envVars)) {
-    envArgs.push("-e", `${key}=${value}`);
-  }
-
-  // Always set PORT for the container
-  envArgs.push("-e", `PORT=${port}`);
+  // Build the full set of environment variables (user-supplied + system).
+  const allEnvVars: Record<string, string> = { ...envVars };
+  allEnvVars.PORT = String(port);
 
   // Build volume arguments if persistent storage is enabled
   const volumeArgs: string[] = [];
   if (persistentStorage) {
     const dataPath = ensureDataDirectory(siteName);
     volumeArgs.push("-v", `${dataPath}:/data`);
-    envArgs.push("-e", "DATA_DIR=/data");
+    allEnvVars.DATA_DIR = "/data";
     info(`Persistent storage enabled: ${dataPath} -> /data`);
   }
+
+  // Write env vars to a temporary file and pass via --env-file so they don't
+  // appear on the `docker run` command line (visible via `docker inspect` / `ps`).
+  const envFile = join(tmpdir(), `deploy-env-${siteName}-${port}.env`);
+  const envFileContent = Object.entries(allEnvVars)
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  writeFileSync(envFile, envFileContent, { mode: 0o600 });
 
   try {
     // For non-blue-green deployment, stop any existing container first
@@ -196,8 +201,8 @@ export async function startContainer(
       --memory=512m \
       --cpus=1 \
       --restart unless-stopped \
+      --env-file ${envFile} \
       ${volumeArgs} \
-      ${envArgs} \
       ${imageName}`.text();
 
     const containerId = result.trim();
@@ -208,6 +213,13 @@ export async function startContainer(
     const message = err instanceof Error ? err.message : String(err);
     error(`Failed to start container ${containerName}: ${message}`);
     throw new Error(`Container start failed: ${message}`);
+  } finally {
+    // Clean up the temp env file regardless of success/failure.
+    try {
+      rmSync(envFile, { force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
 
@@ -348,11 +360,12 @@ export async function waitForContainerHealth(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await fetch(`http://localhost:${port}/`, {
-        method: "HEAD",
+      const healthPath = process.env.HEALTHCHECK_PATH || "/";
+      const response = await fetch(`http://localhost:${port}${healthPath}`, {
+        method: "GET",
         signal: AbortSignal.timeout(2000),
       });
-      if (response.ok || response.status < 500) {
+      if (response.status >= 200 && response.status < 300) {
         info(
           `Container on port ${port} is healthy (status: ${response.status})`
         );
@@ -384,7 +397,7 @@ export async function cleanupContainers(): Promise<CleanupResult> {
 
   try {
     containersRemoved =
-      await $`docker container prune -f --filter "until=24h"`.text();
+      await $`docker container prune -f --filter "until=24h" --filter "name=deploy-*"`.text();
     info(`Container cleanup: ${containersRemoved.trim()}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -1,0 +1,42 @@
+# Dial Up Deploy — Caddyfile example
+#
+# Copy this file to `Caddyfile` and edit the paths/domain for your environment,
+# or let `deploy setup` generate one for you. The generated file is gitignored.
+#
+# Replace <PROJECT_DIR> with your install directory (e.g. /home/deploy/deploy)
+# and <DOMAIN> with your base domain (e.g. example.com).
+
+{
+  # Use project directory for storage
+  storage file_system {
+    root <PROJECT_DIR>/config/caddy-data
+  }
+
+  # Use Let's Encrypt for production (remove this line for local dev certs)
+  # local_certs
+
+  # HTTP/3 support
+  servers {
+    protocols h1 h2 h3
+  }
+
+  log {
+    output file /var/log/caddy/access.log
+    format json
+  }
+}
+
+# Admin dashboard
+https://admin.<DOMAIN> {
+  reverse_proxy localhost:3000
+}
+
+# API
+https://api.<DOMAIN> {
+  reverse_proxy localhost:3000
+}
+
+# Wildcard for deployed sites
+https://*.<DOMAIN> {
+  reverse_proxy localhost:3000
+}

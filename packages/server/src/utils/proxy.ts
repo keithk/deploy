@@ -204,7 +204,9 @@ export async function proxyRequest(
     const response = await fetch(proxyReq, { redirect: "manual" });
 
     const responseHeaders = new Headers(response.headers);
-    responseHeaders.set("Access-Control-Allow-Origin", "*");
+    // Do not inject a blanket Access-Control-Allow-Origin. Let each site set
+    // its own CORS headers; injecting * here would make private sites readable
+    // from any origin.
     responseHeaders.delete("Content-Encoding");
     responseHeaders.delete("Content-Length");
 

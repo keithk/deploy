@@ -7,3 +7,4 @@ export * from "./caddyfile";
 export * from "./caddyManager";
 export * from "./siteDiscovery";
 export * from "./portUtils";
+export * from "./crypto";

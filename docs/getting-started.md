@@ -8,7 +8,6 @@ This guide walks you through setting up Deploy on a fresh server and deploying y
 
 - **A VPS running Ubuntu 22.04+** (DigitalOcean, Linode, Vultr, etc.)
 - **A domain name** with DNS you can control
-- **An SSH key** on your local machine
 
 > **Important**: Deploy uses SQLite for its database, which requires a persistent filesystem. This means **Heroku, Fly.io, Railway, and similar platforms won't work**. You need a traditional VPS.
 
@@ -48,15 +47,13 @@ The wizard asks for:
 | Environment | Local or Production | `Production Server` |
 | Domain | Your domain name | `yourdomain.com` |
 | HTTP Port | Server port | `3000` (default) |
-| SSH Port | Auth port | `2222` (default) |
 | Sites Directory | Where sites live | `/var/deploy/sites` |
-| SSH Public Key | Your public key | `~/.ssh/id_ed25519.pub` |
+| Dashboard Password | Password for admin dashboard | `********` (min 8 chars) |
 
 The wizard creates:
 - `.env` with your configuration
 - `data/` directory for the SQLite database
-- `data/authorized_keys` with your SSH key
-- `data/host_key` for SSH server identity
+- Password hash stored in the database (argon2id)
 - `config/Caddyfile` for reverse proxy
 
 ---
@@ -97,25 +94,13 @@ sudo systemctl status deploy
 
 ## Step 5: Access the Dashboard
 
-SSH to your server on the configured port (default 2222):
-
-```bash
-ssh yourdomain.com -p 2222
-```
-
-You'll see a welcome message with a login URL:
+Open your browser to:
 
 ```
-╔══════════════════════════════════════════╗
-║         Welcome to Deploy                ║
-╚══════════════════════════════════════════╝
-
-Dashboard: https://admin.yourdomain.com?token=abc123def456...
-
-This link is valid for 7 days.
+https://admin.yourdomain.com
 ```
 
-Open that URL in your browser. The token authenticates you and sets a session cookie.
+You'll see a login screen. Enter the password you set during `deploy setup`. On success, you'll be authenticated with a session cookie valid for 7 days.
 
 ---
 
@@ -164,8 +149,8 @@ Just click **+ New Site** again. Each site gets its own subdomain and SSL certif
 ### Can't access dashboard
 
 1. Check the server is running: `sudo systemctl status deploy`
-2. Check your SSH key is in `data/authorized_keys`
-3. Check firewall allows port 2222: `sudo ufw status`
+2. Check Caddy is running and proxies to port 3000: `sudo journalctl -u caddy -f`
+3. Check firewall allows ports 80/443: `sudo ufw status`
 
 ### Site not loading
 

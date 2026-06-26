@@ -4,6 +4,7 @@
 import { randomUUID } from "crypto";
 import { Database } from "../database";
 import type { Site } from "../schema";
+import { encrypt, decrypt } from "../utils/crypto";
 
 /**
  * Data required to create a new site
@@ -54,6 +55,38 @@ export class SiteModel {
   }
 
   /**
+   * Encrypt the env_vars JSON string for storage at rest.
+   * If no encryption key is configured, stores as plaintext (no-op).
+   */
+  private encryptEnvVars(envVars: string): string {
+    if (!envVars) return envVars;
+    return encrypt(envVars);
+  }
+
+  /**
+   * Decrypt env_vars on a returned Site object.
+   * If the value is not encrypted (legacy plaintext), it passes through unchanged.
+   */
+  private decryptSite(site: Site): Site {
+    if (site.env_vars) {
+      try {
+        site.env_vars = decrypt(site.env_vars);
+      } catch {
+        // Decryption failed — leave the value as-is so the caller can see
+        // something rather than crashing. The deploy path handles bad JSON gracefully.
+      }
+    }
+    return site;
+  }
+
+  /**
+   * Decrypt env_vars on an array of Site objects.
+   */
+  private decryptSites(sites: Site[]): Site[] {
+    return sites.map((s) => this.decryptSite(s));
+  }
+
+  /**
    * Create a new site
    */
   public create(data: CreateSiteData): Site {
@@ -98,7 +131,7 @@ export class SiteModel {
       site.status,
       site.container_id,
       site.port,
-      site.env_vars,
+      this.encryptEnvVars(site.env_vars),
       site.persistent_storage,
       site.autodeploy,
       site.created_at,
@@ -122,7 +155,7 @@ export class SiteModel {
       `SELECT * FROM sites WHERE id = ? LIMIT 1`,
       [id]
     );
-    return results.length > 0 ? results[0] : null;
+    return results.length > 0 ? this.decryptSite(results[0]) : null;
   }
 
   /**
@@ -133,14 +166,15 @@ export class SiteModel {
       `SELECT * FROM sites WHERE name = ? LIMIT 1`,
       [name]
     );
-    return results.length > 0 ? results[0] : null;
+    return results.length > 0 ? this.decryptSite(results[0]) : null;
   }
 
   /**
    * Find all sites
    */
   public findAll(): Site[] {
-    return this.db.query<Site>(`SELECT * FROM sites`);
+    const results = this.db.query<Site>(`SELECT * FROM sites`);
+    return this.decryptSites(results);
   }
 
   /**
@@ -216,7 +250,7 @@ export class SiteModel {
     }
     if (data.env_vars !== undefined) {
       updates.push("env_vars = ?");
-      values.push(data.env_vars);
+      values.push(this.encryptEnvVars(data.env_vars));
     }
     if (data.persistent_storage !== undefined) {
       updates.push("persistent_storage = ?");
@@ -324,7 +358,7 @@ export class SiteModel {
    * Uses the site's sleep_after_minutes, falling back to the server default setting.
    */
   public findSleepEligible(): Site[] {
-    return this.db.query<Site>(`
+    const results = this.db.query<Site>(`
       SELECT s.* FROM sites s
       LEFT JOIN settings st ON st.key = 'sleep_after_minutes_default'
       WHERE s.status = 'running'
@@ -332,6 +366,7 @@ export class SiteModel {
         AND s.last_request_at IS NOT NULL
         AND datetime(s.last_request_at, '+' || COALESCE(s.sleep_after_minutes, CAST(COALESCE(st.value, '30') AS INTEGER)) || ' minutes') <= datetime('now')
     `);
+    return this.decryptSites(results);
   }
 }
 

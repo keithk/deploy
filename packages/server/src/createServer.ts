@@ -23,6 +23,7 @@ import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
 import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
 import { isPasswordConfigured } from "./api/auth";
+import { startSiteContainer, getPrimaryContainerName } from "./services/site-ops";
 import { validateSession, createSessionCookie, getSessionFromRequest } from "./middleware/auth";
 import { proxyRequest, createWebSocketHandlers } from "./utils/proxy";
 import { join, dirname, resolve } from "path";
@@ -440,8 +441,12 @@ export async function createServer({
   for (const site of dbSites) {
     if (site.status === "running" && site.container_id) {
       try {
+        // Resolve the actual container name — for Compose sites this is the
+        // primary service container (e.g. deploy-mysite-web-1), not deploy-mysite.
+        const containerName = await getPrimaryContainerName(site);
+
         // Check if container is actually running
-        const checkProc = spawn(["docker", "inspect", "-f", "{{.State.Running}}", `deploy-${site.name}`], {
+        const checkProc = spawn(["docker", "inspect", "-f", "{{.State.Running}}", containerName], {
           stdout: "pipe",
           stderr: "pipe"
         });
@@ -449,17 +454,11 @@ export async function createServer({
         const output = await new Response(checkProc.stdout).text();
 
         if (output.trim() !== "true") {
-          info(`Restarting container for ${site.name}...`);
-          const startProc = spawn(["docker", "start", `deploy-${site.name}`], {
-            stdout: "pipe",
-            stderr: "pipe"
-          });
-          await startProc.exited;
-          if (startProc.exitCode === 0) {
-            info(`Container deploy-${site.name} restarted successfully`);
-          } else {
-            warn(`Failed to restart container deploy-${site.name}`);
-          }
+          info(`Restarting container for ${site.name} (${containerName})...`);
+          // Use startSiteContainer so Compose sites are started via
+          // `docker compose start` rather than a bare `docker start`.
+          await startSiteContainer(site);
+          info(`Container ${containerName} restarted successfully`);
         }
       } catch (err) {
         warn(`Error checking/restarting container for ${site.name}: ${err}`);

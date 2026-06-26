@@ -136,7 +136,7 @@ export async function generateCaddyfileContent(
   
   # On-demand TLS for SaaS applications (if enabled)
   ${process.env.ENABLE_ON_DEMAND_TLS === 'true' ? `on_demand_tls {
-    ask http://localhost:3000/api/validate-domain
+    ask http://localhost:${process.env.PORT || "3000"}/api/validate-domain
   }` : ''}
   
   log {
@@ -166,7 +166,7 @@ ${domain} {
   }
   
   # Proxy requests to DialUpDeploy server with health monitoring
-  reverse_proxy localhost:3000 {
+  reverse_proxy localhost:${process.env.PORT || "3000"} {
     health_uri /health
     health_interval 30s
     health_timeout 5s
@@ -208,7 +208,7 @@ ${domain} {
   }
   
   # Proxy requests with forwarded headers for site routing
-  reverse_proxy localhost:3000 {
+  reverse_proxy localhost:${process.env.PORT || "3000"} {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -254,7 +254,7 @@ ${domain} {
   }
   
   # Proxy requests with forwarded headers for site routing
-  reverse_proxy localhost:3000 {
+  reverse_proxy localhost:${process.env.PORT || "3000"} {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
