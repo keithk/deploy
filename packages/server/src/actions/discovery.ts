@@ -189,11 +189,14 @@ export async function executeCommand(
  * Build a specific site
  * @param site The site configuration
  * @param context The action context
+ * @param options.force Build even if needsRebuild() sees no repo changes. Required when a
+ *   build pulls in remote content (e.g. PDS-backed posts) that mtimes can't detect.
  * @returns Result of the build operation
  */
 export async function buildSite(
   site: SiteConfig,
-  context: ActionContext
+  context: ActionContext,
+  options: { force?: boolean } = {}
 ): Promise<{ success: boolean; message: string }> {
   if (site.type !== "static-build" || !site.commands?.build) {
     return {
@@ -205,8 +208,8 @@ export async function buildSite(
   // Load build cache
   const buildCache = loadBuildCache();
 
-  // Check if site needs rebuilding
-  if (!needsRebuild(site, buildCache)) {
+  // Check if site needs rebuilding (skipped when forced)
+  if (!options.force && !needsRebuild(site, buildCache)) {
     return {
       success: true,
       message: `Site ${site.subdomain} is already up to date, skipping build`
