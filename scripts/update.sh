@@ -44,7 +44,11 @@ done
 
 echo ""
 echo "🔄 Restarting Caddy..."
-systemctl restart caddy
+if systemctl is-enabled caddy.service 2>/dev/null; then
+    systemctl restart caddy
+else
+    echo "   Caddy service is not enabled — skipping restart"
+fi
 
 echo ""
 echo "⏳ Waiting for Caddy to obtain certificates..."

@@ -329,14 +329,37 @@ export async function handleSubdomainRequest(
   projectDomain: string
 ): Promise<Response> {
   const host = request.headers.get("host") || "";
-  const subdomain = extractSubdomain(host, projectDomain);
+  const hostNoPort = host.split(":")[0] || "";
 
-  if (!subdomain) {
-    return new Response("Site not found", { status: 404 });
+  // First, check if this is a custom domain for a DB-backed site.
+  // Custom domains don't match the subdomain pattern, so we look them up
+  // explicitly before falling through to subdomain extraction.
+  let site = null;
+  let subdomain = "";
+
+  if (hostNoPort && hostNoPort !== projectDomain && hostNoPort !== "localhost") {
+    // Check if any DB site has this host as its custom_domain
+    const allSites = siteModel.findAll();
+    const customSite = allSites.find(
+      (s) => s.custom_domain === hostNoPort
+    );
+    if (customSite) {
+      site = customSite;
+      subdomain = customSite.name;
+    }
   }
 
-  // Look up site in database by name (subdomain)
-  const site = siteModel.findByName(subdomain);
+  if (!site) {
+    subdomain = extractSubdomain(host, projectDomain);
+
+    if (!subdomain) {
+      return new Response("Site not found", { status: 404 });
+    }
+
+    // Look up site in database by name (subdomain)
+    site = siteModel.findByName(subdomain);
+  }
+
   if (!site) {
     return new Response("Site not found", { status: 404 });
   }

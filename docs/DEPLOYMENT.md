@@ -168,7 +168,7 @@ The systemd service sets environment variables directly. The `.env` file is also
 ```bash
 PROJECT_DOMAIN=keith.is
 PORT=3000
-SITES_DIR=/var/deploy/sites
+ROOT_DIR=/var/deploy/sites
 NODE_ENV=production
 BUILDKIT_HOST=docker-container://buildkit
 ```

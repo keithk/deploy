@@ -10,7 +10,7 @@ import type { Site } from "@keithk/deploy-core";
 import { assertSafeCompose } from "../api/compose";
 import { getSiteDataPath } from "./container";
 
-const SITES_BASE_PATH = process.env.SITES_DIR || "/var/deploy/sites";
+const SITES_BASE_PATH = process.env.ROOT_DIR || "/var/deploy/sites";
 
 const COMPOSE_FILENAME = "docker-compose.yml";
 

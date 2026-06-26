@@ -189,7 +189,7 @@ async function createEnvFile(config: SetupConfig): Promise<void> {
 
   setEnvVar("PROJECT_DOMAIN", config.domain);
   setEnvVar("PORT", String(config.httpPort));
-  setEnvVar("SITES_DIR", config.sitesDir);
+  setEnvVar("ROOT_DIR", config.sitesDir);
   setEnvVar("NODE_ENV", config.environment === "production" ? "production" : "development");
 
   await Bun.write(envPath, envContent);

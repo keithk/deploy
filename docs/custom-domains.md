@@ -31,15 +31,24 @@ Or for a subdomain:
 A     blog  →  your.server.ip
 ```
 
-### 2. Configure in Dashboard
+### 2. Assign the Domain to a Site
 
-1. Click on the site you want to use the custom domain
-2. Go to **Settings**
-3. Add your custom domain (coming soon - currently requires manual Caddyfile edit)
+Use the API to set a custom domain on a site:
 
-### 3. Manual Caddyfile Configuration
+```bash
+curl -X PATCH https://admin.yourdomain.com/api/sites/SITE_ID \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN" \
+  -d '{"custom_domain": "mycustomdomain.com"}'
+```
 
-Until the dashboard supports custom domains directly, edit the Caddyfile:
+Replace `SITE_ID` with the ID from the dashboard, and `mycustomdomain.com` with your domain.
+
+Once set, Deploy's on-demand TLS will request a certificate for the domain automatically (if on-demand TLS is enabled), and requests to that domain will route to the site's container.
+
+### 3. Manual Caddyfile Configuration (Fallback)
+
+If on-demand TLS is not enabled, or you prefer manual control, edit the Caddyfile:
 
 ```bash
 sudo nano /etc/caddy/Caddyfile

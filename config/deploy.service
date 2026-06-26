@@ -18,7 +18,10 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Environment variables
+# Load environment variables from .env (created by `deploy setup`)
+EnvironmentFile=/home/deploy/deploy/.env
+
+# Environment variables (also set in .env; these are fallbacks)
 Environment=NODE_ENV=production
 Environment=BUN_INSTALL=/home/deploy/.bun
 Environment=PATH=/home/deploy/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -27,7 +30,7 @@ Environment=PATH=/home/deploy/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/deploy/deploy/data /var/deploy/sites /var/log/caddy
+ReadWritePaths=/home/deploy/deploy/data /home/deploy/deploy/logs /var/deploy/sites /var/deploy/data /var/log/caddy
 PrivateTmp=true
 
 # Resource limits

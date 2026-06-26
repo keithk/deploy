@@ -25,7 +25,7 @@ function getAuthenticatedUrl(gitUrl: string): string {
  * Get the sites directory from environment or default
  */
 function getSitesDir(): string {
-  return process.env.SITES_DIR || "/var/deploy/sites";
+  return process.env.ROOT_DIR || "/var/deploy/sites";
 }
 
 /**

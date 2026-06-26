@@ -12,7 +12,7 @@ const TEST_REPO_URL = "https://github.com/octocat/Hello-World.git";
 
 describe("git service", () => {
   beforeEach(() => {
-    process.env.SITES_DIR = TEST_SITES_DIR;
+    process.env.ROOT_DIR = TEST_SITES_DIR;
     if (existsSync(TEST_SITES_DIR)) {
       rmSync(TEST_SITES_DIR, { recursive: true });
     }
@@ -23,7 +23,7 @@ describe("git service", () => {
     if (existsSync(TEST_SITES_DIR)) {
       rmSync(TEST_SITES_DIR, { recursive: true });
     }
-    delete process.env.SITES_DIR;
+    delete process.env.ROOT_DIR;
   });
 
   describe("getSitePath", () => {

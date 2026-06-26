@@ -41,7 +41,7 @@ describe("composeProjectName / Dir / FilesArgs", () => {
     expect(composeProjectName("cobalt")).toBe("deploy-cobalt");
   });
 
-  test("project dir resolves under SITES_DIR", () => {
+  test("project dir resolves under ROOT_DIR", () => {
     expect(composeProjectDir("cobalt")).toMatch(/cobalt$/);
   });
 

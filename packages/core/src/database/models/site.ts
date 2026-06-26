@@ -23,6 +23,7 @@ export interface CreateSiteData {
   compose_yaml?: string | null;
   primary_service?: string | null;
   primary_port?: number | null;
+  custom_domain?: string | null;
 }
 
 /**
@@ -42,6 +43,7 @@ export interface UpdateSiteData {
   compose_yaml?: string | null;
   primary_service?: string | null;
   primary_port?: number | null;
+  custom_domain?: string | null;
 }
 
 /**
@@ -114,11 +116,12 @@ export class SiteModel {
       compose_yaml: data.compose_yaml ?? null,
       primary_service: data.primary_service ?? null,
       primary_port: data.primary_port ?? null,
+      custom_domain: data.custom_domain ?? null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domain)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -141,7 +144,8 @@ export class SiteModel {
       site.last_request_at,
       site.compose_yaml,
       site.primary_service,
-      site.primary_port
+      site.primary_port,
+      site.custom_domain
     );
 
     return site;
@@ -279,6 +283,10 @@ export class SiteModel {
     if (data.primary_port !== undefined) {
       updates.push("primary_port = ?");
       values.push(data.primary_port);
+    }
+    if (data.custom_domain !== undefined) {
+      updates.push("custom_domain = ?");
+      values.push(data.custom_domain);
     }
 
     if (updates.length === 0) {

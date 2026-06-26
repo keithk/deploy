@@ -364,6 +364,11 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     // Also check database-backed sites
     const dbSites = siteModel.findAll();
     const isDbSite = dbSites.some(site => {
+      // Check custom domain
+      if (site.custom_domain && site.custom_domain === domain) {
+        return true;
+      }
+      // Check subdomain pattern
       return domain === `${site.name}.${projectDomain}`;
     });
 

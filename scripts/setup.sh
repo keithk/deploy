@@ -7,6 +7,10 @@
 
 set -e
 
+# Pinned versions for reproducible installs
+BUN_VERSION="1.3.14"
+RAILPACK_VERSION="latest"  # Railpack has no stable release tags yet; pin when available
+
 echo "+==============================================================+"
 echo "|                    Deploy - Server Setup                      |"
 echo "+==============================================================+"
@@ -57,9 +61,15 @@ if command -v bun &> /dev/null; then
     echo "Bun is already installed"
     bun --version
 else
-    curl -fsSL https://bun.sh/install | bash
+    curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
     export BUN_INSTALL="$HOME/.bun"
     export PATH="$BUN_INSTALL/bin:$PATH"
+
+    # Verify the installed version matches
+    INSTALLED_BUN_VERSION=$(bun --version 2>/dev/null || echo "unknown")
+    if [ "$INSTALLED_BUN_VERSION" != "$BUN_VERSION" ]; then
+        echo "Warning: expected Bun $BUN_VERSION but got $INSTALLED_BUN_VERSION"
+    fi
 
     # Also add to .bashrc for future sessions
     echo 'export BUN_INSTALL="$HOME/.bun"' >> ~/.bashrc
@@ -107,9 +117,8 @@ else
     apt-get update
     apt-get install -y caddy
 
-    # Stop Caddy from running as a service - we'll manage it ourselves
-    systemctl stop caddy 2>/dev/null || true
-    systemctl disable caddy 2>/dev/null || true
+    # Caddy runs as its own systemd service; we enable it later after
+    # the deploy.service unit is installed.
 fi
 
 # Install Railpack (for building container images)
@@ -117,7 +126,18 @@ echo "==> Installing Railpack..."
 if command -v railpack &> /dev/null; then
     echo "Railpack is already installed"
 else
-    curl -fsSL https://railpack.dev/install.sh | bash
+    # Retry up to 3 times for flaky networks
+    for attempt in 1 2 3; do
+        if curl -fsSL https://railpack.dev/install.sh | bash -s -- --version "${RAILPACK_VERSION}"; then
+            break
+        elif [ "$attempt" -eq 3 ]; then
+            echo "Error: Failed to install Railpack after 3 attempts"
+            exit 1
+        else
+            echo "Railpack install attempt $attempt failed, retrying..."
+            sleep 3
+        fi
+    done
 fi
 
 # Create deploy user
@@ -147,6 +167,8 @@ echo "==> Creating sites directory..."
 SITES_DIR="/var/deploy/sites"
 mkdir -p "$SITES_DIR"
 chown deploy:deploy "$SITES_DIR"
+# Note: the env var ROOT_DIR (not SITES_DIR) is what the app reads at runtime;
+# this shell variable is just used locally for directory creation.
 
 # Create Caddy log directory
 echo "==> Creating Caddy log directory..."
@@ -159,7 +181,6 @@ if command -v ufw &> /dev/null; then
     ufw allow ssh
     ufw allow http
     ufw allow https
-    ufw allow 2222/tcp  # SSH for deploy
 
     # Enable firewall if not already enabled
     if ! ufw status | grep -q "Status: active"; then
@@ -199,6 +220,24 @@ chown -R deploy:deploy /home/deploy/.bun
 sudo -u deploy bash -c 'echo "export BUN_INSTALL=\"\$HOME/.bun\"" >> ~/.bashrc'
 sudo -u deploy bash -c 'echo "export PATH=\"\$BUN_INSTALL/bin:\$PATH\"" >> ~/.bashrc'
 
+# Install systemd units
+echo "==> Installing systemd services..."
+cp "$DEPLOY_DIR/config/deploy.service" /etc/systemd/system/deploy.service
+systemctl daemon-reload
+systemctl enable deploy.service
+
+# Caddy: use the distro package's service if present, otherwise no-op
+# (setup.sh already installed Caddy via apt earlier in this script)
+if systemctl list-unit-files caddy.service 2>/dev/null | grep -q caddy; then
+    systemctl enable caddy.service
+else
+    echo "   Caddy service not found — skipping enable"
+fi
+
+# Create logs directory (required by deploy.service ReadWritePaths)
+mkdir -p "$DEPLOY_DIR/logs"
+chown deploy:deploy "$DEPLOY_DIR/logs"
+
 echo ""
 echo "+==============================================================+"
 echo "|              Base installation complete!                      |"
@@ -209,9 +248,8 @@ echo "  1. cd $DEPLOY_DIR"
 echo "  2. sudo -u deploy /home/deploy/.bun/bin/bun run deploy setup"
 echo "  3. Follow the interactive setup wizard"
 echo ""
-echo "After setup, you can start the server with:"
+echo "After setup, start the server with:"
 echo "  sudo systemctl start deploy"
 echo ""
-echo "Or manually:"
-echo "  cd $DEPLOY_DIR && sudo -u deploy /home/deploy/.bun/bin/bun run start"
+echo "Both deploy.service and caddy.service are installed and enabled."
 echo ""

@@ -103,7 +103,7 @@ Server-level settings are configured during setup and stored in `.env`:
 ```bash
 PROJECT_DOMAIN=yourdomain.com
 PORT=3000
-SITES_DIR=/var/deploy/sites
+ROOT_DIR=/var/deploy/sites
 NODE_ENV=production
 ```
 
