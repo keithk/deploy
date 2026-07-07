@@ -23,14 +23,17 @@
       "@keithk/deploy-server": ["./packages/server/src"],
       "@keithk/deploy-server/*": ["./packages/server/src/*"],
       "@keithk/deploy-cli": ["./packages/cli/src"],
-      "@keithk/deploy-cli/*": ["./packages/cli/src/*"]
+      "@keithk/deploy-cli/*": ["./packages/cli/src/*"],
+      "@keithk/deploy-mcp": ["./packages/mcp/src"],
+      "@keithk/deploy-mcp/*": ["./packages/mcp/src/*"]
     }
   },
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/actions" },
     { "path": "./packages/server" },
-    { "path": "./packages/cli" }
+    { "path": "./packages/cli" },
+    { "path": "./packages/mcp" }
   ],
   "files": [],
   "exclude": ["node_modules", "dist"]

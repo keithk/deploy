@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "deploy": {
+      "command": "bun",
+      "args": [
+        "/Users/keith/.cache/deploy/packages/mcp/dist/index.js"
+      ],
+      "env": {
+        "API_URL": "https://admin.keith.is",
+        "SESSION_TOKEN": "your-long-lived-session-token-here"
+      }
+    }
+  }
+}

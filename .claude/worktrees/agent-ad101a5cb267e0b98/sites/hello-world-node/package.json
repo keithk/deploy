@@ -1,0 +1,6 @@
+{
+  "name": "hello-world-node",
+  "scripts": {
+    "start": "node index.js"
+  }
+}

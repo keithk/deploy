@@ -1,0 +1,14 @@
+{
+  "name": "@keithk/deploy-admin",
+  "version": "0.1.0",
+  "description": "Deploy Admin Panel",
+  "type": "module",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "bun build src/app.ts --outdir=dist --format=esm --target=browser --splitting && cp src/index.html dist/ && cp -r src/styles dist/ && cp -r src/fonts dist/",
+    "dev": "bun build src/app.ts --outdir=dist --format=esm --target=browser --splitting --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
