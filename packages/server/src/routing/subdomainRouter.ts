@@ -350,7 +350,7 @@ export async function handleSubdomainRequest(
   }
 
   if (!site) {
-    subdomain = extractSubdomain(host, projectDomain);
+    subdomain = extractSubdomain(host, projectDomain) || "";
 
     if (!subdomain) {
       return new Response("Site not found", { status: 404 });

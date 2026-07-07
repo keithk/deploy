@@ -80,9 +80,12 @@ const envVarsSchema = z.object({
   vars: z.record(z.unknown()).optional(),
 });
 
+// The `as any` casts on setRequestHandler's schema argument work around a
+// "type instantiation is excessively deep" error from the SDK's zod v3/v4
+// compat union types; they don't affect runtime behavior.
 // Register tools/list
 server.setRequestHandler(
-  z.object({ method: z.literal("tools/list") }),
+  z.object({ method: z.literal("tools/list") }) as any,
   async () => {
     return {
       tools: [
@@ -168,7 +171,7 @@ server.setRequestHandler(
       name: z.string(),
       arguments: z.record(z.unknown()).optional(),
     }),
-  }),
+  }) as any,
   async (request) => {
     const toolName = request.params.name;
     const args = request.params.arguments || {};
