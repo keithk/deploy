@@ -4,7 +4,7 @@
 import { randomUUID } from "crypto";
 import { Database } from "../database";
 import type { Site } from "../schema";
-import { encrypt, decrypt } from "../utils/crypto";
+import { encrypt, decrypt } from "../../utils/crypto";
 
 /**
  * Data required to create a new site
