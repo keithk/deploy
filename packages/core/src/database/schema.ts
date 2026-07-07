@@ -27,7 +27,7 @@ export interface Site {
   compose_yaml: string | null;        // raw compose file for type='compose'
   primary_service: string | null;     // service name to expose via subdomain
   primary_port: number | null;        // internal container port of primary service
-  custom_domain: string | null;       // optional custom domain (e.g., myapp.com)
+  custom_domains: string;             // JSON array of custom domains (e.g., ["myapp.com"])
 }
 
 /**

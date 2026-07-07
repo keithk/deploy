@@ -23,7 +23,7 @@ export interface CreateSiteData {
   compose_yaml?: string | null;
   primary_service?: string | null;
   primary_port?: number | null;
-  custom_domain?: string | null;
+  custom_domains?: string[];
 }
 
 /**
@@ -43,7 +43,7 @@ export interface UpdateSiteData {
   compose_yaml?: string | null;
   primary_service?: string | null;
   primary_port?: number | null;
-  custom_domain?: string | null;
+  custom_domains?: string[];
 }
 
 /**
@@ -116,11 +116,11 @@ export class SiteModel {
       compose_yaml: data.compose_yaml ?? null,
       primary_service: data.primary_service ?? null,
       primary_port: data.primary_port ?? null,
-      custom_domain: data.custom_domain ?? null,
+      custom_domains: JSON.stringify(data.custom_domains ?? []),
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domain)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domains)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
@@ -145,7 +145,7 @@ export class SiteModel {
       site.compose_yaml,
       site.primary_service,
       site.primary_port,
-      site.custom_domain
+      site.custom_domains
     );
 
     return site;
@@ -284,9 +284,9 @@ export class SiteModel {
       updates.push("primary_port = ?");
       values.push(data.primary_port);
     }
-    if (data.custom_domain !== undefined) {
-      updates.push("custom_domain = ?");
-      values.push(data.custom_domain);
+    if (data.custom_domains !== undefined) {
+      updates.push("custom_domains = ?");
+      values.push(JSON.stringify(data.custom_domains));
     }
 
     if (updates.length === 0) {
@@ -375,6 +375,19 @@ export class SiteModel {
         AND datetime(s.last_request_at, '+' || COALESCE(s.sleep_after_minutes, CAST(COALESCE(st.value, '30') AS INTEGER)) || ' minutes') <= datetime('now')
     `);
     return this.decryptSites(results);
+  }
+}
+
+/**
+ * Parse a site's custom_domains JSON column into a string array.
+ * Falls back to an empty array on malformed JSON.
+ */
+export function parseCustomDomains(site: Site): string[] {
+  try {
+    const domains = JSON.parse(site.custom_domains);
+    return Array.isArray(domains) ? domains : [];
+  } catch {
+    return [];
   }
 }
 

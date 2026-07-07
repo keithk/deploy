@@ -9,6 +9,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { DeployApiClient } from "./client.js";
+import { parseCustomDomains } from "@keithk/deploy-core";
 
 // Read configuration from environment
 const API_URL = process.env.API_URL || "https://admin.keith.is";
@@ -69,9 +70,9 @@ const siteWithTypeSchema = z.object({
   type: z.enum(["build", "runtime"]).optional(),
   limit: z.number().optional(),
 });
-const domainSchema = z.object({
+const domainsSchema = z.object({
   site: z.string(),
-  domain: z.string(),
+  domains: z.array(z.string()),
 });
 const envVarsSchema = z.object({
   site: z.string(),
@@ -128,16 +129,16 @@ server.setRequestHandler(
           },
         },
         {
-          name: "set_custom_domain",
+          name: "set_custom_domains",
           description:
-            "Set or update the custom domain for a site. Pass empty string to remove.",
+            "Set the full list of custom domains for a site, replacing any existing ones. Pass an empty array to remove all custom domains.",
           inputSchema: {
             type: "object",
             properties: {
               site: { type: "string" },
-              domain: { type: "string" },
+              domains: { type: "array", items: { type: "string" } },
             },
-            required: ["site", "domain"],
+            required: ["site", "domains"],
           },
         },
         {
@@ -175,18 +176,21 @@ server.setRequestHandler(
     try {
       if (toolName === "list_sites") {
         const sites = await client.listSites();
-        const formatted = sites.map((site) => ({
-          name: site.name,
-          id: site.id,
-          status: site.status,
-          visibility: site.visibility,
-          type: site.type,
-          url: site.custom_domain
-            ? `https://${site.custom_domain}`
-            : `https://${site.name}.keith.is`,
-          last_deployed: site.last_deployed_at,
-          created: site.created_at,
-        }));
+        const formatted = sites.map((site) => {
+          const customDomains = parseCustomDomains(site);
+          return {
+            name: site.name,
+            id: site.id,
+            status: site.status,
+            visibility: site.visibility,
+            type: site.type,
+            urls: customDomains.length > 0
+              ? customDomains.map((d) => `https://${d}`)
+              : [`https://${site.name}.keith.is`],
+            last_deployed: site.last_deployed_at,
+            created: site.created_at,
+          };
+        });
 
         return {
           content: [
@@ -199,6 +203,7 @@ server.setRequestHandler(
       } else if (toolName === "get_site_status") {
         const siteId = await resolveSiteId(args.site as string);
         const siteData = await client.getSite(siteId);
+        const customDomains = parseCustomDomains(siteData);
 
         return {
           content: [
@@ -215,10 +220,10 @@ server.setRequestHandler(
                   branch: siteData.branch,
                   container_id: siteData.container_id,
                   port: siteData.port,
-                  custom_domain: siteData.custom_domain,
-                  url: siteData.custom_domain
-                    ? `https://${siteData.custom_domain}`
-                    : `https://${siteData.name}.keith.is`,
+                  custom_domains: customDomains,
+                  urls: customDomains.length > 0
+                    ? customDomains.map((d) => `https://${d}`)
+                    : [`https://${siteData.name}.keith.is`],
                   created_at: siteData.created_at,
                   last_deployed_at: siteData.last_deployed_at,
                   last_request_at: siteData.last_request_at,
@@ -261,13 +266,11 @@ server.setRequestHandler(
             } as TextContent,
           ],
         };
-      } else if (toolName === "set_custom_domain") {
+      } else if (toolName === "set_custom_domains") {
         const siteId = await resolveSiteId(args.site as string);
-        const domain = args.domain as string;
-        const result = await client.setCustomDomain(
-          siteId,
-          domain.trim() === "" ? null : domain.trim()
-        );
+        const domains = (args.domains as string[]).map((d) => d.trim()).filter(Boolean);
+        const result = await client.setCustomDomains(siteId, domains);
+        const customDomains = parseCustomDomains(result);
 
         return {
           content: [
@@ -275,11 +278,11 @@ server.setRequestHandler(
               type: "text" as const,
               text: JSON.stringify(
                 {
-                  message: "Custom domain updated",
-                  custom_domain: result.custom_domain,
-                  url: result.custom_domain
-                    ? `https://${result.custom_domain}`
-                    : `https://${result.name}.keith.is`,
+                  message: "Custom domains updated",
+                  custom_domains: customDomains,
+                  urls: customDomains.length > 0
+                    ? customDomains.map((d) => `https://${d}`)
+                    : [`https://${result.name}.keith.is`],
                 },
                 null,
                 2

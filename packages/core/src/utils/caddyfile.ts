@@ -96,7 +96,42 @@ ${domain} {
     flush_interval -1
   }
 }
-`;
+${
+  enableOnDemandTls
+    ? `
+# Catch-all for custom domains - cert issuance is gated by the ask endpoint above
+https:// {
+  tls {
+    on_demand
+  }
+
+  encode {
+    gzip 6
+    zstd
+  }
+
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    X-XSS-Protection "1; mode=block"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+
+  reverse_proxy localhost:${port} {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    flush_interval -1
+  }
+}
+`
+    : ""
+}`;
 }
 
 /**

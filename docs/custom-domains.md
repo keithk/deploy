@@ -17,6 +17,8 @@ All you need to do is point your DNS and Deploy handles the rest.
 
 ## Adding a Custom Domain
 
+A site can answer to any number of custom domains at once (e.g. both `example.com` and `www.example.com`).
+
 ### 1. Point DNS to Your Server
 
 Add an A record for your custom domain:
@@ -33,22 +35,22 @@ A     blog  →  your.server.ip
 
 ### 2. Assign the Domain to a Site
 
-Use the API to set a custom domain on a site:
+Add domains from the site's **Settings** tab in the dashboard, or use the API:
 
 ```bash
 curl -X PATCH https://admin.yourdomain.com/api/sites/SITE_ID \
   -H "Content-Type: application/json" \
   -H "Cookie: session=YOUR_SESSION_TOKEN" \
-  -d '{"custom_domain": "mycustomdomain.com"}'
+  -d '{"custom_domains": ["mycustomdomain.com", "www.mycustomdomain.com"]}'
 ```
 
-Replace `SITE_ID` with the ID from the dashboard, and `mycustomdomain.com` with your domain.
+Replace `SITE_ID` with the ID from the dashboard. This replaces the site's full list of custom domains, so include every domain the site should answer to, not just the one you're adding.
 
-Once set, Deploy's on-demand TLS will request a certificate for the domain automatically (if on-demand TLS is enabled), and requests to that domain will route to the site's container.
+If `ENABLE_ON_DEMAND_TLS=true`, the Caddyfile includes a catch-all block that requests certificates and routes any domain that passes the `/api/validate-domain` check — no Caddy edits or reloads are needed per domain. Once DNS resolves and you've saved the domain here, it works immediately.
 
 ### 3. Manual Caddyfile Configuration (Fallback)
 
-If on-demand TLS is not enabled, or you prefer manual control, edit the Caddyfile:
+If on-demand TLS is not enabled, edit the Caddyfile directly:
 
 ```bash
 sudo nano /etc/caddy/Caddyfile

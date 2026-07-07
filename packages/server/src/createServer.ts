@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database, parseCustomDomains } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { handleApiRequest } from "./api/handlers";
@@ -364,8 +364,8 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     // Also check database-backed sites
     const dbSites = siteModel.findAll();
     const isDbSite = dbSites.some(site => {
-      // Check custom domain
-      if (site.custom_domain && site.custom_domain === domain) {
+      // Check custom domains
+      if (parseCustomDomains(site).includes(domain)) {
         return true;
       }
       // Check subdomain pattern

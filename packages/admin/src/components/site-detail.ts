@@ -18,6 +18,7 @@ interface Site {
   sleep_enabled?: number;
   sleep_after_minutes?: number | null;
   last_request_at?: string | null;
+  custom_domains?: string;
 }
 
 interface LogEntry {
@@ -84,6 +85,74 @@ class DeploySiteDetail extends HTMLElement {
 
   getDomain(): string {
     return window.location.hostname.split(".").slice(-2).join(".");
+  }
+
+  getCustomDomains(): string[] {
+    if (!this.site?.custom_domains) return [];
+    try {
+      const domains = JSON.parse(this.site.custom_domains);
+      return Array.isArray(domains) ? domains : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async saveCustomDomains(domains: string[]) {
+    if (!this.site) return;
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ custom_domains: domains }),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        this.site.custom_domains = updated.custom_domains;
+        this.render();
+      } else {
+        const error = await response.json();
+        showToast(`Failed to update custom domains: ${error.message || error.error || "Unknown error"}`, 'error');
+      }
+    } catch (error) {
+      console.error("Failed to update custom domains:", error);
+      showToast("Failed to update custom domains", 'error');
+    }
+  }
+
+  async handleAddCustomDomain() {
+    const input = this.querySelector<HTMLInputElement>("#custom-domain-input");
+    if (!input) return;
+
+    const domain = input.value.trim().toLowerCase();
+    if (!domain) return;
+
+    const hostnamePattern = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+    if (!hostnamePattern.test(domain)) {
+      showToast("Enter a valid domain, e.g. example.com", 'error');
+      return;
+    }
+
+    const current = this.getCustomDomains();
+    if (current.includes(domain)) {
+      showToast("That domain is already added.", 'error');
+      return;
+    }
+
+    await this.saveCustomDomains([...current, domain]);
+  }
+
+  async handleRemoveCustomDomain(domain: string) {
+    const confirmed = await showConfirm(
+      'Remove Custom Domain',
+      `Remove "${domain}" from this site?`,
+      { confirmText: 'Remove', destructive: true }
+    );
+    if (!confirmed) return;
+
+    await this.saveCustomDomains(this.getCustomDomains().filter((d) => d !== domain));
   }
 
   async loadSite() {
@@ -627,6 +696,24 @@ class DeploySiteDetail extends HTMLElement {
       this.querySelector("#wake-btn")?.addEventListener("click", () =>
         this.handleWakeNow()
       );
+      this.querySelector("#add-domain-btn")?.addEventListener("click", () =>
+        this.handleAddCustomDomain()
+      );
+      this.querySelector("#custom-domain-input")?.addEventListener(
+        "keydown",
+        (e) => {
+          if ((e as KeyboardEvent).key === "Enter") {
+            e.preventDefault();
+            this.handleAddCustomDomain();
+          }
+        }
+      );
+      this.querySelectorAll("[data-remove-domain]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const domain = (e.currentTarget as HTMLElement).dataset.removeDomain!;
+          this.handleRemoveCustomDomain(domain);
+        });
+      });
       this.querySelector("#delete-btn")?.addEventListener("click", () =>
         this.handleDelete()
       );
@@ -876,6 +963,35 @@ class DeploySiteDetail extends HTMLElement {
             Last request: ${new Date(this.site.last_request_at).toLocaleString()}
           </p>
         ` : ""}
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Custom Domains</h3>
+        <p class="text-muted mb-4">Point your own domains at this site. DNS must resolve to this server first.</p>
+        ${
+          this.getCustomDomains().length === 0
+            ? '<p class="text-muted">No custom domains configured</p>'
+            : `<div class="env-table">
+            ${this.getCustomDomains()
+              .map(
+                (domain) => `
+              <div class="env-row">
+                <div class="env-cell env-key">${this.escapeHtml(domain)}</div>
+                <div class="env-cell">
+                  <button class="btn btn-sm btn-ghost btn-danger" data-remove-domain="${this.escapeHtml(
+                    domain
+                  )}">Remove</button>
+                </div>
+              </div>
+            `
+              )
+              .join("")}
+          </div>`
+        }
+        <div class="form-group mt-4" style="display: flex; gap: var(--space-2);">
+          <input type="text" id="custom-domain-input" class="form-input" placeholder="example.com">
+          <button class="btn" id="add-domain-btn">Add</button>
+        </div>
       </div>
 
       <div class="settings-section danger">

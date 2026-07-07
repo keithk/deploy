@@ -135,9 +135,9 @@ export class DeployApiClient {
     return this.request<Site>("PATCH", `/api/sites/${siteId}`, updates);
   }
 
-  // Set custom domain on a site
-  async setCustomDomain(siteId: string, domain: string | null): Promise<Site> {
-    return this.updateSite(siteId, { custom_domain: domain });
+  // Set the full list of custom domains on a site
+  async setCustomDomains(siteId: string, domains: string[]): Promise<Site> {
+    return this.updateSite(siteId, { custom_domains: domains });
   }
 
   // Get environment variables for a site

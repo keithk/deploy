@@ -10,7 +10,7 @@ This package provides an MCP server that wraps the Deploy admin API, exposing 6 
 2. **get_site_status** – Get detailed information about a specific site
 3. **redeploy_site** – Trigger a deployment of a site
 4. **get_logs** – Retrieve build or runtime logs for a site
-5. **set_custom_domain** – Set or update a custom domain for a site
+5. **set_custom_domains** – Set the full list of custom domains for a site
 6. **manage_env_vars** – Get or set environment variables for a site
 
 ## Structure

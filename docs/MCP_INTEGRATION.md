@@ -139,8 +139,8 @@ Retrieves detailed information about a specific site, including container ID, po
   "branch": "main",
   "container_id": "abc123def456",
   "port": 5000,
-  "custom_domain": "atmobb.app",
-  "url": "https://atmobb.app",
+  "custom_domains": ["atmobb.app"],
+  "urls": ["https://atmobb.app"],
   "created_at": "2026-01-15T08:00:00Z",
   "last_deployed_at": "2026-07-06T12:34:56Z",
   "last_request_at": "2026-07-06T14:22:10Z",
@@ -203,29 +203,29 @@ Retrieves build or runtime logs for a site. Build logs are stored in the databas
 ]
 ```
 
-### set_custom_domain
+### set_custom_domains
 
-Sets or removes a custom domain for a site. Once set, Deploy's on-demand TLS will automatically request a certificate for the domain (if enabled). The domain will resolve to the site's container.
+Sets the full list of custom domains for a site, replacing any existing ones. Once set, Deploy's on-demand TLS will automatically request certificates for the domains (if enabled). The domains will resolve to the site's container.
 
 **Parameters:**
 - `site` (string, required): Site name or ID
-- `domain` (string, required): Custom domain (e.g., "atmobb.app"), or empty string to remove
+- `domains` (array of strings, required): Custom domains (e.g., `["atmobb.app", "hv.atmobb.app"]`), or an empty array to remove all
 
 **Prerequisites:**
-- The domain must be DNS-pointed to your Deploy server (via A record or CNAME)
+- Each domain must be DNS-pointed to your Deploy server (via A record or CNAME)
 - If on-demand TLS is enabled, certificates are automatic
-- If on-demand TLS is disabled, manually add the domain to your Caddyfile
+- If on-demand TLS is disabled, manually add each domain to your Caddyfile
 
 **Usage in Claude:**
-> "Add atmobb.app as a custom domain on atmobb"
-> "Remove the custom domain from the blog site"
+> "Add atmobb.app and hv.atmobb.app as custom domains on atmobb"
+> "Remove all custom domains from the blog site"
 
 **Output example:**
 ```json
 {
-  "message": "Custom domain updated",
-  "custom_domain": "atmobb.app",
-  "url": "https://atmobb.app"
+  "message": "Custom domains updated",
+  "custom_domains": ["atmobb.app", "hv.atmobb.app"],
+  "urls": ["https://atmobb.app", "https://hv.atmobb.app"]
 }
 ```
 
