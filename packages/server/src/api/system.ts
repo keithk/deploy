@@ -4,7 +4,7 @@
 import { requireAuth } from "../middleware/auth";
 import { spawn } from "bun";
 import { join } from "path";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 
 interface UpdateStatus {
   status: "idle" | "updating" | "success" | "error";
@@ -14,6 +14,38 @@ interface UpdateStatus {
 }
 
 let updateStatus: UpdateStatus = { status: "idle" };
+
+// A rolling update restarts this very server, so update progress is tracked in
+// a shared file the detached deploy job writes and any instance can read —
+// in-memory status can't survive the restart. Lives in the git-ignored data/.
+const STATUS_FILE = join(process.cwd(), "data", "update-status.json");
+
+// A stuck "updating" (e.g. the box was rebooted mid-deploy) shouldn't block
+// updates forever; treat one older than this as stale.
+const STALE_UPDATE_MS = 15 * 60 * 1000;
+
+function readUpdateStatusFile(): UpdateStatus | null {
+  try {
+    if (!existsSync(STATUS_FILE)) return null;
+    return JSON.parse(readFileSync(STATUS_FILE, "utf8")) as UpdateStatus;
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateStatusFile(status: UpdateStatus): void {
+  try {
+    writeFileSync(STATUS_FILE, JSON.stringify(status));
+  } catch {
+    // Non-fatal: the file is a convenience mirror of updateStatus.
+  }
+}
+
+function isUpdateInProgress(status: UpdateStatus): boolean {
+  if (status.status !== "updating") return false;
+  if (!status.startedAt) return true;
+  return Date.now() - Date.parse(status.startedAt) < STALE_UPDATE_MS;
+}
 
 /**
  * Get current git commit info
@@ -150,125 +182,72 @@ async function checkForUpdates(): Promise<{
 }
 
 /**
- * Perform rolling update
+ * Kick off a zero-downtime rolling update.
+ *
+ * The deploy restarts this very server, so it can't run as a child of this
+ * process: with KillMode=control-group, `systemctl restart deploy` would kill
+ * the deploy script mid-run. Instead we launch scripts/rolling-deploy.sh as a
+ * transient systemd unit (via a narrowly-scoped passwordless sudo rule), which
+ * runs outside this service's cgroup and survives the restart. That detached
+ * job owns the shared status file from launch onward; the poller reads it.
+ *
+ * Paths are hardcoded to the standard single-tenant install at /home/deploy/
+ * deploy so they match the sudoers grant and the unit's WorkingDirectory.
  */
 async function performRollingUpdate(): Promise<void> {
-  const cwd = process.cwd();
-  const scriptPath = join(cwd, "scripts", "rolling-deploy.sh");
+  const DEPLOY_DIR = "/home/deploy/deploy";
+  const scriptPath = `${DEPLOY_DIR}/scripts/rolling-deploy.sh`;
+  const startedAt = new Date().toISOString();
 
-  updateStatus = {
+  const starting: UpdateStatus = {
     status: "updating",
-    message: "Starting update...",
-    startedAt: new Date().toISOString(),
+    message: "Starting rolling deploy...",
+    startedAt,
   };
+  updateStatus = starting;
+  writeUpdateStatusFile(starting);
 
-  try {
-    // Check if rolling deploy script exists
-    if (existsSync(scriptPath)) {
-      // Use the rolling deploy script for zero-downtime update
-      updateStatus.message = "Running rolling deploy...";
-
-      const proc = spawn(["bash", scriptPath], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      await proc.exited;
-
-      if (proc.exitCode === 0) {
-        updateStatus = {
-          status: "success",
-          message: "Update completed successfully",
-          startedAt: updateStatus.startedAt,
-          completedAt: new Date().toISOString(),
-        };
-      } else {
-        const stderr = await new Response(proc.stderr).text();
-        updateStatus = {
-          status: "error",
-          message: `Update failed: ${stderr}`,
-          startedAt: updateStatus.startedAt,
-          completedAt: new Date().toISOString(),
-        };
-      }
-    } else {
-      // Fallback: manual update steps
-      updateStatus.message = "Pulling latest code...";
-
-      // Git pull
-      const pullProc = spawn(["git", "pull", "origin", "main"], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await pullProc.exited;
-
-      if (pullProc.exitCode !== 0) {
-        throw new Error("Git pull failed");
-      }
-
-      // Install dependencies
-      updateStatus.message = "Installing dependencies...";
-      const installProc = spawn(["bun", "install"], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await installProc.exited;
-
-      if (installProc.exitCode !== 0) {
-        throw new Error("Dependency installation failed");
-      }
-
-      // Build
-      updateStatus.message = "Building...";
-      const buildProc = spawn(["bun", "run", "build"], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await buildProc.exited;
-
-      if (buildProc.exitCode !== 0) {
-        throw new Error("Build failed");
-      }
-
-      // Restart services
-      updateStatus.message = "Restarting services...";
-
-      // Try systemd first (deploy@0 and deploy@1)
-      const restart0 = spawn(["systemctl", "restart", "deploy@0"], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await restart0.exited;
-
-      // Wait for instance 0 to be healthy
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const restart1 = spawn(["systemctl", "restart", "deploy@1"], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await restart1.exited;
-
-      updateStatus = {
-        status: "success",
-        message: "Update completed successfully",
-        startedAt: updateStatus.startedAt,
-        completedAt: new Date().toISOString(),
-      };
-    }
-  } catch (error) {
-    updateStatus = {
+  if (!existsSync(scriptPath)) {
+    const failed: UpdateStatus = {
       status: "error",
-      message: error instanceof Error ? error.message : "Update failed",
-      startedAt: updateStatus.startedAt,
+      message: `Rolling deploy script not found at ${scriptPath}`,
+      startedAt,
       completedAt: new Date().toISOString(),
     };
+    updateStatus = failed;
+    writeUpdateStatusFile(failed);
+    return;
+  }
+
+  // Launch detached, then return — systemd-run (no --wait) exits as soon as the
+  // transient unit starts. We only await that launch to catch start failures
+  // (e.g. the unit name is busy because a deploy is already running).
+  const proc = spawn(
+    [
+      "sudo",
+      "/usr/bin/systemd-run",
+      "--collect",
+      "--unit=deploy-rolling",
+      "--uid=deploy",
+      "--gid=deploy",
+      "--setenv=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      `--working-directory=${DEPLOY_DIR}`,
+      scriptPath,
+    ],
+    { cwd: DEPLOY_DIR, stdout: "pipe", stderr: "pipe" }
+  );
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const stderr = (await new Response(proc.stderr).text()).trim();
+    const failed: UpdateStatus = {
+      status: "error",
+      message: `Failed to start rolling deploy: ${stderr || "unknown error"}`,
+      startedAt,
+      completedAt: new Date().toISOString(),
+    };
+    updateStatus = failed;
+    writeUpdateStatusFile(failed);
   }
 }
 
@@ -306,12 +285,15 @@ export async function handleSystemApi(
 
   // GET /api/system/update-status - Get current update status
   if (method === "GET" && subPath === "/update-status") {
-    return Response.json(updateStatus);
+    // The shared file is authoritative — the detached job writes it, and it
+    // outlives the server restart that in-memory status does not.
+    return Response.json(readUpdateStatusFile() ?? updateStatus);
   }
 
   // POST /api/system/update - Trigger update
   if (method === "POST" && subPath === "/update") {
-    if (updateStatus.status === "updating") {
+    const current = readUpdateStatusFile() ?? updateStatus;
+    if (isUpdateInProgress(current)) {
       return Response.json(
         { error: "Update already in progress" },
         { status: 409 }
