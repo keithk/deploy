@@ -219,23 +219,16 @@ async function performRollingUpdate(): Promise<void> {
     return;
   }
 
-  // Launch detached, then return — systemd-run (no --wait) exits as soon as the
-  // transient unit starts. We only await that launch to catch start failures
-  // (e.g. the unit name is busy because a deploy is already running).
-  const proc = spawn(
-    [
-      "sudo",
-      "/usr/bin/systemd-run",
-      "--collect",
-      "--unit=deploy-rolling",
-      "--uid=deploy",
-      "--gid=deploy",
-      "--setenv=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      `--working-directory=${DEPLOY_DIR}`,
-      scriptPath,
-    ],
-    { cwd: DEPLOY_DIR, stdout: "pipe", stderr: "pipe" }
-  );
+  // Launch detached, then return — the launcher runs `systemd-run` (no --wait),
+  // which exits as soon as the transient unit starts. We only await the launch
+  // to catch start failures (e.g. the unit name is busy because a deploy is
+  // already running). The launcher is a fixed root-owned script so the sudo
+  // grant is a bare path with no fragile argument matching.
+  const proc = spawn(["sudo", "/usr/local/sbin/deploy-rolling-launch"], {
+    cwd: DEPLOY_DIR,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   await proc.exited;
 
   if (proc.exitCode !== 0) {
