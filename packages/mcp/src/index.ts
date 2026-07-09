@@ -145,6 +145,53 @@ server.setRequestHandler(
           },
         },
         {
+          name: "create_site",
+          description:
+            'Create a new site from a GitHub repository or a Docker Compose file. For source_type="github", git_url is required. For source_type="compose", compose_yaml, primary_service, and primary_port are required.',
+          inputSchema: {
+            type: "object",
+            properties: {
+              site: { type: "string", description: "Name/subdomain for the new site" },
+              source_type: { type: "string", enum: ["github", "compose"] },
+              git_url: {
+                type: "string",
+                description:
+                  "Git repository URL. Required when source_type=github; optional reference URL when source_type=compose.",
+              },
+              compose_yaml: {
+                type: "string",
+                description: "Docker Compose file contents (source_type=compose only)",
+              },
+              primary_service: {
+                type: "string",
+                description:
+                  "Name of the compose service to route traffic to (source_type=compose only)",
+              },
+              primary_port: {
+                type: "number",
+                description: "Port the primary service listens on (source_type=compose only)",
+              },
+              persistent_storage: {
+                type: "boolean",
+                description: "Give the compose site a persistent volume (source_type=compose only)",
+              },
+              env_text: {
+                type: "string",
+                description: "Environment variables as KEY=VALUE lines (source_type=compose only)",
+              },
+              sleep_enabled: {
+                type: "boolean",
+                description: "Whether the site should sleep after inactivity",
+              },
+              sleep_after_minutes: {
+                type: "number",
+                description: "Minutes of inactivity before sleeping",
+              },
+            },
+            required: ["site", "source_type"],
+          },
+        },
+        {
           name: "manage_env_vars",
           description:
             "Get or set environment variables for a site. Changes take effect on next build/redeploy.",
@@ -286,6 +333,75 @@ server.setRequestHandler(
                   urls: customDomains.length > 0
                     ? customDomains.map((d) => `https://${d}`)
                     : [`https://${result.name}.keith.is`],
+                },
+                null,
+                2
+              ),
+            } as TextContent,
+          ],
+        };
+      } else if (toolName === "create_site") {
+        const name = args.site as string;
+        if (!name) {
+          throw new Error("site is required");
+        }
+        const sourceType = args.source_type as string;
+
+        let params: Parameters<typeof client.createSite>[0];
+        if (sourceType === "github") {
+          const gitUrl = args.git_url as string | undefined;
+          if (!gitUrl) {
+            throw new Error('git_url is required when source_type="github"');
+          }
+          params = {
+            source_type: "github",
+            name,
+            git_url: gitUrl,
+            sleep_enabled: args.sleep_enabled as boolean | undefined,
+            sleep_after_minutes: args.sleep_after_minutes as number | undefined,
+          };
+        } else if (sourceType === "compose") {
+          const composeYaml = args.compose_yaml as string | undefined;
+          const primaryService = args.primary_service as string | undefined;
+          const primaryPort = args.primary_port as number | undefined;
+          if (!composeYaml || !primaryService || primaryPort == null) {
+            throw new Error(
+              'compose_yaml, primary_service, and primary_port are required when source_type="compose"'
+            );
+          }
+          params = {
+            source_type: "compose",
+            name,
+            compose_yaml: composeYaml,
+            primary_service: primaryService,
+            primary_port: primaryPort,
+            git_url: args.git_url as string | undefined,
+            env_text: args.env_text as string | undefined,
+            persistent_storage: args.persistent_storage as boolean | undefined,
+            sleep_enabled: args.sleep_enabled as boolean | undefined,
+            sleep_after_minutes: args.sleep_after_minutes as number | undefined,
+          };
+        } else {
+          throw new Error('source_type must be "github" or "compose"');
+        }
+
+        const site = await client.createSite(params);
+        const customDomains = parseCustomDomains(site);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  message: "Site created",
+                  name: site.name,
+                  id: site.id,
+                  type: site.type,
+                  urls:
+                    customDomains.length > 0
+                      ? customDomains.map((d) => `https://${d}`)
+                      : [`https://${site.name}.keith.is`],
                 },
                 null,
                 2

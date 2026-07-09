@@ -16,6 +16,29 @@ export interface ApiError {
   details?: unknown;
 }
 
+export interface CreateGithubSiteParams {
+  source_type: "github";
+  name: string;
+  git_url: string;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number;
+}
+
+export interface CreateComposeSiteParams {
+  source_type: "compose";
+  name: string;
+  compose_yaml: string;
+  primary_service: string;
+  primary_port: number;
+  git_url?: string;
+  env_text?: string;
+  persistent_storage?: boolean;
+  sleep_enabled?: boolean;
+  sleep_after_minutes?: number;
+}
+
+export type CreateSiteParams = CreateGithubSiteParams | CreateComposeSiteParams;
+
 export class DeployApiClient {
   private apiUrl: string;
   private sessionToken: string;
@@ -109,6 +132,11 @@ export class DeployApiClient {
     return sites.find((s) => s.name === name) || null;
   }
 
+  // Create a new site from a GitHub repo or a Docker Compose file
+  async createSite(params: CreateSiteParams): Promise<Site> {
+    return this.request<Site>("POST", "/api/sites", params);
+  }
+
   // Trigger a deployment
   async deploySite(siteId: string): Promise<{ message: string; site_id: string }> {
     return this.request("POST", `/api/sites/${siteId}/deploy`, {});
@@ -124,7 +152,7 @@ export class DeployApiClient {
     if (type) {
       path += `&type=${type}`;
     }
-    return this.request(path, "GET");
+    return this.request("GET", path);
   }
 
   // Update a site (PATCH)
