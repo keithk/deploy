@@ -63,7 +63,7 @@ export async function cloneSite(
     debug(`Successfully cloned ${gitUrl} to ${sitePath}`);
     return sitePath;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof $.ShellError ? err.stderr.toString().trim() : String(err);
     error(`Failed to clone ${gitUrl}: ${message}`);
     throw new Error(`Git clone failed: ${message}`);
   }
@@ -100,7 +100,7 @@ export async function pullSite(
     await $`git -C ${sitePath} reset --hard origin/${branch}`.quiet();
     debug(`Successfully pulled latest changes for ${name}`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof $.ShellError ? err.stderr.toString().trim() : String(err);
     error(`Failed to pull ${name}: ${message}`);
     throw new Error(`Git pull failed: ${message}`);
   }

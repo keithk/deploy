@@ -33,12 +33,31 @@ import {
 import { discoverSiteActions } from "./actions";
 import type { Site } from "@keithk/deploy-core";
 
+/** Sites currently being deployed — prevents concurrent deploys from racing on the same container */
+const deployInProgress = new Set<string>();
+
 /**
  * Deploy a site: clone/pull -> build -> start container -> update status
+ * Guards against concurrent deploys of the same site (e.g. a double-click on
+ * Redeploy), which otherwise race to stop/start the same container name.
  * @param siteId The ID of the site to deploy
  * @returns Result with success status, deployment ID, and optional error message
  */
 export async function deploySite(
+  siteId: string
+): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
+  if (deployInProgress.has(siteId)) {
+    return { success: false, error: "A deployment is already in progress for this site" };
+  }
+  deployInProgress.add(siteId);
+  try {
+    return await runDeploy(siteId);
+  } finally {
+    deployInProgress.delete(siteId);
+  }
+}
+
+async function runDeploy(
   siteId: string
 ): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
   let site;
