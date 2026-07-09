@@ -1,18 +1,37 @@
 // ABOUTME: App header component with navigation and theme toggle
-// ABOUTME: Provides site branding, nav links, and light/dark/system theme switching
+// ABOUTME: Provides site branding, nav links, keyboard shortcuts, and light/dark/system theme switching
+
+import { router } from '../router.js';
 
 interface Settings {
   domain?: string;
 }
 
+// Nav destinations, keyed by the digit that jumps to them (⌘/Ctrl + digit).
+const NAV_SHORTCUTS: Record<string, string> = {
+  '1': '/',
+  '2': '/deployments',
+  '3': '/actions',
+  '4': '/settings',
+};
+
 class DeployHeader extends HTMLElement {
   private domain: string = '';
   private currentTheme: 'system' | 'light' | 'dark' = 'system';
+  private handleShortcut = (e: KeyboardEvent) => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+    const path = NAV_SHORTCUTS[e.key];
+    if (!path) return;
+    e.preventDefault();
+    router.navigate(path);
+  };
 
   connectedCallback() {
     this.loadTheme();
     this.render();
     this.loadSettings();
+
+    document.addEventListener('keydown', this.handleShortcut);
 
     // Listen for system theme changes
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -20,6 +39,10 @@ class DeployHeader extends HTMLElement {
         this.applyTheme();
       }
     });
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener('keydown', this.handleShortcut);
   }
 
   async loadSettings() {
@@ -79,10 +102,10 @@ class DeployHeader extends HTMLElement {
               <span class="header-brand-domain">${this.domain || window.location.hostname}</span>
             </a>
             <nav class="header-nav">
-              <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route>Sites</a>
-              <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route>Deployments</a>
-              <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route>Actions</a>
-              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route>Settings</a>
+              <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route><span class="kbd">⌘1</span>Sites</a>
+              <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route><span class="kbd">⌘2</span>Deployments</a>
+              <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route><span class="kbd">⌘3</span>Actions</a>
+              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route><span class="kbd">⌘4</span>Settings</a>
             </nav>
           </div>
           <div class="header-right">

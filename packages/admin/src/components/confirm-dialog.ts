@@ -65,8 +65,8 @@ class DeployConfirmDialog extends HTMLElement {
             <p>${this.escapeHtml(this.message)}</p>
           </div>
           <div class="modal-footer">
-            <button class="btn" id="confirm-cancel-btn">${this.escapeHtml(this.cancelText)}</button>
-            <button class="${confirmBtnClass}" id="confirm-ok-btn">${this.escapeHtml(this.confirmText)}</button>
+            <button class="btn" id="confirm-cancel-btn"><span class="kbd">Esc</span>${this.escapeHtml(this.cancelText)}</button>
+            <button class="${confirmBtnClass}" id="confirm-ok-btn"><span class="kbd">⏎</span>${this.escapeHtml(this.confirmText)}</button>
           </div>
         </div>
       </div>

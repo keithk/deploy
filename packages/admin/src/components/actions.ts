@@ -141,6 +141,7 @@ class DeployActions extends HTMLElement {
         .actions-list {
           display: flex;
           flex-direction: column;
+          border: 1px solid var(--border-strong);
         }
         .action-row {
           display: flex;
@@ -148,9 +149,15 @@ class DeployActions extends HTMLElement {
           gap: var(--space-4);
           padding: var(--space-4);
           border-bottom: 1px solid var(--border);
+          border-left: 2px solid transparent;
+          transition: background 0.15s ease, border-left-color 0.15s ease;
         }
         .action-row:last-child {
           border-bottom: none;
+        }
+        .action-row:hover {
+          background: var(--surface);
+          border-left-color: var(--accent);
         }
         .action-status {
           width: 8px;

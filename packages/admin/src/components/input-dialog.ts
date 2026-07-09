@@ -72,8 +72,8 @@ class DeployInputDialog extends HTMLElement {
               />
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn" id="input-cancel-btn">${this.escapeHtml(this.cancelText)}</button>
-              <button type="submit" class="btn btn-primary" id="input-submit-btn">${this.escapeHtml(this.submitText)}</button>
+              <button type="button" class="btn" id="input-cancel-btn"><span class="kbd">Esc</span>${this.escapeHtml(this.cancelText)}</button>
+              <button type="submit" class="btn btn-primary" id="input-submit-btn"><span class="kbd">⏎</span>${this.escapeHtml(this.submitText)}</button>
             </div>
           </form>
         </div>
