@@ -20,6 +20,7 @@ import {
 import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database, parseCustomDomains } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
+import { isReservedHost } from "./utils/reserved-hosts";
 import { handleApiRequest } from "./api/handlers";
 import { handleAutodeployWebhook } from "./api/autodeploy-webhook";
 import { isPasswordConfigured } from "./api/auth";
@@ -339,9 +340,9 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     
     const projectDomain = process.env.PROJECT_DOMAIN || 'dev.flexi';
 
-    // Always allow admin subdomain
-    if (domain === `admin.${projectDomain}`) {
-      info(`Domain validation approved: ${domain} (admin)`);
+    // Control-plane hosts have no site record of their own
+    if (isReservedHost(domain, projectDomain)) {
+      info(`Domain validation approved: ${domain} (reserved)`);
       return new Response('Domain validated', { status: 200 });
     }
 
