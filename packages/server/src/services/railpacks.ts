@@ -18,6 +18,8 @@ export interface BuildOptions {
   ioClass?: "idle" | "best-effort" | "realtime";
   /** BuildKit max parallelism (number of concurrent operations). Default: 2 */
   maxParallelism?: number;
+  /** Cancels the Railpack subprocess when the deployment is cancelled. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -56,6 +58,10 @@ export async function buildWithRailpacks(
   info(`Building ${siteName} with Railpack (nice=${opts.niceLevel}, io=${opts.ioClass}, parallelism=${opts.maxParallelism})`);
 
   try {
+    if (opts.signal?.aborted) {
+      throw opts.signal.reason;
+    }
+
     // Map IO class to ionice class number
     const ioClassMap = { realtime: 1, "best-effort": 2, idle: 3 };
     const ioClassNum = ioClassMap[opts.ioClass || "idle"];
@@ -77,9 +83,14 @@ export async function buildWithRailpacks(
       stdout: "pipe",
       stderr: "pipe",
       env,
+      signal: opts.signal,
     });
 
     const exitCode = await proc.exited;
+
+    if (opts.signal?.aborted) {
+      throw opts.signal.reason;
+    }
 
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text();
@@ -89,6 +100,9 @@ export async function buildWithRailpacks(
     debug(`Successfully built image ${imageName}`);
     return { success: true, imageName };
   } catch (err) {
+    if (opts.signal?.aborted) {
+      throw opts.signal.reason;
+    }
     const message = err instanceof Error ? err.message : String(err);
     error(`Failed to build ${siteName}: ${message}`);
     return { success: false, imageName, error: `Railpack build failed: ${message}` };

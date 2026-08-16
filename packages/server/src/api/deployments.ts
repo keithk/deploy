@@ -7,6 +7,7 @@ import {
   siteModel,
 } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
+import { cancelDeployment } from "../services/deploy";
 
 /**
  * Handle /api/deployments requests
@@ -33,6 +34,18 @@ export async function handleDeploymentsApi(
     }
   }
 
+  // /api/deployments/:id/cancel
+  if (
+    pathParts.length === 4 &&
+    pathParts[1] === "deployments" &&
+    pathParts[3] === "cancel"
+  ) {
+    const deploymentId = pathParts[2];
+    if (method === "POST") {
+      return handleCancelDeployment(request, deploymentId);
+    }
+  }
+
   // /api/deployments/:id
   if (pathParts.length === 3 && pathParts[1] === "deployments") {
     const deploymentId = pathParts[2];
@@ -50,6 +63,32 @@ export async function handleDeploymentsApi(
   }
 
   return null;
+}
+
+/**
+ * POST /api/deployments/:id/cancel - Cancel an in-progress deployment
+ */
+async function handleCancelDeployment(
+  request: Request,
+  deploymentId: string
+): Promise<Response> {
+  const authResponse = requireAuth(request);
+  if (authResponse) {
+    return authResponse;
+  }
+
+  try {
+    const result = cancelDeployment(deploymentId);
+    if (!result.success) {
+      const status = result.reason === "not_found" ? 404 : 409;
+      return Response.json({ error: result.error }, { status });
+    }
+
+    return Response.json({ message: "Deployment cancelled" });
+  } catch (error) {
+    console.error("Error cancelling deployment:", error);
+    return Response.json({ error: "Failed to cancel deployment" }, { status: 500 });
+  }
 }
 
 /**

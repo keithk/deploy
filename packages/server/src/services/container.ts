@@ -353,12 +353,17 @@ export async function isContainerRunning(siteName: string): Promise<boolean> {
  */
 export async function waitForContainerHealth(
   port: number,
-  timeoutMs: number = 30000
+  timeoutMs: number = 30000,
+  signal?: AbortSignal
 ): Promise<boolean> {
   const startTime = Date.now();
   const checkInterval = 1000;
 
   while (Date.now() - startTime < timeoutMs) {
+    if (signal?.aborted) {
+      throw signal.reason;
+    }
+
     try {
       const healthPath = process.env.HEALTHCHECK_PATH || "/";
       const response = await fetch(`http://localhost:${port}${healthPath}`, {
@@ -372,9 +377,23 @@ export async function waitForContainerHealth(
         return true;
       }
     } catch {
+      if (signal?.aborted) {
+        throw signal.reason;
+      }
       // Container not ready yet
     }
-    await new Promise((resolve) => setTimeout(resolve, checkInterval));
+
+    await new Promise<void>((resolve, reject) => {
+      const handleAbort = () => {
+        clearTimeout(timeout);
+        reject(signal?.reason);
+      };
+      const timeout = setTimeout(() => {
+        signal?.removeEventListener("abort", handleAbort);
+        resolve();
+      }, checkInterval);
+      signal?.addEventListener("abort", handleAbort, { once: true });
+    });
   }
 
   error(

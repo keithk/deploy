@@ -1185,6 +1185,11 @@ body {
   min-width: 0;
 }
 
+.deployment-actions {
+  align-self: center;
+  margin-left: auto;
+}
+
 .deployment-header {
   display: flex;
   align-items: center;

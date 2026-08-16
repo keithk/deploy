@@ -1,6 +1,9 @@
 // ABOUTME: Deployments list component showing active and historical deployments
 // ABOUTME: Displays deployment status, site name, timing, and error messages
 
+import { showConfirm } from './confirm-dialog.js';
+import { showToast } from './toast.js';
+
 interface Deployment {
   id: string;
   site_id: string;
@@ -22,8 +25,10 @@ class DeployDeployments extends HTMLElement {
   private activeDeployments: Deployment[] = [];
   private loading: boolean = true;
   private refreshInterval: number | null = null;
+  private cancellingDeploymentIds = new Set<string>();
 
   connectedCallback() {
+    this.addEventListener('click', this.handleClick);
     this.render();
     this.loadDeployments();
     // Refresh every 3 seconds to show active deployment progress
@@ -31,8 +36,61 @@ class DeployDeployments extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.removeEventListener('click', this.handleClick);
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
+    }
+  }
+
+  private handleClick = (event: Event) => {
+    const target = event.target as Element;
+    const button = target.closest<HTMLButtonElement>('[data-cancel-deployment]');
+    if (!button) return;
+
+    const deployment = this.activeDeployments.find(
+      (item) => item.id === button.dataset.cancelDeployment
+    );
+    if (deployment) {
+      void this.handleCancelDeployment(deployment);
+    }
+  };
+
+  private async handleCancelDeployment(deployment: Deployment) {
+    if (this.cancellingDeploymentIds.has(deployment.id)) return;
+
+    const confirmed = await showConfirm(
+      'Cancel Deployment',
+      `Cancel the in-progress deployment for ${deployment.site_name}?`,
+      { confirmText: 'Cancel Deployment', destructive: true }
+    );
+    if (!confirmed) return;
+    if (this.cancellingDeploymentIds.has(deployment.id)) return;
+
+    this.cancellingDeploymentIds.add(deployment.id);
+    this.render();
+
+    try {
+      const response = await fetch(`/api/deployments/${deployment.id}/cancel`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to cancel deployment');
+      }
+
+      showToast(`Cancelled deployment for ${deployment.site_name}`, 'success');
+      await this.loadDeployments();
+    } catch (error) {
+      console.error('Failed to cancel deployment:', error);
+      showToast(
+        error instanceof Error ? error.message : 'Failed to cancel deployment',
+        'error'
+      );
+    } finally {
+      this.cancellingDeploymentIds.delete(deployment.id);
+      this.render();
     }
   }
 
@@ -172,6 +230,7 @@ class DeployDeployments extends HTMLElement {
     const statusLabel = this.getStatusLabel(deployment.status);
     const duration = this.formatDuration(deployment.started_at, deployment.completed_at);
     const startTime = this.formatTime(deployment.started_at);
+    const isCancelling = this.cancellingDeploymentIds.has(deployment.id);
 
     return `
       <div class="deployment-row ${isActive ? 'deployment-active' : ''}">
@@ -188,6 +247,16 @@ class DeployDeployments extends HTMLElement {
           </div>
           ${deployment.error_message ? `<div class="deployment-error">${deployment.error_message}</div>` : ''}
         </div>
+        ${isActive ? `
+          <div class="deployment-actions">
+            <button
+              type="button"
+              class="btn btn-sm btn-danger"
+              data-cancel-deployment="${deployment.id}"
+              ${isCancelling ? 'disabled' : ''}
+            >${isCancelling ? 'Cancelling...' : 'Cancel'}</button>
+          </div>
+        ` : ''}
       </div>
     `;
   }

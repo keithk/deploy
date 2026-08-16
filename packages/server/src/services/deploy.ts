@@ -36,6 +36,70 @@ import type { Site } from "@keithk/deploy-core";
 /** Sites currently being deployed — prevents concurrent deploys from racing on the same container */
 const deployInProgress = new Set<string>();
 
+/** Live deployment workers keyed by deployment ID so the API can cancel them. */
+const deploymentAbortControllers = new Map<string, AbortController>();
+
+const DEPLOYMENT_CANCELLED_MESSAGE = "Deployment cancelled by user";
+
+function throwIfDeploymentCancelled(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw signal.reason;
+  }
+}
+
+export type CancelDeploymentResult =
+  | { success: true }
+  | { success: false; reason: "not_found" | "not_active"; error: string };
+
+/**
+ * Cancel a live deployment, or close an abandoned in-progress record.
+ */
+export function cancelDeployment(deploymentId: string): CancelDeploymentResult {
+  const deployment = deploymentModel.findById(deploymentId);
+  if (!deployment) {
+    return { success: false, reason: "not_found", error: "Deployment not found" };
+  }
+
+  if (["completed", "failed", "rolled_back"].includes(deployment.status)) {
+    return {
+      success: false,
+      reason: "not_active",
+      error: "Deployment is no longer in progress",
+    };
+  }
+
+  const controller = deploymentAbortControllers.get(deploymentId);
+  controller?.abort(new Error(DEPLOYMENT_CANCELLED_MESSAGE));
+
+  for (const step of deploymentStepModel.findByDeploymentId(deploymentId)) {
+    if (step.status === "running") {
+      deploymentStepModel.completeStep(step.id, DEPLOYMENT_CANCELLED_MESSAGE);
+    }
+  }
+  deploymentModel.fail(deploymentId, DEPLOYMENT_CANCELLED_MESSAGE);
+  logModel.append(deployment.site_id, "build", DEPLOYMENT_CANCELLED_MESSAGE);
+
+  // A stale record has no worker left to restore the site status in its catch
+  // block. Make the site deployable again while preserving a previous version.
+  if (!controller) {
+    const site = siteModel.findById(deployment.site_id);
+    if (site?.status === "building") {
+      if (deployment.old_container_id && deployment.old_port) {
+        siteModel.updateStatus(
+          site.id,
+          "running",
+          deployment.old_container_id,
+          deployment.old_port
+        );
+      } else {
+        siteModel.updateStatus(site.id, "stopped");
+      }
+    }
+  }
+
+  return { success: true };
+}
+
 /**
  * Deploy a site: clone/pull -> build -> start container -> update status
  * Guards against concurrent deploys of the same site (e.g. a double-click on
@@ -50,15 +114,17 @@ export async function deploySite(
     return { success: false, error: "A deployment is already in progress for this site" };
   }
   deployInProgress.add(siteId);
+  const controller = new AbortController();
   try {
-    return await runDeploy(siteId);
+    return await runDeploy(siteId, controller);
   } finally {
     deployInProgress.delete(siteId);
   }
 }
 
 async function runDeploy(
-  siteId: string
+  siteId: string,
+  controller: AbortController
 ): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
   let site;
   try {
@@ -78,7 +144,7 @@ async function runDeploy(
   }
 
   if (site.type === "compose") {
-    return deployComposeSite(site);
+    return deployComposeSite(site, controller);
   }
 
   info(`Starting deployment for site: ${site.name}`);
@@ -98,6 +164,9 @@ async function runDeploy(
   // Tracks the currently-running step row so the catch block can mark it failed.
   // We null this out the moment a step is closed (success or handled failure).
   let currentStepId: string | null = null;
+  let containerInfo: Awaited<ReturnType<typeof startContainer>> | null = null;
+  let blueGreenSwitched = false;
+  const { signal } = controller;
 
   try {
     // Create a deployment record to track progress
@@ -106,6 +175,8 @@ async function runDeploy(
       old_container_id: site.container_id,
       old_port: site.port,
     });
+    deploymentAbortControllers.set(deployment.id, controller);
+    throwIfDeploymentCancelled(signal);
     // Only update status to building if there's NO existing container
     // For blue-green deploys, keep status as "running" so routing continues to work
     if (!hasExistingContainer) {
@@ -120,6 +191,7 @@ async function runDeploy(
     deploymentModel.updateStatus(deployment.id, "cloning");
     log(`Cloning repository from ${site.git_url}...`);
     const sitePath = await cloneSite(site.git_url, site.name, site.branch);
+    throwIfDeploymentCancelled(signal);
     log(`Repository cloned to ${sitePath}`);
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
@@ -128,7 +200,8 @@ async function runDeploy(
     currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
     deploymentModel.updateStatus(deployment.id, "building");
     log(`Building with Railpack...`);
-    const buildResult = await buildWithRailpacks(sitePath, site.name);
+    const buildResult = await buildWithRailpacks(sitePath, site.name, { signal });
+    throwIfDeploymentCancelled(signal);
     if (!buildResult.success) {
       throw new Error(buildResult.error || "Build failed");
     }
@@ -146,7 +219,7 @@ async function runDeploy(
       }...`
     );
     const envVars = parseEnvVars(site.env_vars);
-    const containerInfo = await startContainer(
+    containerInfo = await startContainer(
       buildResult.imageName,
       site.name,
       {
@@ -155,6 +228,7 @@ async function runDeploy(
         blueGreen: !!hasExistingContainer,
       }
     );
+    throwIfDeploymentCancelled(signal);
     log(`Container started on port ${containerInfo.port}`);
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
@@ -166,7 +240,12 @@ async function runDeploy(
     const containerName = containerInfo.isBlueGreen
       ? `deploy-${site.name}-new`
       : `deploy-${site.name}`;
-    const isHealthy = await waitForContainerHealth(containerInfo.port, 120000);
+    const isHealthy = await waitForContainerHealth(
+      containerInfo.port,
+      120000,
+      signal
+    );
+    throwIfDeploymentCancelled(signal);
     if (!isHealthy) {
       // Close the health_check step now so its duration reflects time-to-failure,
       // not time-spent-on-recovery work below.
@@ -222,6 +301,8 @@ async function runDeploy(
       deploymentModel.updateStatus(deployment.id, "switching");
       log(`Completing blue-green deployment...`);
       await completeBlueGreenDeployment(site.name);
+      blueGreenSwitched = true;
+      throwIfDeploymentCancelled(signal);
       deploymentStepModel.completeStep(currentStepId);
       currentStepId = null;
     }
@@ -242,6 +323,7 @@ async function runDeploy(
     ).id;
     log(`Discovering actions...`);
     const actions = await discoverSiteActions(sitePath, siteId);
+    throwIfDeploymentCancelled(signal);
     if (actions.length > 0) {
       // Clear old actions for this site first
       actionModel.deleteBySiteId(siteId);
@@ -262,6 +344,7 @@ async function runDeploy(
     currentStepId = null;
 
     // Mark deployment as completed
+    throwIfDeploymentCancelled(signal);
     deploymentModel.complete(
       deployment.id,
       containerInfo.containerId,
@@ -271,9 +354,26 @@ async function runDeploy(
     log(`Deployment complete!`);
     return { success: true, deploymentId: deployment.id };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const cancelled = signal.aborted;
+    const message = cancelled
+      ? DEPLOYMENT_CANCELLED_MESSAGE
+      : err instanceof Error
+        ? err.message
+        : String(err);
     error(`Deployment failed for ${site.name}: ${message}`);
     logModel.append(siteId, "build", `ERROR: ${message}`);
+
+    if (cancelled && containerInfo) {
+      if (containerInfo.isBlueGreen) {
+        if (blueGreenSwitched) {
+          await stopContainer(site.name);
+        } else {
+          await rollbackBlueGreenDeployment(site.name);
+        }
+      } else {
+        await stopContainer(site.name);
+      }
+    }
 
     // Close the active step (if any) as failed.
     if (currentStepId) {
@@ -285,9 +385,10 @@ async function runDeploy(
       deploymentModel.fail(deployment.id, message);
     }
 
-    // Update status to error (but only if we don't have a healthy old container)
-    if (!hasExistingContainer) {
-      siteModel.updateStatus(siteId, "error");
+    // Preserve the old container unless a completed blue-green switch already
+    // replaced it; in that case cancellation leaves the site stopped.
+    if (!hasExistingContainer || (cancelled && blueGreenSwitched)) {
+      siteModel.updateStatus(siteId, cancelled ? "stopped" : "error");
     } else {
       // Restore to running if old container is still serving
       siteModel.updateStatus(
@@ -300,6 +401,10 @@ async function runDeploy(
     }
 
     return { success: false, error: message, deploymentId: deployment?.id };
+  } finally {
+    if (deployment) {
+      deploymentAbortControllers.delete(deployment.id);
+    }
   }
 }
 
@@ -344,7 +449,8 @@ export async function stopSite(siteId: string): Promise<void> {
  * No blue-green for v1 (`up -d` recreates only changed services; brief downtime acceptable).
  */
 async function deployComposeSite(
-  site: Site
+  site: Site,
+  controller: AbortController
 ): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
   const log = (message: string) => {
     info(message);
@@ -363,6 +469,9 @@ async function deployComposeSite(
 
   let deployment: ReturnType<typeof deploymentModel.create> | null = null;
   let currentStepId: string | null = null;
+  let composeStartAttempted = false;
+  const wasRunning = site.status === "running";
+  const { signal } = controller;
 
   try {
     deployment = deploymentModel.create({
@@ -370,6 +479,8 @@ async function deployComposeSite(
       old_container_id: site.container_id,
       old_port: site.port,
     });
+    deploymentAbortControllers.set(deployment.id, controller);
+    throwIfDeploymentCancelled(signal);
     siteModel.updateStatus(site.id, "building");
 
     // Step 1: prepare — write compose.yml
@@ -378,6 +489,7 @@ async function deployComposeSite(
     // Use the shared port allocator: checks both the DB AND `docker ps` so we don't
     // collide with running containers from other sites (the deploy-resume site bug).
     const allocatedPort = await getNextPort(site.name);
+    throwIfDeploymentCancelled(signal);
     log(`Allocated host port ${allocatedPort} for primary service ${site.primary_service}`);
     log(`Writing compose project files...`);
     writeComposeProject(site, {
@@ -393,7 +505,9 @@ async function deployComposeSite(
     log(`Pulling images...`);
     try {
       await pullCompose(site.name);
+      throwIfDeploymentCancelled(signal);
     } catch (pullErr) {
+      throwIfDeploymentCancelled(signal);
       // Warn but don't fail — service may use `build:` directives
       log(`docker compose pull warned: ${pullErr instanceof Error ? pullErr.message : String(pullErr)}`);
     }
@@ -403,7 +517,9 @@ async function deployComposeSite(
     // Step 3: start (compose up)
     currentStepId = deploymentStepModel.startStep(deployment.id, "start").id;
     log(`Starting compose project...`);
+    composeStartAttempted = true;
     await upCompose(site.name);
+    throwIfDeploymentCancelled(signal);
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
 
@@ -411,7 +527,12 @@ async function deployComposeSite(
     currentStepId = deploymentStepModel.startStep(deployment.id, "health_check").id;
     deploymentModel.updateStatus(deployment.id, "healthy");
     log(`Waiting for primary service to become healthy on port ${allocatedPort}...`);
-    const isHealthy = await waitForContainerHealth(allocatedPort, 120000);
+    const isHealthy = await waitForContainerHealth(
+      allocatedPort,
+      120000,
+      signal
+    );
+    throwIfDeploymentCancelled(signal);
     if (!isHealthy) {
       deploymentStepModel.completeStep(currentStepId, "Primary service failed health check");
       currentStepId = null;
@@ -438,6 +559,7 @@ async function deployComposeSite(
 
     // Step 5: mark deployed — resolve primary container ID for metrics + status row
     const primaryContainerId = await getPrimaryContainerId(site.name, site.primary_service);
+    throwIfDeploymentCancelled(signal);
     siteModel.updateStatus(
       site.id,
       "running",
@@ -446,14 +568,24 @@ async function deployComposeSite(
     );
     siteModel.markDeployed(site.id);
 
+    throwIfDeploymentCancelled(signal);
     deploymentModel.complete(deployment.id, primaryContainerId ?? "", allocatedPort);
 
     log(`Compose deployment complete!`);
     return { success: true, deploymentId: deployment.id };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const cancelled = signal.aborted;
+    const message = cancelled
+      ? DEPLOYMENT_CANCELLED_MESSAGE
+      : err instanceof Error
+        ? err.message
+        : String(err);
     error(`Compose deployment failed for ${site.name}: ${message}`);
     logModel.append(site.id, "build", `ERROR: ${message}`);
+
+    if (cancelled && composeStartAttempted) {
+      await downCompose(site.name, false);
+    }
 
     if (currentStepId) {
       deploymentStepModel.completeStep(currentStepId, message);
@@ -461,8 +593,15 @@ async function deployComposeSite(
     if (deployment) {
       deploymentModel.fail(deployment.id, message);
     }
-    siteModel.updateStatus(site.id, "error");
+    siteModel.updateStatus(
+      site.id,
+      cancelled ? (wasRunning && !composeStartAttempted ? "running" : "stopped") : "error"
+    );
     return { success: false, error: message, deploymentId: deployment?.id };
+  } finally {
+    if (deployment) {
+      deploymentAbortControllers.delete(deployment.id);
+    }
   }
 }
 
