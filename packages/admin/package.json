@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/app.js",
   "scripts": {
-    "build": "bun build src/app.ts --outdir=dist --format=esm --target=browser --splitting && cp src/index.html dist/ && cp -r src/styles dist/ && cp -r src/fonts dist/",
+    "build": "bun build src/app.ts --outdir=dist --format=esm --target=browser --splitting && cp src/index.html favicon.svg dist/ && cp -r src/styles dist/ && cp -r src/fonts dist/",
     "dev": "bun build src/app.ts --outdir=dist --format=esm --target=browser --splitting --watch"
   },
   "devDependencies": {

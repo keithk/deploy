@@ -163,6 +163,9 @@ class DeploySiteDetail extends HTMLElement {
       const response = await fetch(`/api/sites/${this.siteId}`);
       if (response.ok) {
         this.site = await response.json();
+        if (this.isConnected && this.site) {
+          document.title = `${this.site.name} · deploy`;
+        }
         await this.loadTabData();
       }
     } catch (error) {

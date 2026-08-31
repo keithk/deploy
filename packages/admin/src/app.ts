@@ -31,6 +31,7 @@ class DeployApp extends HTMLElement {
   }
 
   renderSites() {
+    document.title = 'Sites · deploy';
     this.innerHTML = `
       <deploy-header></deploy-header>
       <main class="main-content">
@@ -40,6 +41,7 @@ class DeployApp extends HTMLElement {
   }
 
   renderSettings() {
+    document.title = 'Settings · deploy';
     this.innerHTML = `
       <deploy-header></deploy-header>
       <main class="main-content">
@@ -49,6 +51,7 @@ class DeployApp extends HTMLElement {
   }
 
   renderActions() {
+    document.title = 'Actions · deploy';
     this.innerHTML = `
       <deploy-header></deploy-header>
       <main class="main-content">
@@ -58,6 +61,7 @@ class DeployApp extends HTMLElement {
   }
 
   renderSiteDetail(siteId: string) {
+    document.title = 'Site · deploy';
     this.innerHTML = `
       <deploy-header></deploy-header>
       <main class="main-content">
@@ -67,6 +71,7 @@ class DeployApp extends HTMLElement {
   }
 
   renderDeployments() {
+    document.title = 'Deployments · deploy';
     this.innerHTML = `
       <deploy-header></deploy-header>
       <main class="main-content">
