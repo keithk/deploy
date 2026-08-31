@@ -1,5 +1,5 @@
-// ABOUTME: App header component with navigation and theme toggle
-// ABOUTME: Provides site branding, nav links, keyboard shortcuts, and light/dark/system theme switching
+// ABOUTME: CRT app header with navigation and display controls.
+// ABOUTME: Provides site branding, keyboard shortcuts, scanline preference, and sign-out.
 
 import { router } from '../router.js';
 
@@ -18,7 +18,7 @@ const NAV_SHORTCUTS: Record<string, string> = {
 
 class DeployHeader extends HTMLElement {
   private domain: string = '';
-  private currentTheme: 'system' | 'light' | 'dark' = 'system';
+  private scanlinesEnabled = true;
   private handleShortcut = (e: KeyboardEvent) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
     const path = NAV_SHORTCUTS[e.key];
@@ -28,18 +28,12 @@ class DeployHeader extends HTMLElement {
   };
 
   connectedCallback() {
-    this.loadTheme();
+    this.scanlinesEnabled = localStorage.getItem('scanlines') !== 'off';
+    this.applyScanlines();
     this.render();
     this.loadSettings();
 
     document.addEventListener('keydown', this.handleShortcut);
-
-    // Listen for system theme changes
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (this.currentTheme === 'system') {
-        this.applyTheme();
-      }
-    });
   }
 
   disconnectedCallback() {
@@ -61,29 +55,17 @@ class DeployHeader extends HTMLElement {
     }
   }
 
-  loadTheme() {
-    const stored = localStorage.getItem('theme') as 'system' | 'light' | 'dark' | null;
-    this.currentTheme = stored || 'system';
-    this.applyTheme();
+  applyScanlines() {
+    document.documentElement.setAttribute(
+      'data-scanlines',
+      this.scanlinesEnabled ? 'on' : 'off'
+    );
   }
 
-  applyTheme() {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    let effectiveTheme: 'light' | 'dark';
-
-    if (this.currentTheme === 'system') {
-      effectiveTheme = prefersDark ? 'dark' : 'light';
-    } else {
-      effectiveTheme = this.currentTheme;
-    }
-
-    document.documentElement.setAttribute('data-theme', effectiveTheme);
-  }
-
-  setTheme(theme: 'system' | 'light' | 'dark') {
-    this.currentTheme = theme;
-    localStorage.setItem('theme', theme);
-    this.applyTheme();
+  toggleScanlines() {
+    this.scanlinesEnabled = !this.scanlinesEnabled;
+    localStorage.setItem('scanlines', this.scanlinesEnabled ? 'on' : 'off');
+    this.applyScanlines();
     this.render();
   }
 
@@ -97,60 +79,27 @@ class DeployHeader extends HTMLElement {
     this.innerHTML = `
       <header class="app-header">
         <div class="header-inner">
-          <div class="header-left">
-            <a href="/" class="header-brand" data-route>
-              <span class="header-brand-name">deploy</span>
-              <span class="header-brand-domain">${this.domain || window.location.hostname}</span>
-            </a>
-            <nav class="header-nav">
-              <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route><span class="kbd">⌘1</span>Sites</a>
-              <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route><span class="kbd">⌘2</span>Deployments</a>
-              <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route><span class="kbd">⌘3</span>Actions</a>
-              <a href="/server" class="nav-link ${path === '/server' ? 'active' : ''}" data-route><span class="kbd">⌘4</span>Server</a>
-              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route><span class="kbd">⌘5</span>Settings</a>
-            </nav>
-          </div>
+          <a href="/" class="header-brand" data-route aria-label="Deploy home">
+            <span class="header-brand-name">DEPLOY v2.4.1</span>
+            <span class="header-brand-divider">//</span>
+            <span class="header-brand-domain">${this.domain || window.location.hostname}</span>
+          </a>
+          <nav class="header-nav" aria-label="Primary navigation">
+            <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route title="Sites (⌘1)">Sites</a>
+            <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route title="Deploys (⌘2)">Deploys</a>
+            <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route title="Actions (⌘3)">Actions</a>
+            <a href="/server" class="nav-link ${path === '/server' ? 'active' : ''}" data-route title="Server (⌘4)">Server</a>
+            <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route title="Config (⌘5)">Config</a>
+          </nav>
           <div class="header-right">
-            <div class="theme-toggle">
-              <button class="theme-btn ${this.currentTheme === 'system' ? 'active' : ''}" data-theme="system" title="System theme">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                  <line x1="8" y1="21" x2="16" y2="21"></line>
-                  <line x1="12" y1="17" x2="12" y2="21"></line>
-                </svg>
-              </button>
-              <button class="theme-btn ${this.currentTheme === 'light' ? 'active' : ''}" data-theme="light" title="Light theme">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="5"></circle>
-                  <line x1="12" y1="1" x2="12" y2="3"></line>
-                  <line x1="12" y1="21" x2="12" y2="23"></line>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                  <line x1="1" y1="12" x2="3" y2="12"></line>
-                  <line x1="21" y1="12" x2="23" y2="12"></line>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-              </button>
-              <button class="theme-btn ${this.currentTheme === 'dark' ? 'active' : ''}" data-theme="dark" title="Dark theme">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-              </button>
-            </div>
-            <button class="btn btn-ghost" id="sign-out-btn">Sign out</button>
+            <button class="header-control ${this.scanlinesEnabled ? 'active' : ''}" id="scanlines-btn" aria-pressed="${this.scanlinesEnabled}" title="Toggle scanlines">SCAN ${this.scanlinesEnabled ? 'ON' : 'OFF'}</button>
+            <button class="header-control" id="sign-out-btn">EXIT</button>
           </div>
         </div>
       </header>
     `;
 
-    // Theme toggle handlers
-    this.querySelectorAll('.theme-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const theme = (e.currentTarget as HTMLElement).dataset.theme as 'system' | 'light' | 'dark';
-        this.setTheme(theme);
-      });
-    });
+    this.querySelector('#scanlines-btn')?.addEventListener('click', () => this.toggleScanlines());
 
     // Sign out handler
     this.querySelector('#sign-out-btn')?.addEventListener('click', async () => {

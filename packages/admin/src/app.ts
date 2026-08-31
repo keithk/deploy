@@ -11,6 +11,7 @@ import './components/site-deploys.js';
 import './components/site-metrics.js';
 import './components/deployments.js';
 import './components/server.js';
+import './components/status-ticker.js';
 import './components/toast.js';
 import './components/confirm-dialog.js';
 import './components/input-dialog.js';
@@ -39,6 +40,7 @@ class DeployApp extends HTMLElement {
       <main class="main-content">
         <deploy-sites></deploy-sites>
       </main>
+      <deploy-status-ticker></deploy-status-ticker>
     `;
   }
 
@@ -59,6 +61,7 @@ class DeployApp extends HTMLElement {
       <main class="main-content">
         <deploy-actions></deploy-actions>
       </main>
+      <deploy-status-ticker></deploy-status-ticker>
     `;
   }
 
@@ -79,6 +82,7 @@ class DeployApp extends HTMLElement {
       <main class="main-content">
         <deploy-deployments></deploy-deployments>
       </main>
+      <deploy-status-ticker></deploy-status-ticker>
     `;
   }
 
@@ -89,6 +93,7 @@ class DeployApp extends HTMLElement {
       <main class="main-content">
         <deploy-server></deploy-server>
       </main>
+      <deploy-status-ticker></deploy-status-ticker>
     `;
   }
 }

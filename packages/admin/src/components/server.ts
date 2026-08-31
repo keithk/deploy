@@ -28,12 +28,23 @@ interface ServerStatus {
   };
 }
 
+interface RecentDeployment {
+  id: string;
+  site_id: string;
+  site_name: string;
+  status: 'pending' | 'cloning' | 'building' | 'starting' | 'healthy' | 'switching' | 'completed' | 'failed' | 'rolled_back';
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
 const POLL_INTERVAL_MS = 5_000;
 
 class DeployServer extends HTMLElement {
   private stats: ServerStatus | null = null;
   private loading = true;
   private error: string | null = null;
+  private deployments: RecentDeployment[] = [];
   private pollInterval: number | null = null;
 
   connectedCallback() {
@@ -51,11 +62,17 @@ class DeployServer extends HTMLElement {
 
   async loadStats() {
     try {
-      const response = await fetch('/api/server/status', { credentials: 'include' });
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
+      const [statusResponse, deploymentsResponse] = await Promise.all([
+        fetch('/api/server/status', { credentials: 'include' }),
+        fetch('/api/deployments?limit=8', { credentials: 'include' }),
+      ]);
+      if (!statusResponse.ok) {
+        throw new Error(`Server returned ${statusResponse.status}`);
       }
-      this.stats = await response.json();
+      this.stats = await statusResponse.json();
+      if (deploymentsResponse.ok) {
+        this.deployments = await deploymentsResponse.json();
+      }
       this.error = null;
     } catch (error) {
       console.error('Failed to load server stats:', error);
@@ -91,11 +108,8 @@ class DeployServer extends HTMLElement {
     return `${value.toFixed(1)}%`;
   }
 
-  progressWidth(value: number): number {
-    return Math.min(100, Math.max(0, value));
-  }
-
   renderProgress(label: string, usage: number): string {
+    const filled = Math.round((Math.min(100, Math.max(0, usage)) / 100) * 16);
     return `
       <div
         class="server-stat-progress"
@@ -105,9 +119,54 @@ class DeployServer extends HTMLElement {
         aria-valuemax="100"
         aria-valuenow="${usage}"
       >
-        <span style="width: ${this.progressWidth(usage)}%"></span>
+        <span class="ascii-fill">${'█'.repeat(filled)}</span><span class="ascii-track">${'░'.repeat(16 - filled)}</span>
       </div>
     `;
+  }
+
+  formatDeploymentDuration(deployment: RecentDeployment): string {
+    const started = new Date(deployment.started_at).getTime();
+    const ended = deployment.completed_at
+      ? new Date(deployment.completed_at).getTime()
+      : Date.now();
+    const seconds = Math.max(0, Math.floor((ended - started) / 1_000));
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
+
+  escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  renderRecentDeployments(): string {
+    if (this.deployments.length === 0) {
+      return '<div class="server-deployments-empty">&gt; NO DEPLOYMENTS RECORDED</div>';
+    }
+
+    return this.deployments.map((deployment) => {
+      const failed = deployment.status === 'failed' || deployment.status === 'rolled_back';
+      const complete = deployment.status === 'completed';
+      const status = failed ? 'FAILED' : complete ? 'SUCCESS' : 'RUNNING';
+      const detail = failed
+        ? deployment.error_message || 'deployment failed'
+        : `deploy-${deployment.site_name}:latest · blue-green · ${this.formatDeploymentDuration(deployment)}`;
+      const time = new Date(deployment.started_at).toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+
+      return `
+        <div class="server-deployment-row deployment-${status.toLowerCase()}">
+          <span class="server-deployment-dot">●</span>
+          <span class="server-deployment-time">${time}</span>
+          <a href="/sites/${deployment.site_id}" class="server-deployment-site" data-route>${this.escapeHtml(deployment.site_name)}</a>
+          <span class="server-deployment-detail">${this.escapeHtml(detail)}</span>
+          <span class="server-deployment-status">${status}</span>
+        </div>
+      `;
+    }).join('');
   }
 
   render() {
@@ -149,10 +208,10 @@ class DeployServer extends HTMLElement {
     this.innerHTML = `
       <div class="page-header server-page-header">
         <div class="server-title-group">
-          <h1 class="page-title">Server</h1>
-          <span class="server-online"><span></span>Online</span>
+          <h1 class="page-title">SERVER</h1>
+          <span class="server-online">● ONLINE</span>
         </div>
-        <span class="server-updated">Updated ${new Date(this.stats.recorded_at).toLocaleTimeString()}</span>
+        <span class="server-updated">updated ${new Date(this.stats.recorded_at).toLocaleTimeString()}</span>
       </div>
 
       ${this.error ? `<div class="server-refresh-error">${this.error} Showing the latest available values.</div>` : ''}
@@ -162,20 +221,14 @@ class DeployServer extends HTMLElement {
           <h2>CPU</h2>
           <div class="server-stat-value">${this.formatPercent(host.cpu.usage_pct)}</div>
           ${this.renderProgress('CPU usage', host.cpu.usage_pct)}
-          <div class="server-stat-detail server-stat-detail-stacked">
-            <span>${host.cpu.cores} logical cores</span>
-            <span>Load ${load}</span>
-          </div>
+          <div class="server-stat-detail">${host.cpu.cores} cores · load ${load}</div>
         </section>
 
         <section class="server-stat-card server-stat-memory">
           <h2>Memory</h2>
           <div class="server-stat-value">${this.formatPercent(host.memory.usage_pct)}</div>
           ${this.renderProgress('Memory usage', host.memory.usage_pct)}
-          <div class="server-stat-detail">
-            <span>${this.formatBytes(host.memory.used_bytes)} used</span>
-            <span>${this.formatBytes(host.memory.total_bytes)} total</span>
-          </div>
+          <div class="server-stat-detail">${this.formatBytes(host.memory.used_bytes)} / ${this.formatBytes(host.memory.total_bytes)}</div>
         </section>
 
         <section class="server-stat-card server-stat-disk">
@@ -183,10 +236,7 @@ class DeployServer extends HTMLElement {
           ${host.disk ? `
             <div class="server-stat-value">${this.formatPercent(host.disk.usage_pct)}</div>
             ${this.renderProgress('Storage usage', host.disk.usage_pct)}
-            <div class="server-stat-detail">
-              <span>${this.formatBytes(host.disk.used_bytes)} used</span>
-              <span>${this.formatBytes(host.disk.total_bytes)} total</span>
-            </div>
+            <div class="server-stat-detail">${this.formatBytes(host.disk.used_bytes)} / ${this.formatBytes(host.disk.total_bytes)}</div>
           ` : `
             <div class="server-stat-value server-stat-unavailable">Unavailable</div>
             <div class="server-stat-detail"><span>Storage path could not be read</span></div>
@@ -196,20 +246,17 @@ class DeployServer extends HTMLElement {
         <section class="server-stat-card server-stat-uptime">
           <h2>Uptime</h2>
           <div class="server-stat-value">${this.formatDuration(host.uptime_seconds)}</div>
-          <div class="server-stat-detail">
-            <span>Host system uptime</span>
-          </div>
+          <div class="server-stat-host">host ${host.hostname}</div>
+          <div class="server-stat-detail">${platformName} ${host.release}</div>
         </section>
       </div>
 
-      <section class="server-details">
-        <h2 class="section-title">System</h2>
-        <dl>
-          <div><dt>Hostname</dt><dd>${host.hostname}</dd></div>
-          <div><dt>Operating system</dt><dd>${platformName} ${host.release}</dd></div>
-          <div><dt>CPU cores</dt><dd>${host.cpu.cores}</dd></div>
-          <div><dt>Load average</dt><dd>${load}</dd></div>
-        </dl>
+      <section class="terminal-frame server-deployments" aria-label="Recent deployments">
+        <div class="terminal-frame-title"><span>┌─ RECENT DEPLOYMENTS</span><span class="terminal-frame-line" aria-hidden="true"></span><span>─┐</span></div>
+        <div class="server-deployments-list">
+          ${this.renderRecentDeployments()}
+        </div>
+        <div class="terminal-frame-bottom"><span>└</span><span class="terminal-frame-line" aria-hidden="true"></span><span>┘</span></div>
       </section>
     `;
   }

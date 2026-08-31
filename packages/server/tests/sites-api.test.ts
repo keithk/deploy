@@ -41,6 +41,7 @@ let mockSiteFindAll: ReturnType<typeof mock>;
 let mockSiteUpdate: ReturnType<typeof mock>;
 let mockSiteDelete: ReturnType<typeof mock>;
 let mockSiteMarkDeployed: ReturnType<typeof mock>;
+let mockMetricsFindLatestBySiteIds: ReturnType<typeof mock>;
 let mockShareLinkCreate: ReturnType<typeof mock>;
 let mockSessionFindByToken: ReturnType<typeof mock>;
 let mockDeploySite: ReturnType<typeof mock>;
@@ -77,6 +78,15 @@ mock.module("@keithk/deploy-core", () => {
 
   mockSiteMarkDeployed = mock(() => undefined);
 
+  mockMetricsFindLatestBySiteIds = mock(() => new Map([
+    ["site-id-123", {
+      site_id: "site-id-123",
+      cpu_pct: 12.5,
+      mem_bytes: 134_217_728,
+      mem_limit_bytes: 536_870_912,
+    }],
+  ]));
+
   mockShareLinkCreate = mock((siteId: string, hours?: number) => ({
     ...mockShareLink,
     site_id: siteId,
@@ -96,6 +106,13 @@ mock.module("@keithk/deploy-core", () => {
       update: mockSiteUpdate,
       delete: mockSiteDelete,
       markDeployed: mockSiteMarkDeployed,
+    },
+    containerMetricModel: {
+      findLatestBySiteIds: mockMetricsFindLatestBySiteIds,
+    },
+    logModel: {
+      findBySiteId: mock(() => []),
+      findBySiteIdAndType: mock(() => []),
     },
     shareLinkModel: {
       create: mockShareLinkCreate,
@@ -149,6 +166,8 @@ describe("GET /api/sites", () => {
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBe(1);
     expect(body[0].name).toBe("test-site");
+    expect(body[0].cpu_pct).toBe(12.5);
+    expect(body[0].mem_pct).toBe(25);
   });
 
   test("returns 401 when not authenticated", async () => {

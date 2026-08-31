@@ -5,6 +5,7 @@ import {
   siteModel,
   shareLinkModel,
   logModel,
+  containerMetricModel,
   error,
   info,
 } from "@keithk/deploy-core";
@@ -102,7 +103,23 @@ export async function handleSitesApi(
  */
 function handleListSites(): Response {
   const sites = siteModel.findAll();
-  return Response.json(sites);
+  const latestMetrics = containerMetricModel.findLatestBySiteIds(
+    sites.map((site) => site.id)
+  );
+
+  return Response.json(
+    sites.map((site) => {
+      const metrics = latestMetrics.get(site.id);
+      return {
+        ...site,
+        cpu_pct: metrics?.cpu_pct ?? null,
+        mem_pct:
+          metrics && metrics.mem_limit_bytes > 0
+            ? Math.round((metrics.mem_bytes / metrics.mem_limit_bytes) * 1_000) / 10
+            : null,
+      };
+    })
+  );
 }
 
 /**

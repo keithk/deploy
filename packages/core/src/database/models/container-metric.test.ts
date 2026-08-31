@@ -133,6 +133,19 @@ describe("ContainerMetricModel", () => {
     expect(rows).toHaveLength(3);
   });
 
+  test("findLatestBySiteIds returns only the newest sample for each requested site", () => {
+    model.insert(makeSampleData("site-a", "2026-04-26T10:00:00.000Z", { cpu_pct: 5 }));
+    model.insert(makeSampleData("site-a", "2026-04-26T10:00:05.000Z", { cpu_pct: 12 }));
+    model.insert(makeSampleData("site-b", "2026-04-26T10:00:02.000Z", { cpu_pct: 8 }));
+
+    const latest = model.findLatestBySiteIds(["site-a", "site-b"]);
+
+    expect(latest.size).toBe(2);
+    expect(latest.get("site-a")?.cpu_pct).toBe(12);
+    expect(latest.get("site-b")?.cpu_pct).toBe(8);
+    expect(model.findLatestBySiteIds([]).size).toBe(0);
+  });
+
   test("pruneOld deletes rows before the given timestamp", () => {
     model.insert(makeSampleData("site-a", "2026-04-19T10:00:00.000Z")); // old
     model.insert(makeSampleData("site-a", "2026-04-19T23:59:59.000Z")); // old

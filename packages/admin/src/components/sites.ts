@@ -1,5 +1,5 @@
-// ABOUTME: Sites list component displaying all deployed sites
-// ABOUTME: Shows status, name, URL, and action buttons in exe.dev style rows
+// ABOUTME: CRT sites table displaying live deployment and resource state.
+// ABOUTME: Supports site search, creation, log navigation, and redeployment.
 
 import './site-card.js';
 import './new-site-modal.js';
@@ -11,8 +11,12 @@ interface Site {
   status: 'running' | 'stopped' | 'building' | 'error' | 'sleeping';
   visibility?: 'public' | 'private';
   gitUrl?: string;
+  git_url?: string;
   url?: string;
   persistent_storage?: number;
+  cpu_pct?: number | null;
+  mem_pct?: number | null;
+  last_deployed_at?: string | null;
 }
 
 class DeploySites extends HTMLElement {
@@ -60,7 +64,16 @@ class DeploySites extends HTMLElement {
 
   handleSearch(query: string) {
     this.searchQuery = query;
-    this.render();
+    const sitesList = this.querySelector<HTMLElement>('.sites-list');
+    if (sitesList) {
+      sitesList.innerHTML = this.renderContent(this.getDomain());
+    }
+
+    const filterCount = this.querySelector<HTMLElement>('.sites-filter-count');
+    if (filterCount) {
+      filterCount.textContent = `SHOWING ${this.filteredSites.length} OF ${this.sites.length} SITES`;
+      filterCount.classList.toggle('is-hidden', !query);
+    }
   }
 
   toggleModal() {
@@ -73,8 +86,9 @@ class DeploySites extends HTMLElement {
     const query = this.searchQuery.toLowerCase();
     return this.sites.filter(site =>
       site.name.toLowerCase().includes(query) ||
-      (site.subdomain && site.subdomain.toLowerCase().includes(query)) ||
-      (site.gitUrl && site.gitUrl.toLowerCase().includes(query))
+      site.subdomain?.toLowerCase().includes(query) ||
+      site.gitUrl?.toLowerCase().includes(query) ||
+      site.git_url?.toLowerCase().includes(query)
     );
   }
 
@@ -84,27 +98,41 @@ class DeploySites extends HTMLElement {
 
   render() {
     const domain = this.getDomain();
+    const visibleCount = this.filteredSites.length;
 
     this.innerHTML = `
-      <div class="page-header">
-        <div class="flex items-center gap-3">
-          <h1 class="page-title">My Sites</h1>
-          <button class="btn btn-primary" id="new-site-btn">+ New</button>
+      <section class="terminal-frame sites-frame" aria-label="Sites">
+        <div class="terminal-frame-title">
+          <span>┌─ SITES [${this.sites.length}]</span>
+          <span class="terminal-frame-line" aria-hidden="true"></span>
+          <div class="site-list-tools">
+            <input
+              type="search"
+              class="search-input"
+              placeholder="SEARCH SITES..."
+              aria-label="Search sites"
+              id="search-input"
+              value="${this.searchQuery}"
+            />
+            <button class="btn btn-primary" id="new-site-btn">+ NEW</button>
+          </div>
+          <span>─┐</span>
         </div>
-        <div class="page-actions">
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search sites..."
-            id="search-input"
-            value="${this.searchQuery}"
-          />
-        </div>
-      </div>
 
-      <div class="sites-list">
-        ${this.renderContent(domain)}
-      </div>
+        <div class="sites-table-scroll">
+          <div class="sites-table">
+            <div class="sites-table-header" aria-hidden="true">
+              <span></span><span>NAME</span><span>STATE</span><span>CPU</span><span>MEM</span><span>LAST DEPLOY</span><span></span>
+            </div>
+            <div class="sites-list">
+              ${this.renderContent(domain)}
+            </div>
+          </div>
+        </div>
+        <div class="terminal-frame-bottom"><span>└</span><span class="terminal-frame-line" aria-hidden="true"></span><span>┘</span></div>
+      </section>
+
+      <p class="sites-filter-count ${this.searchQuery ? '' : 'is-hidden'}">SHOWING ${visibleCount} OF ${this.sites.length} SITES</p>
 
       ${this.showModal ? '<deploy-new-site-modal></deploy-new-site-modal>' : ''}
     `;
@@ -130,8 +158,8 @@ class DeploySites extends HTMLElement {
   renderContent(domain: string): string {
     if (this.loading) {
       return `
-        <div class="empty-state">
-          <p>Loading sites...</p>
+        <div class="sites-empty">
+          <p>&gt; SCANNING DEPLOYMENTS<span class="loading-ellipsis">...</span></p>
         </div>
       `;
     }
@@ -140,13 +168,9 @@ class DeploySites extends HTMLElement {
 
     if (sites.length === 0) {
       return `
-        <div class="empty-state">
-          <p class="empty-state-title">
-            ${this.searchQuery ? 'No sites found' : 'No sites yet'}
-          </p>
-          <p>
-            ${this.searchQuery ? 'Try a different search term.' : 'Create your first site to get started.'}
-          </p>
+        <div class="sites-empty">
+          <p>&gt; ${this.searchQuery ? 'NO SITES MATCH QUERY' : 'NO SITES CONFIGURED'}</p>
+          <p>${this.searchQuery ? 'TRY A DIFFERENT SEARCH TERM' : 'SELECT + NEW TO INITIALIZE A DEPLOYMENT'}</p>
         </div>
       `;
     }
@@ -157,10 +181,13 @@ class DeploySites extends HTMLElement {
         name="${site.name}"
         status="${site.status}"
         visibility="${site.visibility || 'public'}"
-        git-url="${site.gitUrl || ''}"
+        git-url="${site.gitUrl || site.git_url || ''}"
         subdomain="${site.subdomain || site.name}"
         domain="${domain}"
         persistent-storage="${site.persistent_storage || 0}"
+        cpu-pct="${site.cpu_pct ?? ''}"
+        mem-pct="${site.mem_pct ?? ''}"
+        last-deployed-at="${site.last_deployed_at || ''}"
       ></deploy-site-card>
     `).join('');
   }

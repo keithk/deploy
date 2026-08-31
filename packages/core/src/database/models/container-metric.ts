@@ -63,6 +63,30 @@ export class ContainerMetricModel {
   }
 
   /**
+   * Return the newest sample for each requested site in one query.
+   */
+  public findLatestBySiteIds(siteIds: string[]): Map<string, ContainerMetric> {
+    if (siteIds.length === 0) return new Map();
+
+    const placeholders = siteIds.map(() => "?").join(",");
+    const rows = this.db.query<ContainerMetric>(
+      `SELECT metrics.*
+       FROM container_metrics metrics
+       INNER JOIN (
+         SELECT site_id, MAX(recorded_at) AS recorded_at
+         FROM container_metrics
+         WHERE site_id IN (${placeholders})
+         GROUP BY site_id
+       ) latest
+         ON metrics.site_id = latest.site_id
+        AND metrics.recorded_at = latest.recorded_at`,
+      siteIds
+    );
+
+    return new Map(rows.map((row) => [row.site_id, row]));
+  }
+
+  /**
    * Delete all rows recorded before `beforeIso`. Called every poller tick for retention.
    */
   public pruneOld(beforeIso: string): void {

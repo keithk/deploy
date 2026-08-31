@@ -19,6 +19,8 @@ interface Site {
   sleep_after_minutes?: number | null;
   last_request_at?: string | null;
   custom_domains?: string;
+  port?: number | null;
+  type?: "auto" | "passthrough" | "compose";
 }
 
 interface LogEntry {
@@ -42,7 +44,7 @@ class DeploySiteDetail extends HTMLElement {
   private logs: LogEntry[] = [];
   private userEnvVars: EnvVar[] = [];
   private systemEnvVars: EnvVar[] = [];
-  private autoRefresh: boolean = false;
+  private autoRefresh: boolean = true;
   private refreshInterval: number | null = null;
 
   static get observedAttributes() {
@@ -179,8 +181,23 @@ class DeploySiteDetail extends HTMLElement {
   async loadTabData() {
     if (this.activeTab === "build" || this.activeTab === "runtime") {
       await this.loadLogs();
+      if (this.autoRefresh && this.refreshInterval === null) {
+        this.refreshInterval = window.setInterval(
+          () => this.loadLogs().then(() => this.render()),
+          3000
+        );
+      }
     } else if (this.activeTab === "environment") {
       await this.loadEnvVars();
+    }
+
+    if (
+      this.activeTab !== "build" &&
+      this.activeTab !== "runtime" &&
+      this.refreshInterval !== null
+    ) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
     }
   }
 
@@ -604,50 +621,52 @@ class DeploySiteDetail extends HTMLElement {
     const siteUrl = `https://${
       this.site.subdomain || this.site.name
     }.${domain}`;
+    const siteState = this.site.status === "running"
+      ? "LIVE"
+      : this.site.status === "sleeping"
+        ? "ASLEEP"
+        : this.site.status.toUpperCase();
+    const deploymentMode = this.site.type === "compose" ? "compose" : "blue-green";
 
     this.innerHTML = `
-      <a href="/" class="back-link" data-route>&larr; Back to Sites</a>
+      <a href="/" class="back-link" data-route>&larr; SITES</a>
 
       <div class="site-detail-header">
         <div class="site-detail-info">
-          <div class="site-status ${this.site.status}"></div>
-          <div>
-            <h1 class="site-detail-title">${this.site.name}</h1>
-            <div class="site-detail-meta">
-              <a href="${siteUrl}" target="_blank">${siteUrl}</a>
-              ${
-                this.site.gitUrl
-                  ? `<a href="${this.site.gitUrl}" target="_blank">${this.site.gitUrl}</a>`
-                  : ""
-              }
-            </div>
+          <span class="site-detail-prefix">┌ SITE:</span>
+          <h1 class="site-detail-title">${this.site.name}</h1>
+          <span class="site-detail-state status-${this.site.status}">● ${siteState}</span>
+          <div class="site-detail-meta">
+            <a href="${siteUrl}" target="_blank">${this.site.subdomain || this.site.name}.${domain}</a>
+            <span>· PORT ${this.site.port ?? "--"}</span>
+            <span>· ${deploymentMode}</span>
           </div>
         </div>
         <div class="site-detail-actions">
-          <button class="btn" id="redeploy-btn">Redeploy</button>
-          <a href="${siteUrl}" target="_blank" class="btn">Open</a>
+          <button class="btn btn-primary" id="redeploy-btn">REDEPLOY</button>
+          <a href="${siteUrl}" target="_blank" class="btn">OPEN</a>
         </div>
       </div>
 
       <div class="tabs">
         <button class="tab ${
           this.activeTab === "deploys" ? "active" : ""
-        }" data-tab="deploys">Deploys</button>
+        }" data-tab="deploys">DEPLOYS</button>
         <button class="tab ${
           this.activeTab === "build" ? "active" : ""
-        }" data-tab="build">Build Logs</button>
+        }" data-tab="build">BUILD LOGS</button>
         <button class="tab ${
           this.activeTab === "runtime" ? "active" : ""
-        }" data-tab="runtime">Runtime Logs</button>
+        }" data-tab="runtime">RUNTIME LOGS</button>
         <button class="tab ${
           this.activeTab === "environment" ? "active" : ""
-        }" data-tab="environment">Environment</button>
+        }" data-tab="environment">ENVIRONMENT</button>
         <button class="tab ${
           this.activeTab === "settings" ? "active" : ""
-        }" data-tab="settings">Settings</button>
+        }" data-tab="settings">SETTINGS</button>
         <button class="tab ${
           this.activeTab === "metrics" ? "active" : ""
-        }" data-tab="metrics">Metrics</button>
+        }" data-tab="metrics">METRICS</button>
       </div>
 
       <div class="tab-content">
@@ -769,16 +788,15 @@ class DeploySiteDetail extends HTMLElement {
   }
 
   renderLogsTab(): string {
-    const title = this.activeTab === "runtime" ? "Runtime Logs" : "Build Logs";
+    const title = this.activeTab === "runtime" ? "RUNTIME STREAM" : "BUILD STREAM";
 
     return `
       <div class="logs-header">
-        <span class="logs-title">${title}</span>
-        <button class="btn btn-sm ${
-          this.autoRefresh ? "btn-primary" : ""
-        }" id="auto-refresh-btn">
-          ${this.autoRefresh ? "Auto-refresh ON" : "Auto-refresh"}
+        <span class="logs-title">── ${title} ── tail -f ·</span>
+        <button class="log-refresh ${this.autoRefresh ? "active" : ""}" id="auto-refresh-btn">
+          auto-refresh ${this.autoRefresh ? "ON" : "OFF"}
         </button>
+        <span class="logs-title">──</span>
       </div>
       <div class="logs-container">
         ${
@@ -799,12 +817,13 @@ class DeploySiteDetail extends HTMLElement {
 
             return `
             <div class="log-line ${lineClass}">
-              <span class="log-time">${time}</span>
+              <span class="log-time">[${time}]</span>
               <span class="log-content">${this.escapeHtml(log.content)}</span>
             </div>
           `;
           })
           .join("")}
+        <div class="terminal-log-prompt" aria-hidden="true"><span>&gt;</span><i class="terminal-cursor"></i></div>
       </div>
     `;
   }

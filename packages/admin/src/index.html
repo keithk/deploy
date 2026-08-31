@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sites · deploy</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
   <link rel="stylesheet" href="/styles/main.css">
   <script>
-    // Apply theme immediately to prevent flash
-    (function() {
-      const stored = localStorage.getItem('theme');
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const theme = stored === 'dark' || stored === 'light' ? stored : (prefersDark ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', theme);
+    // Apply the saved CRT preference before paint to prevent a flash.
+    (() => {
+      const scanlines = localStorage.getItem('scanlines') === 'off' ? 'off' : 'on';
+      document.documentElement.setAttribute('data-scanlines', scanlines);
     })();
   </script>
 </head>
