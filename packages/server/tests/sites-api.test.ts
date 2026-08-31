@@ -15,6 +15,7 @@ const mockSite = {
   container_id: null,
   port: null,
   env_vars: "{}",
+  build_sources: "[]",
   created_at: new Date().toISOString(),
   last_deployed_at: null,
 };
@@ -119,6 +120,31 @@ mock.module("@keithk/deploy-core", () => {
     },
     sessionModel: {
       findByToken: mockSessionFindByToken,
+    },
+    logModel: {
+      append: () => {},
+      findBySiteId: () => [],
+      pruneOldLogs: () => {},
+    },
+    settingsModel: {
+      get: () => undefined,
+      set: () => {},
+    },
+    parseCustomDomains: (site: any) => {
+      try {
+        const domains = JSON.parse(site.custom_domains || "[]");
+        return Array.isArray(domains) ? domains : [];
+      } catch {
+        return [];
+      }
+    },
+    parseBuildSources: (site: any) => {
+      try {
+        const sources = JSON.parse(site.build_sources || "[]");
+        return Array.isArray(sources) ? sources : [];
+      } catch {
+        return [];
+      }
     },
     error: () => {},
     info: () => {},
@@ -535,6 +561,116 @@ describe("PATCH /api/sites/:id/env", () => {
 
     expect(response).not.toBeNull();
     expect(response!.status).toBe(401);
+  });
+});
+
+describe("GET /api/sites/:id/build-sources", () => {
+  test("returns an empty list for a site with none configured", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/build-sources"
+    );
+    const response = await handleSitesApi(
+      request,
+      "/api/sites/site-id-123/build-sources"
+    );
+
+    expect(response!.status).toBe(200);
+    expect(await response!.json()).toEqual({ build_sources: [] });
+  });
+
+  test("returns 404 when site not found", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/non-existent/build-sources"
+    );
+    const response = await handleSitesApi(
+      request,
+      "/api/sites/non-existent/build-sources"
+    );
+
+    expect(response!.status).toBe(404);
+  });
+});
+
+describe("PUT /api/sites/:id/build-sources", () => {
+  function putBuildSources(buildSources: unknown, siteId = "site-id-123") {
+    const request = createAuthenticatedRequest(
+      `http://localhost/api/sites/${siteId}/build-sources`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ build_sources: buildSources }),
+      }
+    );
+    return handleSitesApi(request, `/api/sites/${siteId}/build-sources`);
+  }
+
+  test("replaces the list", async () => {
+    const response = await putBuildSources([
+      {
+        type: "git",
+        source: "https://github.com/keithk/private-plugin.git",
+        dest: "vendor/plugin",
+      },
+      { type: "path", source: "/srv/assets", dest: "vendor/assets" },
+    ]);
+
+    expect(response!.status).toBe(200);
+    const body = await response!.json();
+    expect(body.build_sources).toHaveLength(2);
+    expect(body.build_sources[1]).toEqual({
+      type: "path",
+      source: "/srv/assets",
+      dest: "vendor/assets",
+    });
+  });
+
+  test("clears the list when given an empty array", async () => {
+    const response = await putBuildSources([]);
+
+    expect(response!.status).toBe(200);
+    expect((await response!.json()).build_sources).toEqual([]);
+  });
+
+  test("rejects a dest that escapes the checkout", async () => {
+    const response = await putBuildSources([
+      { type: "path", source: "/srv/assets", dest: "../../etc" },
+    ]);
+
+    expect(response!.status).toBe(400);
+    expect((await response!.json()).error).toMatch(/inside the site checkout/);
+  });
+
+  test("rejects a path source that is not absolute", async () => {
+    const response = await putBuildSources([
+      { type: "path", source: "assets", dest: "vendor/assets" },
+    ]);
+
+    expect(response!.status).toBe(400);
+  });
+
+  test("returns 404 when site not found", async () => {
+    const response = await putBuildSources([], "non-existent");
+
+    expect(response!.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/sites/:id with build_sources", () => {
+  test("rejects an invalid entry", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          build_sources: [{ type: "path", source: "/srv/assets", dest: ".git/hooks" }],
+        }),
+      }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123");
+
+    expect(response!.status).toBe(400);
+    expect((await response!.json()).error).toMatch(/may not write into .git/);
   });
 });
 
