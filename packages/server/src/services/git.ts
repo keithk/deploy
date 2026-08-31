@@ -9,7 +9,7 @@ import { info, debug, error, settingsModel } from "@keithk/deploy-core";
 /**
  * Inject GitHub token into URL for private repo access
  */
-function getAuthenticatedUrl(gitUrl: string): string {
+export function getAuthenticatedUrl(gitUrl: string): string {
   const token = settingsModel.get("github_token");
   if (!token) return gitUrl;
 

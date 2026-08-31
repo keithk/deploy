@@ -231,7 +231,7 @@ Sets the full list of custom domains for a site, replacing any existing ones. On
 
 ### manage_env_vars
 
-Gets or sets environment variables for a site. Environment variables are stored per-site and merged with system variables (like `PORT`) at build/runtime.
+Gets or sets environment variables for a site. Environment variables are stored per-site and merged with system variables (like `PORT`) at build/runtime. They are passed to the build as BuildKit secrets as well as to the running container.
 
 **Parameters:**
 - `site` (string, required): Site name or ID
@@ -281,6 +281,34 @@ vars: {
 ```
 
 **Important:** Environment variable changes do NOT trigger an automatic redeploy. After setting vars, ask Claude to "Redeploy the [site] site" to apply them.
+
+### manage_build_sources
+
+Gets or replaces the directories copied into a site's build context before it builds. See [Build Sources](build-sources.md) for the full picture.
+
+**Parameters:**
+- `site` (string, required): Site name or ID
+- `action` (string, required): "get" or "set"
+- `build_sources` (array, optional): When `action="set"`, the full replacement list. Each entry has `type` ("git" or "path"), `source` (git URL or absolute server path), `dest` (relative path inside the checkout), and optionally `branch` for git sources.
+
+**Usage in Claude (get):**
+> "What build sources does atmobb have?"
+
+**Usage in Claude (set):**
+> "On atmobb, build in the private avatar plugin repo at vendor/avatar-plugin and /srv/atmobb-avatar-assets at vendor/avatar-assets"
+
+**Output:**
+```json
+{
+  "message": "Build sources updated. They take effect on the next deploy.",
+  "build_sources": [
+    { "type": "git", "source": "https://github.com/keithk/atmobb-avatar-plugin.git", "dest": "vendor/avatar-plugin" },
+    { "type": "path", "source": "/srv/atmobb-avatar-assets", "dest": "vendor/avatar-assets" }
+  ]
+}
+```
+
+**Important:** Setting replaces the whole list — send the complete set, not just additions. Changes apply on the next deploy.
 
 ## Troubleshooting
 

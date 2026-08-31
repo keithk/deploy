@@ -3,7 +3,7 @@
  * Wraps calls to the admin API with session authentication.
  */
 
-import type { Site } from "@keithk/deploy-core";
+import type { BuildSource, Site } from "@keithk/deploy-core";
 
 export interface ClientOptions {
   apiUrl: string;
@@ -185,5 +185,20 @@ export class DeployApiClient {
       `/api/sites/${siteId}/env`,
       vars
     );
+  }
+
+  // Get the build sources overlaid onto a site's build context
+  async getBuildSources(siteId: string): Promise<{ build_sources: BuildSource[] }> {
+    return this.request("GET", `/api/sites/${siteId}/build-sources`, undefined);
+  }
+
+  // Replace the full list of build sources for a site
+  async setBuildSources(
+    siteId: string,
+    buildSources: BuildSource[]
+  ): Promise<{ message: string; build_sources: BuildSource[] }> {
+    return this.request("PUT", `/api/sites/${siteId}/build-sources`, {
+      build_sources: buildSources,
+    });
   }
 }

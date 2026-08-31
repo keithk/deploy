@@ -3,7 +3,7 @@
 
 import { randomUUID } from "crypto";
 import { Database } from "../database";
-import type { Site } from "../schema";
+import type { BuildSource, Site } from "../schema";
 import { encrypt, decrypt } from "../../utils/crypto";
 
 /**
@@ -24,6 +24,7 @@ export interface CreateSiteData {
   primary_service?: string | null;
   primary_port?: number | null;
   custom_domains?: string[];
+  build_sources?: BuildSource[];
 }
 
 /**
@@ -44,6 +45,7 @@ export interface UpdateSiteData {
   primary_service?: string | null;
   primary_port?: number | null;
   custom_domains?: string[];
+  build_sources?: BuildSource[];
 }
 
 /**
@@ -117,11 +119,12 @@ export class SiteModel {
       primary_service: data.primary_service ?? null,
       primary_port: data.primary_port ?? null,
       custom_domains: JSON.stringify(data.custom_domains ?? []),
+      build_sources: JSON.stringify(data.build_sources ?? []),
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domains)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domains, build_sources)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -145,7 +148,8 @@ export class SiteModel {
       site.compose_yaml,
       site.primary_service,
       site.primary_port,
-      site.custom_domains
+      site.custom_domains,
+      site.build_sources
     );
 
     return site;
@@ -288,6 +292,10 @@ export class SiteModel {
       updates.push("custom_domains = ?");
       values.push(JSON.stringify(data.custom_domains));
     }
+    if (data.build_sources !== undefined) {
+      updates.push("build_sources = ?");
+      values.push(JSON.stringify(data.build_sources));
+    }
 
     if (updates.length === 0) {
       return existing;
@@ -386,6 +394,19 @@ export function parseCustomDomains(site: Site): string[] {
   try {
     const domains = JSON.parse(site.custom_domains);
     return Array.isArray(domains) ? domains : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse a site's build_sources JSON column into an array.
+ * Falls back to an empty array on malformed JSON.
+ */
+export function parseBuildSources(site: Site): BuildSource[] {
+  try {
+    const sources = JSON.parse(site.build_sources || "[]");
+    return Array.isArray(sources) ? sources : [];
   } catch {
     return [];
   }

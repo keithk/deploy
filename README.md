@@ -72,7 +72,8 @@ Open `https://admin.yourdomain.com` in your browser and log in with the password
 - **GitHub autodeploy**: Toggle it on, push to main, site updates automatically
 - **Persistent storage**: Enable `/data` volumes that survive redeploys
 - **Build & runtime logs**: Watch deployments in real-time
-- **Environment variables**: Set secrets per-site via the dashboard
+- **Environment variables**: Set secrets per-site via the dashboard, available to the build and the container
+- **Build sources**: Pull a private repo or a server directory into the build context for sites whose repository must stay public
 
 ---
 

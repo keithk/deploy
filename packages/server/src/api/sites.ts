@@ -1,18 +1,21 @@
 // ABOUTME: REST API endpoints for site management.
-// ABOUTME: Handles CRUD operations, deployments, share links, and environment variables.
+// ABOUTME: Handles CRUD operations, deployments, share links, environment variables, and build sources.
 
 import {
   siteModel,
   shareLinkModel,
   logModel,
   containerMetricModel,
+  parseBuildSources,
   error,
   info,
 } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
 import { teardownSite, getSiteLogs } from "../services/site-ops";
+import { validateBuildSources } from "../services/overlay";
 import { parseComposeFile, ComposeError } from "./compose";
+import type { BuildSource } from "@keithk/deploy-core";
 
 /**
  * Handle all /api/sites/* requests
@@ -93,6 +96,16 @@ export async function handleSitesApi(
   // PATCH /api/sites/:id/env - Update environment variables
   if (method === "PATCH" && subResource === "env") {
     return handleUpdateEnvVars(siteId, request);
+  }
+
+  // GET /api/sites/:id/build-sources - Get build sources
+  if (method === "GET" && subResource === "build-sources") {
+    return handleGetBuildSources(siteId);
+  }
+
+  // PUT /api/sites/:id/build-sources - Replace build sources
+  if (method === "PUT" && subResource === "build-sources") {
+    return handleSetBuildSources(siteId, request);
   }
 
   return null;
@@ -329,6 +342,17 @@ async function handleUpdateSite(
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (body.build_sources !== undefined) {
+    try {
+      body.build_sources = validateBuildSources(body.build_sources);
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        { status: 400 }
+      );
+    }
+  }
+
   const site = siteModel.update(siteId, body);
   if (!site) {
     return Response.json({ error: "Site not found" }, { status: 404 });
@@ -541,5 +565,54 @@ async function handleUpdateEnvVars(
   return Response.json({
     message: "Environment variables updated",
     env_vars: mergedEnv,
+  });
+}
+
+/**
+ * GET /api/sites/:id/build-sources - List the directories overlaid onto the build
+ */
+function handleGetBuildSources(siteId: string): Response {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  return Response.json({ build_sources: parseBuildSources(site) });
+}
+
+/**
+ * PUT /api/sites/:id/build-sources - Replace the full list of build sources
+ */
+async function handleSetBuildSources(
+  siteId: string,
+  request: Request
+): Promise<Response> {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  let body: { build_sources?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  let buildSources: BuildSource[];
+  try {
+    buildSources = validateBuildSources(body.build_sources ?? []);
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 400 }
+    );
+  }
+
+  siteModel.update(siteId, { build_sources: buildSources });
+
+  return Response.json({
+    message: "Build sources updated. They take effect on the next deploy.",
+    build_sources: buildSources,
   });
 }

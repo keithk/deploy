@@ -21,6 +21,14 @@ interface Site {
   custom_domains?: string;
   port?: number | null;
   type?: "auto" | "passthrough" | "compose";
+  build_sources?: string;
+}
+
+interface BuildSource {
+  type: "git" | "path";
+  source: string;
+  dest: string;
+  branch?: string;
 }
 
 interface LogEntry {
@@ -122,6 +130,82 @@ class DeploySiteDetail extends HTMLElement {
       console.error("Failed to update custom domains:", error);
       showToast("Failed to update custom domains", 'error');
     }
+  }
+
+  getBuildSources(): BuildSource[] {
+    if (!this.site?.build_sources) return [];
+    try {
+      const sources = JSON.parse(this.site.build_sources);
+      return Array.isArray(sources) ? sources : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async saveBuildSources(sources: BuildSource[]) {
+    if (!this.site) return;
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ build_sources: sources }),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        this.site.build_sources = updated.build_sources;
+        this.render();
+        showToast("Build sources saved. They apply on the next deploy.", 'success');
+      } else {
+        const error = await response.json();
+        showToast(`Failed to update build sources: ${error.error || error.message || "Unknown error"}`, 'error');
+      }
+    } catch (error) {
+      console.error("Failed to update build sources:", error);
+      showToast("Failed to update build sources", 'error');
+    }
+  }
+
+  async handleAddBuildSource() {
+    const typeInput = this.querySelector<HTMLSelectElement>("#build-source-type");
+    const sourceInput = this.querySelector<HTMLInputElement>("#build-source-source");
+    const destInput = this.querySelector<HTMLInputElement>("#build-source-dest");
+    const branchInput = this.querySelector<HTMLInputElement>("#build-source-branch");
+    if (!typeInput || !sourceInput || !destInput) return;
+
+    const type = typeInput.value === "path" ? "path" : "git";
+    const source = sourceInput.value.trim();
+    const dest = destInput.value.trim();
+    const branch = branchInput?.value.trim() ?? "";
+
+    if (!source || !dest) {
+      showToast("A build source needs both a source and a destination.", 'error');
+      return;
+    }
+
+    const current = this.getBuildSources();
+    if (current.some((entry) => entry.dest === dest)) {
+      showToast(`Something already builds into ${dest}.`, 'error');
+      return;
+    }
+
+    await this.saveBuildSources([
+      ...current,
+      { type, source, dest, ...(type === "git" && branch ? { branch } : {}) },
+    ]);
+  }
+
+  async handleRemoveBuildSource(dest: string) {
+    const confirmed = await showConfirm(
+      'Remove Build Source',
+      `Stop copying into "${dest}" on deploy?`,
+      { confirmText: 'Remove', destructive: true }
+    );
+    if (!confirmed) return;
+
+    await this.saveBuildSources(this.getBuildSources().filter((entry) => entry.dest !== dest));
   }
 
   async handleAddCustomDomain() {
@@ -736,6 +820,15 @@ class DeploySiteDetail extends HTMLElement {
           this.handleRemoveCustomDomain(domain);
         });
       });
+      this.querySelector("#add-build-source-btn")?.addEventListener("click", () =>
+        this.handleAddBuildSource()
+      );
+      this.querySelectorAll("[data-remove-build-source]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const dest = (e.currentTarget as HTMLElement).dataset.removeBuildSource!;
+          this.handleRemoveBuildSource(dest);
+        });
+      });
       this.querySelector("#delete-btn")?.addEventListener("click", () =>
         this.handleDelete()
       );
@@ -1013,6 +1106,50 @@ class DeploySiteDetail extends HTMLElement {
         <div class="form-group mt-4" style="display: flex; gap: var(--space-2);">
           <input type="text" id="custom-domain-input" class="form-input" placeholder="example.com">
           <button class="btn" id="add-domain-btn">Add</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Build Sources</h3>
+        <p class="text-muted mb-4">
+          Copied into the build context on every deploy, before the image is built. Use these for a
+          private repository or a directory of licensed files that must not live in this site's own
+          repository. Paths are relative to the checkout, which is <code>/app</code> inside the build.
+        </p>
+        ${
+          this.getBuildSources().length === 0
+            ? '<p class="text-muted">No build sources configured</p>'
+            : `<div class="env-table">
+            ${this.getBuildSources()
+              .map(
+                (source) => `
+              <div class="env-row">
+                <div class="env-cell env-key">${this.escapeHtml(source.dest)}</div>
+                <div class="env-cell env-value">${this.escapeHtml(
+                  source.type === "git"
+                    ? `git ${source.source}${source.branch ? ` (${source.branch})` : ""}`
+                    : `path ${source.source}`
+                )}</div>
+                <div class="env-cell">
+                  <button class="btn btn-sm btn-ghost btn-danger" data-remove-build-source="${this.escapeHtml(
+                    source.dest
+                  )}">Remove</button>
+                </div>
+              </div>
+            `
+              )
+              .join("")}
+          </div>`
+        }
+        <div class="form-group mt-4" style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+          <select id="build-source-type" class="form-input" style="flex: 0 0 auto;">
+            <option value="git">Git repo</option>
+            <option value="path">Server path</option>
+          </select>
+          <input type="text" id="build-source-source" class="form-input" style="flex: 2 1 16rem;" placeholder="https://github.com/you/private-plugin.git">
+          <input type="text" id="build-source-dest" class="form-input" style="flex: 1 1 10rem;" placeholder="vendor/plugin">
+          <input type="text" id="build-source-branch" class="form-input" style="flex: 0 1 8rem;" placeholder="main">
+          <button class="btn" id="add-build-source-btn">Add</button>
         </div>
       </div>
 

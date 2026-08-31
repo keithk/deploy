@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { DeployApiClient } from "./client.js";
 import { parseCustomDomains } from "@keithk/deploy-core";
+import type { BuildSource } from "@keithk/deploy-core";
 
 // Read configuration from environment
 const API_URL = process.env.API_URL || "https://admin.keith.is";
@@ -194,13 +195,47 @@ server.setRequestHandler(
         {
           name: "manage_env_vars",
           description:
-            "Get or set environment variables for a site. Changes take effect on next build/redeploy.",
+            "Get or set environment variables for a site. Variables are available both to the build (as build secrets) and to the running container. Changes take effect on next build/redeploy.",
           inputSchema: {
             type: "object",
             properties: {
               site: { type: "string" },
               action: { type: "string", enum: ["get", "set"] },
               vars: { type: "object" },
+            },
+            required: ["site", "action"],
+          },
+        },
+        {
+          name: "manage_build_sources",
+          description:
+            "Get or replace the directories copied into a site's build context before it builds. Use this to add a private repo or a directory of licensed assets that must not live in the site's own repository. Setting replaces the whole list; changes take effect on next deploy.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              site: { type: "string" },
+              action: { type: "string", enum: ["get", "set"] },
+              build_sources: {
+                type: "array",
+                description:
+                  'Full replacement list, e.g. [{"type":"git","source":"https://github.com/me/private-plugin.git","dest":"vendor/plugin"},{"type":"path","source":"/srv/assets","dest":"vendor/assets"}]',
+                items: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string", enum: ["git", "path"] },
+                    source: {
+                      type: "string",
+                      description: "Git URL, or an absolute path on the deploy server",
+                    },
+                    dest: {
+                      type: "string",
+                      description: "Relative path inside the site checkout, e.g. vendor/plugin",
+                    },
+                    branch: { type: "string", description: "Git sources only; defaults to main" },
+                  },
+                  required: ["type", "source", "dest"],
+                },
+              },
             },
             required: ["site", "action"],
           },
@@ -453,6 +488,50 @@ server.setRequestHandler(
                     message: result.message,
                     env_vars: result.env_vars,
                     note: "Changes take effect on next build/redeploy",
+                  },
+                  null,
+                  2
+                ),
+              } as TextContent,
+            ],
+          };
+        } else {
+          throw new Error('action must be "get" or "set"');
+        }
+      } else if (toolName === "manage_build_sources") {
+        const siteId = await resolveSiteId(args.site as string);
+        const action = args.action as string;
+
+        if (action === "get") {
+          const result = await client.getBuildSources(siteId);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(result, null, 2),
+              } as TextContent,
+            ],
+          };
+        } else if (action === "set") {
+          const buildSources = args.build_sources;
+          if (!Array.isArray(buildSources)) {
+            throw new Error(
+              'When action="set", build_sources must be provided as an array (pass [] to clear)'
+            );
+          }
+
+          const result = await client.setBuildSources(
+            siteId,
+            buildSources as BuildSource[]
+          );
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    message: result.message,
+                    build_sources: result.build_sources,
                   },
                   null,
                   2

@@ -28,6 +28,23 @@ export interface Site {
   primary_service: string | null;     // service name to expose via subdomain
   primary_port: number | null;        // internal container port of primary service
   custom_domains: string;             // JSON array of custom domains (e.g., ["myapp.com"])
+  build_sources: string;              // JSON array of BuildSource entries overlaid onto the build context
+}
+
+/**
+ * A directory pulled into a site's build context before the image is built.
+ *
+ * `git` sources are cloned fresh on every deploy (private repos use the stored
+ * GitHub token). `path` sources are copied from a directory on the server, which
+ * keeps licensed or secret material out of git entirely.
+ *
+ * `dest` is always relative to the site checkout.
+ */
+export interface BuildSource {
+  type: 'git' | 'path';
+  source: string;   // git URL, or an absolute path on the server
+  dest: string;     // relative path inside the site checkout
+  branch?: string;  // git sources only; defaults to main
 }
 
 /**
@@ -127,6 +144,7 @@ export interface ContainerMetric {
  */
 export type DeploymentStepName =
   | 'clone'
+  | 'overlay'
   | 'build'
   | 'start'
   | 'health_check'

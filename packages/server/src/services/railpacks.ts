@@ -20,6 +20,27 @@ export interface BuildOptions {
   maxParallelism?: number;
   /** Cancels the Railpack subprocess when the deployment is cancelled. */
   signal?: AbortSignal;
+  /**
+   * Variables exposed to the build. Railpack registers these as BuildKit
+   * secrets, so build commands can read them but they are not baked into the
+   * image layers.
+   */
+  buildEnv?: Record<string, string>;
+}
+
+/**
+ * Turn build variables into repeated `--env KEY=VALUE` arguments.
+ * Keys that are empty or contain `=` would produce an ambiguous argument, so
+ * they are dropped rather than silently corrupting the build.
+ */
+export function buildEnvArgs(buildEnv?: Record<string, string>): string[] {
+  if (!buildEnv) return [];
+
+  return Object.entries(buildEnv).flatMap(([key, value]) => {
+    const name = key.trim();
+    if (!name || name.includes("=")) return [];
+    return ["--env", `${name}=${value ?? ""}`];
+  });
 }
 
 /**
@@ -70,7 +91,8 @@ export async function buildWithRailpacks(
     const command = [
       "nice", "-n", String(opts.niceLevel || 10),
       "ionice", "-c", String(ioClassNum),
-      "railpack", "build", sitePath, "--name", imageName
+      "railpack", "build", sitePath, "--name", imageName,
+      ...buildEnvArgs(opts.buildEnv),
     ];
 
     // Set up environment with BuildKit parallelism limit

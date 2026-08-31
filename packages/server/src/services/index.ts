@@ -2,7 +2,13 @@
 // ABOUTME: Provides centralized access to git, build, container, and deployment orchestration.
 
 export { cloneSite, pullSite, getSitePath } from "./git";
-export { buildWithRailpacks, type BuildResult } from "./railpacks";
+export { buildWithRailpacks, buildEnvArgs, type BuildResult } from "./railpacks";
+export {
+  applyBuildSources,
+  validateBuildSource,
+  validateBuildSources,
+  resolveDest,
+} from "./overlay";
 export {
   startContainer,
   stopContainer,

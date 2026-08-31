@@ -10,6 +10,7 @@ import {
   actionModel,
   deploymentModel,
   deploymentStepModel,
+  parseBuildSources,
 } from "@keithk/deploy-core";
 import { cloneSite, pullSite, getSitePath } from "./git";
 import { buildWithRailpacks } from "./railpacks";
@@ -30,6 +31,7 @@ import {
   getPrimaryContainerId,
   getComposeLogs,
 } from "./compose";
+import { applyBuildSources } from "./overlay";
 import { discoverSiteActions } from "./actions";
 import type { Site } from "@keithk/deploy-core";
 
@@ -196,11 +198,27 @@ async function runDeploy(
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
 
-    // Step 2: Build with Railpack
+    // Step 2: Overlay build sources (private plugins, licensed assets) onto the checkout
+    const buildSources = parseBuildSources(site);
+    if (buildSources.length) {
+      currentStepId = deploymentStepModel.startStep(deployment.id, "overlay").id;
+      log(`Adding ${buildSources.length} build source(s) to the build context...`);
+      await applyBuildSources(sitePath, buildSources, log);
+      throwIfDeploymentCancelled(signal);
+      deploymentStepModel.completeStep(currentStepId);
+      currentStepId = null;
+    }
+
+    // Step 3: Build with Railpack. Site variables are passed as build secrets so
+    // frameworks that need configuration at build time can read them.
+    const envVars = parseEnvVars(site.env_vars);
     currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
     deploymentModel.updateStatus(deployment.id, "building");
     log(`Building with Railpack...`);
-    const buildResult = await buildWithRailpacks(sitePath, site.name, { signal });
+    const buildResult = await buildWithRailpacks(sitePath, site.name, {
+      signal,
+      buildEnv: envVars,
+    });
     throwIfDeploymentCancelled(signal);
     if (!buildResult.success) {
       throw new Error(buildResult.error || "Build failed");
@@ -209,7 +227,7 @@ async function runDeploy(
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
 
-    // Step 3: Start the container with environment variables
+    // Step 4: Start the container with environment variables
     // Use blue-green deployment if there's an existing container
     currentStepId = deploymentStepModel.startStep(deployment.id, "start").id;
     deploymentModel.updateStatus(deployment.id, "starting");
@@ -218,7 +236,6 @@ async function runDeploy(
         hasExistingContainer ? " (blue-green deployment)" : ""
       }...`
     );
-    const envVars = parseEnvVars(site.env_vars);
     containerInfo = await startContainer(
       buildResult.imageName,
       site.name,
@@ -233,7 +250,7 @@ async function runDeploy(
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
 
-    // Step 4: Wait for the new container to be healthy before switching
+    // Step 5: Wait for the new container to be healthy before switching
     currentStepId = deploymentStepModel.startStep(deployment.id, "health_check").id;
     deploymentModel.updateStatus(deployment.id, "healthy");
     log(`Waiting for container to be healthy...`);
@@ -295,7 +312,7 @@ async function runDeploy(
     deploymentStepModel.completeStep(currentStepId);
     currentStepId = null;
 
-    // Step 5: Complete blue-green deployment (stop old container, rename new)
+    // Step 6: Complete blue-green deployment (stop old container, rename new)
     if (containerInfo.isBlueGreen) {
       currentStepId = deploymentStepModel.startStep(deployment.id, "switch").id;
       deploymentModel.updateStatus(deployment.id, "switching");
@@ -307,7 +324,7 @@ async function runDeploy(
       currentStepId = null;
     }
 
-    // Step 6: Update status to running with new container info
+    // Step 7: Update status to running with new container info
     siteModel.updateStatus(
       siteId,
       "running",
@@ -316,7 +333,7 @@ async function runDeploy(
     );
     siteModel.markDeployed(siteId);
 
-    // Step 7: Discover and register actions from the site
+    // Step 8: Discover and register actions from the site
     currentStepId = deploymentStepModel.startStep(
       deployment.id,
       "register_actions"
