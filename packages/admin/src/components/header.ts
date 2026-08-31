@@ -12,7 +12,8 @@ const NAV_SHORTCUTS: Record<string, string> = {
   '1': '/',
   '2': '/deployments',
   '3': '/actions',
-  '4': '/settings',
+  '4': '/server',
+  '5': '/settings',
 };
 
 class DeployHeader extends HTMLElement {
@@ -105,7 +106,8 @@ class DeployHeader extends HTMLElement {
               <a href="/" class="nav-link ${path === '/' ? 'active' : ''}" data-route><span class="kbd">⌘1</span>Sites</a>
               <a href="/deployments" class="nav-link ${path === '/deployments' ? 'active' : ''}" data-route><span class="kbd">⌘2</span>Deployments</a>
               <a href="/actions" class="nav-link ${path === '/actions' ? 'active' : ''}" data-route><span class="kbd">⌘3</span>Actions</a>
-              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route><span class="kbd">⌘4</span>Settings</a>
+              <a href="/server" class="nav-link ${path === '/server' ? 'active' : ''}" data-route><span class="kbd">⌘4</span>Server</a>
+              <a href="/settings" class="nav-link ${path === '/settings' ? 'active' : ''}" data-route><span class="kbd">⌘5</span>Settings</a>
             </nav>
           </div>
           <div class="header-right">

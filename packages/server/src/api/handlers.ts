@@ -16,6 +16,7 @@ import { handleMetricsApi } from "./metrics";
 import { handleSystemApi } from "./system";
 import { handleAuthApi } from "./auth";
 import { handleComposeApi } from "./compose";
+import { handleGetServerStatus } from "./server-status";
 import { requireAuth } from "../middleware/auth";
 
 /**
@@ -349,36 +350,6 @@ export async function handleRunSiteCommand(
 }
 
 /**
- * Handle GET /api/server/status - Get server status
- */
-export async function handleGetServerStatus(
-  request: Request
-): Promise<Response> {
-  try {
-    return new Response(
-      JSON.stringify({
-        status: "running",
-        uptime: process.uptime(),
-        memory: process.memoryUsage(),
-        version: process.version,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    console.error("Error getting server status:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to get server status" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-  }
-}
-
-/**
  * Main API router
  */
 export async function handleApiRequest(
@@ -496,7 +467,7 @@ export async function handleApiRequest(
 
   if (firstPart === "server" && apiParts[1] === "status") {
     if (method === "GET") {
-      return handleGetServerStatus(request);
+      return handleGetServerStatus(context.rootDir);
     }
   }
 

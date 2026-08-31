@@ -1,5 +1,5 @@
 // ABOUTME: Main DeployApp web component with client-side routing
-// ABOUTME: Renders different views based on URL path (/, /settings, /actions, /sites/:id)
+// ABOUTME: Renders top-level views and per-site detail based on the URL path.
 
 import { router, setupLinkInterception } from './router.js';
 import './components/header.js';
@@ -10,6 +10,7 @@ import './components/site-detail.js';
 import './components/site-deploys.js';
 import './components/site-metrics.js';
 import './components/deployments.js';
+import './components/server.js';
 import './components/toast.js';
 import './components/confirm-dialog.js';
 import './components/input-dialog.js';
@@ -26,6 +27,7 @@ class DeployApp extends HTMLElement {
     router.addRoute('/settings', () => this.renderSettings());
     router.addRoute('/actions', () => this.renderActions());
     router.addRoute('/deployments', () => this.renderDeployments());
+    router.addRoute('/server', () => this.renderServer());
     router.addRoute('/sites/:id', (params) => this.renderSiteDetail(params.id));
     router.setDefault(() => this.renderSites());
   }
@@ -76,6 +78,16 @@ class DeployApp extends HTMLElement {
       <deploy-header></deploy-header>
       <main class="main-content">
         <deploy-deployments></deploy-deployments>
+      </main>
+    `;
+  }
+
+  renderServer() {
+    document.title = 'Server · deploy';
+    this.innerHTML = `
+      <deploy-header></deploy-header>
+      <main class="main-content">
+        <deploy-server></deploy-server>
       </main>
     `;
   }
