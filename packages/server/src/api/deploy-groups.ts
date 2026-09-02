@@ -7,8 +7,10 @@ import {
   siteModel,
 } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
-import { deploySite } from "../services/deploy";
-import { triggerDeployGroup } from "../services/deploy-group";
+import {
+  deployGroup,
+  getGroupBuildCompatibilityError,
+} from "../services/deploy-group";
 
 export async function handleDeployGroupsApi(
   request: Request,
@@ -71,10 +73,17 @@ export async function handleDeployGroupsApi(
       return Response.json({ error: "Deploy group has no sites" }, { status: 400 });
     }
 
-    triggerDeployGroup(group, deploySite, (message) => error(message));
+    const compatibilityError = getGroupBuildCompatibilityError(group);
+    if (compatibilityError) {
+      return Response.json({ error: compatibilityError }, { status: 400 });
+    }
+
+    void deployGroup(group).catch((err) => {
+      error(`Group deployment error for ${group.name}: ${err}`);
+    });
 
     return Response.json({
-      message: "Group deployment triggered",
+      message: "Shared group build triggered",
       group_id: group.id,
       site_ids: group.sites.map((site) => site.id),
     });

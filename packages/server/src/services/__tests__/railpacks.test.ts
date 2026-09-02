@@ -19,6 +19,14 @@ describe("railpacks service", () => {
 
       expect(result.imageName).toBe("deploy-my-app:latest");
     });
+
+    test("uses an explicitly shared image name", async () => {
+      const result = await buildWithRailpacks("/nonexistent/path", "my-app", {
+        imageName: "deploy-group-123:latest",
+      });
+
+      expect(result.imageName).toBe("deploy-group-123:latest");
+    });
   });
 
   describe("buildEnvArgs", () => {

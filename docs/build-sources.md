@@ -68,6 +68,8 @@ This is how a build is pointed at whatever the overlay just added:
 ATMOBB_CONFIG=/app/vendor/plugin/config.mjs
 ```
 
+Deploy groups build one shared image. Only environment variables with the same key and value on every group member are available to that build; differing variables are treated as per-site runtime configuration and are injected when each container starts.
+
 ---
 
 ## Notes

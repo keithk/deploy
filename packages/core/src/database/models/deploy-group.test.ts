@@ -32,13 +32,19 @@ describe("DeployGroupModel", () => {
   });
 
   test("creates a group with unique site memberships", () => {
-    const first = sites.create({ name: "at-one", type: "auto", git_url: "https://example.com/one" });
+    const first = sites.create({
+      name: "at-one",
+      type: "auto",
+      git_url: "https://example.com/one",
+      env_vars: '{"SHARED":"yes","FORUM":"one"}',
+    });
     const second = sites.create({ name: "at-two", type: "auto", git_url: "https://example.com/two" });
 
     const group = groups.create("ATMob instances", [first.id, second.id, first.id]);
 
     expect(group.name).toBe("ATMob instances");
     expect(group.sites.map((site) => site.name)).toEqual(["at-one", "at-two"]);
+    expect(group.sites[0].env_vars).toBe('{"SHARED":"yes","FORUM":"one"}');
     expect(groups.findAll()).toHaveLength(1);
   });
 

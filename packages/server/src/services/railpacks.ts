@@ -2,7 +2,7 @@
 // ABOUTME: Wraps the railpack CLI to build container images with automatic detection.
 
 import { spawn } from "bun";
-import { existsSync } from "fs";
+import { existsSync } from "node:fs";
 import { info, debug, error, settingsModel } from "@keithk/deploy-core";
 
 export interface BuildResult {
@@ -12,6 +12,8 @@ export interface BuildResult {
 }
 
 export interface BuildOptions {
+  /** Override the default per-site Docker image name. */
+  imageName?: string;
   /** CPU nice level (0-19, higher = lower priority). Default: 10 */
   niceLevel?: number;
   /** IO scheduling class: 'idle', 'best-effort', 'realtime'. Default: 'idle' */
@@ -67,7 +69,7 @@ export async function buildWithRailpacks(
   siteName: string,
   options?: BuildOptions
 ): Promise<BuildResult> {
-  const imageName = `deploy-${siteName}:latest`;
+  const imageName = options?.imageName || `deploy-${siteName}:latest`;
 
   if (!existsSync(sitePath)) {
     const message = `Site path does not exist: ${sitePath}`;

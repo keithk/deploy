@@ -93,6 +93,7 @@ mock.module("@keithk/deploy-core", () => ({
   actionModel: { upsert: mock(() => {}), deleteBySiteId: mock(() => {}) },
   deploymentModel: deploymentModelMock,
   deploymentStepModel: stepModelMock,
+  parseBuildSources: mock(() => []),
 }));
 
 // Knobs the individual tests flip to drive different paths.
@@ -104,34 +105,41 @@ mock.module("../src/services/git", () => ({
   cloneSite: mock(async () => "/tmp/fake-site-path"),
   pullSite: mock(async () => "/tmp/fake-site-path"),
   getSitePath: mock(() => "/tmp/fake-site-path"),
+  getAuthenticatedUrl: mock((url: string) => url),
 }));
 
+const buildWithRailpacksMock = mock(async () =>
+  buildSucceeds
+    ? { success: true, imageName: "fake-image" }
+    : { success: false, error: "boom" }
+);
+
 mock.module("../src/services/railpacks", () => ({
-  buildWithRailpacks: mock(async () =>
-    buildSucceeds
-      ? { success: true, imageName: "fake-image" }
-      : { success: false, error: "boom" }
-  ),
+  buildWithRailpacks: buildWithRailpacksMock,
+}));
+
+const startContainerMock = mock(async () => ({
+  containerId: "container-id",
+  port: 8080,
+  isBlueGreen: blueGreen,
 }));
 
 mock.module("../src/services/container", () => ({
-  startContainer: mock(async () => ({
-    containerId: "container-id",
-    port: 8080,
-    isBlueGreen: blueGreen,
-  })),
+  startContainer: startContainerMock,
   stopContainer: mock(async () => {}),
   completeBlueGreenDeployment: mock(async () => {}),
   rollbackBlueGreenDeployment: mock(async () => {}),
   waitForContainerHealth: mock(async () => healthSucceeds),
   getContainerLogs: mock(async () => ""),
+  getNextPort: mock(async () => 8080),
+  getSiteDataPath: mock(() => "/tmp/fake-site-data"),
 }));
 
 mock.module("../src/services/actions", () => ({
   discoverSiteActions: mock(async () => []),
 }));
 
-const { deploySite } = await import("../src/services/deploy");
+const { deploySite, deploySiteFromImage } = await import("../src/services/deploy");
 
 beforeEach(() => {
   stepRows = [];
@@ -139,10 +147,13 @@ beforeEach(() => {
   buildSucceeds = true;
   healthSucceeds = true;
   blueGreen = false;
+  buildWithRailpacksMock.mockClear();
+  startContainerMock.mockClear();
   // Ensure the site looks fresh (no existing container) by default.
   siteRecord.status = "stopped";
   siteRecord.container_id = null;
   siteRecord.port = null;
+  siteRecord.env_vars = "{}";
 });
 
 describe("deploy step instrumentation", () => {
@@ -177,6 +188,33 @@ describe("deploy step instrumentation", () => {
       "register_actions",
     ]);
     expect(stepRows.every((s) => s.status === "completed")).toBe(true);
+  });
+
+  test("reuses a shared image without cloning or building again", async () => {
+    siteRecord.env_vars = '{"FORUM":"at-one","SECRET":"runtime-only"}';
+    const result = await deploySiteFromImage(
+      "site-1",
+      "deploy-group-group-1:latest",
+      "/tmp/group-source"
+    );
+
+    expect(result.success).toBe(true);
+    expect(buildWithRailpacksMock).not.toHaveBeenCalled();
+    expect(startContainerMock).toHaveBeenCalledWith(
+      "deploy-group-group-1:latest",
+      "test-site",
+      {
+        envVars: { FORUM: "at-one", SECRET: "runtime-only" },
+        persistentStorage: false,
+        blueGreen: false,
+      }
+    );
+    expect(stepRows.map((s) => s.name)).toEqual([
+      "build",
+      "start",
+      "health_check",
+      "register_actions",
+    ]);
   });
 
   test("marks the build step failed when railpack reports failure", async () => {

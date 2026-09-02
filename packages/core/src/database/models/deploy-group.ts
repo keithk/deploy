@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { Database } from "../database";
 import type { DeployGroup, DeployGroupWithSites, Site } from "../schema";
+import { decryptSiteEnvVars } from "./site";
 
 export class DeployGroupModel {
   private db: Database;
@@ -84,13 +85,15 @@ export class DeployGroupModel {
   }
 
   private findSites(groupId: string): Site[] {
-    return this.db.query<Site>(
-      `SELECT sites.* FROM sites
-       INNER JOIN deploy_group_sites ON deploy_group_sites.site_id = sites.id
-       WHERE deploy_group_sites.group_id = ?
-       ORDER BY sites.name COLLATE NOCASE`,
-      [groupId]
-    );
+    return this.db
+      .query<Site>(
+        `SELECT sites.* FROM sites
+         INNER JOIN deploy_group_sites ON deploy_group_sites.site_id = sites.id
+         WHERE deploy_group_sites.group_id = ?
+         ORDER BY sites.name COLLATE NOCASE`,
+        [groupId]
+      )
+      .map(decryptSiteEnvVars);
   }
 
   private replaceSites(groupId: string, siteIds: string[]): void {

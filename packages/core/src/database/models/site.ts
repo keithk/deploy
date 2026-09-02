@@ -1,10 +1,22 @@
 // ABOUTME: Model for Site CRUD operations against the sites table.
 // ABOUTME: Provides create, read, update, delete, and status management for deployed sites.
 
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import { Database } from "../database";
 import type { BuildSource, Site } from "../schema";
 import { encrypt, decrypt } from "../../utils/crypto";
+
+/** Decrypt a site's environment JSON after a query that bypasses SiteModel. */
+export function decryptSiteEnvVars(site: Site): Site {
+  if (site.env_vars) {
+    try {
+      site.env_vars = decrypt(site.env_vars);
+    } catch {
+      // Leave the value as-is so callers can handle malformed or unavailable data.
+    }
+  }
+  return site;
+}
 
 /**
  * Data required to create a new site
@@ -68,26 +80,10 @@ export class SiteModel {
   }
 
   /**
-   * Decrypt env_vars on a returned Site object.
-   * If the value is not encrypted (legacy plaintext), it passes through unchanged.
-   */
-  private decryptSite(site: Site): Site {
-    if (site.env_vars) {
-      try {
-        site.env_vars = decrypt(site.env_vars);
-      } catch {
-        // Decryption failed — leave the value as-is so the caller can see
-        // something rather than crashing. The deploy path handles bad JSON gracefully.
-      }
-    }
-    return site;
-  }
-
-  /**
    * Decrypt env_vars on an array of Site objects.
    */
   private decryptSites(sites: Site[]): Site[] {
-    return sites.map((s) => this.decryptSite(s));
+    return sites.map(decryptSiteEnvVars);
   }
 
   /**
@@ -163,7 +159,7 @@ export class SiteModel {
       `SELECT * FROM sites WHERE id = ? LIMIT 1`,
       [id]
     );
-    return results.length > 0 ? this.decryptSite(results[0]) : null;
+    return results.length > 0 ? decryptSiteEnvVars(results[0]) : null;
   }
 
   /**
@@ -174,7 +170,7 @@ export class SiteModel {
       `SELECT * FROM sites WHERE name = ? LIMIT 1`,
       [name]
     );
-    return results.length > 0 ? this.decryptSite(results[0]) : null;
+    return results.length > 0 ? decryptSiteEnvVars(results[0]) : null;
   }
 
   /**

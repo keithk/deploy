@@ -3,7 +3,6 @@
 
 import {
   info,
-  debug,
   error,
   siteModel,
   logModel,
@@ -12,7 +11,7 @@ import {
   deploymentStepModel,
   parseBuildSources,
 } from "@keithk/deploy-core";
-import { cloneSite, pullSite, getSitePath } from "./git";
+import { cloneSite } from "./git";
 import { buildWithRailpacks } from "./railpacks";
 import {
   startContainer,
@@ -52,6 +51,23 @@ function throwIfDeploymentCancelled(signal: AbortSignal): void {
 export type CancelDeploymentResult =
   | { success: true }
   | { success: false; reason: "not_found" | "not_active"; error: string };
+
+export interface DeployResult {
+  success: boolean;
+  error?: string;
+  deploymentId?: string;
+  imageName?: string;
+  sitePath?: string;
+}
+
+interface DeployOptions {
+  buildEnv?: Record<string, string>;
+  imageName?: string;
+  sharedBuild?: {
+    imageName: string;
+    sitePath: string;
+  };
+}
 
 /**
  * Cancel a live deployment, or close an abandoned in-progress record.
@@ -111,14 +127,41 @@ export function cancelDeployment(deploymentId: string): CancelDeploymentResult {
  */
 export async function deploySite(
   siteId: string
-): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
+): Promise<DeployResult> {
+  return deploySiteWithOptions(siteId, {});
+}
+
+/** Build and deploy the source site for a group using only variables shared by every member. */
+export async function deployGroupSourceSite(
+  siteId: string,
+  buildEnv: Record<string, string>,
+  imageName: string
+): Promise<DeployResult> {
+  return deploySiteWithOptions(siteId, { buildEnv, imageName });
+}
+
+/** Deploy a site-specific container from an image already built for its group. */
+export async function deploySiteFromImage(
+  siteId: string,
+  imageName: string,
+  sitePath: string
+): Promise<DeployResult> {
+  return deploySiteWithOptions(siteId, {
+    sharedBuild: { imageName, sitePath },
+  });
+}
+
+async function deploySiteWithOptions(
+  siteId: string,
+  options: DeployOptions
+): Promise<DeployResult> {
   if (deployInProgress.has(siteId)) {
     return { success: false, error: "A deployment is already in progress for this site" };
   }
   deployInProgress.add(siteId);
   const controller = new AbortController();
   try {
-    return await runDeploy(siteId, controller);
+    return await runDeploy(siteId, controller, options);
   } finally {
     deployInProgress.delete(siteId);
   }
@@ -126,9 +169,10 @@ export async function deploySite(
 
 async function runDeploy(
   siteId: string,
-  controller: AbortController
-): Promise<{ success: boolean; error?: string; deploymentId?: string }> {
-  let site;
+  controller: AbortController,
+  options: DeployOptions
+): Promise<DeployResult> {
+  let site: Site | null;
   try {
     site = siteModel.findById(siteId);
   } catch (err) {
@@ -145,8 +189,12 @@ async function runDeploy(
     return { success: false, error: message };
   }
 
-  if (site.type === "compose") {
+  if (site.type === "compose" && !options.sharedBuild) {
     return deployComposeSite(site, controller);
+  }
+
+  if (site.type === "compose") {
+    return { success: false, error: "Compose sites cannot use a shared build image" };
   }
 
   info(`Starting deployment for site: ${site.name}`);
@@ -185,47 +233,63 @@ async function runDeploy(
       siteModel.updateStatus(siteId, "building");
     }
 
-    // Step 1: Clone or pull the repository
-    if (!site.git_url) {
-      throw new Error(`Site ${site.name} has no git_url to clone`);
-    }
-    currentStepId = deploymentStepModel.startStep(deployment.id, "clone").id;
-    deploymentModel.updateStatus(deployment.id, "cloning");
-    log(`Cloning repository from ${site.git_url}...`);
-    const sitePath = await cloneSite(site.git_url, site.name, site.branch);
-    throwIfDeploymentCancelled(signal);
-    log(`Repository cloned to ${sitePath}`);
-    deploymentStepModel.completeStep(currentStepId);
-    currentStepId = null;
+    const envVars = parseEnvVars(site.env_vars);
+    let sitePath: string;
+    let imageName: string;
 
-    // Step 2: Overlay build sources (private plugins, licensed assets) onto the checkout
-    const buildSources = parseBuildSources(site);
-    if (buildSources.length) {
-      currentStepId = deploymentStepModel.startStep(deployment.id, "overlay").id;
-      log(`Adding ${buildSources.length} build source(s) to the build context...`);
-      await applyBuildSources(sitePath, buildSources, log);
+    if (options.sharedBuild) {
+      sitePath = options.sharedBuild.sitePath;
+      imageName = options.sharedBuild.imageName;
+      currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
+      deploymentModel.updateStatus(deployment.id, "building");
+      log(`Using shared group image ${imageName}`);
       throwIfDeploymentCancelled(signal);
       deploymentStepModel.completeStep(currentStepId);
       currentStepId = null;
-    }
+    } else {
+      // Step 1: Clone or pull the repository
+      if (!site.git_url) {
+        throw new Error(`Site ${site.name} has no git_url to clone`);
+      }
+      currentStepId = deploymentStepModel.startStep(deployment.id, "clone").id;
+      deploymentModel.updateStatus(deployment.id, "cloning");
+      log(`Cloning repository from ${site.git_url}...`);
+      sitePath = await cloneSite(site.git_url, site.name, site.branch);
+      throwIfDeploymentCancelled(signal);
+      log(`Repository cloned to ${sitePath}`);
+      deploymentStepModel.completeStep(currentStepId);
+      currentStepId = null;
 
-    // Step 3: Build with Railpack. Site variables are passed as build secrets so
-    // frameworks that need configuration at build time can read them.
-    const envVars = parseEnvVars(site.env_vars);
-    currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
-    deploymentModel.updateStatus(deployment.id, "building");
-    log(`Building with Railpack...`);
-    const buildResult = await buildWithRailpacks(sitePath, site.name, {
-      signal,
-      buildEnv: envVars,
-    });
-    throwIfDeploymentCancelled(signal);
-    if (!buildResult.success) {
-      throw new Error(buildResult.error || "Build failed");
+      // Step 2: Overlay build sources (private plugins, licensed assets) onto the checkout
+      const buildSources = parseBuildSources(site);
+      if (buildSources.length) {
+        currentStepId = deploymentStepModel.startStep(deployment.id, "overlay").id;
+        log(`Adding ${buildSources.length} build source(s) to the build context...`);
+        await applyBuildSources(sitePath, buildSources, log);
+        throwIfDeploymentCancelled(signal);
+        deploymentStepModel.completeStep(currentStepId);
+        currentStepId = null;
+      }
+
+      // Step 3: Build with Railpack. A normal site deploy exposes all site variables;
+      // a group source deploy supplies only variables shared by every member.
+      currentStepId = deploymentStepModel.startStep(deployment.id, "build").id;
+      deploymentModel.updateStatus(deployment.id, "building");
+      log(`Building with Railpack...`);
+      const buildResult = await buildWithRailpacks(sitePath, site.name, {
+        signal,
+        buildEnv: options.buildEnv ?? envVars,
+        imageName: options.imageName,
+      });
+      throwIfDeploymentCancelled(signal);
+      if (!buildResult.success) {
+        throw new Error(buildResult.error || "Build failed");
+      }
+      imageName = buildResult.imageName;
+      log(`Build complete: ${imageName}`);
+      deploymentStepModel.completeStep(currentStepId);
+      currentStepId = null;
     }
-    log(`Build complete: ${buildResult.imageName}`);
-    deploymentStepModel.completeStep(currentStepId);
-    currentStepId = null;
 
     // Step 4: Start the container with environment variables
     // Use blue-green deployment if there's an existing container
@@ -237,7 +301,7 @@ async function runDeploy(
       }...`
     );
     containerInfo = await startContainer(
-      buildResult.imageName,
+      imageName,
       site.name,
       {
         envVars,
@@ -369,7 +433,12 @@ async function runDeploy(
     );
 
     log(`Deployment complete!`);
-    return { success: true, deploymentId: deployment.id };
+    return {
+      success: true,
+      deploymentId: deployment.id,
+      imageName,
+      sitePath,
+    };
   } catch (err) {
     const cancelled = signal.aborted;
     const message = cancelled
@@ -429,7 +498,7 @@ async function runDeploy(
  * Stop a running site (full container removal — caller redeploys to bring it back).
  */
 export async function stopSite(siteId: string): Promise<void> {
-  let site;
+  let site: Site | null;
   try {
     site = siteModel.findById(siteId);
   } catch (err) {
