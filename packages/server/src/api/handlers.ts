@@ -17,6 +17,7 @@ import { handleSystemApi } from "./system";
 import { handleAuthApi } from "./auth";
 import { handleComposeApi } from "./compose";
 import { handleGetServerStatus } from "./server-status";
+import { handleDeployGroupsApi } from "./deploy-groups";
 import { requireAuth } from "../middleware/auth";
 
 /**
@@ -412,6 +413,11 @@ export async function handleApiRequest(
   // Route to deployments API
   if (firstPart === "deployments") {
     return handleDeploymentsApi(request, path);
+  }
+
+  // Route to deploy groups API
+  if (firstPart === "deploy-groups") {
+    return handleDeployGroupsApi(request, path);
   }
 
   // Route to compose API (POST /api/compose/parse)

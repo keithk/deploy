@@ -146,6 +146,19 @@ describe("Database Migrations", () => {
     expect(indexNames).toContain("idx_share_links_token");
     expect(indexNames).toContain("idx_sessions_token");
     expect(indexNames).toContain("idx_logs_timestamp");
+    expect(indexNames).toContain("idx_deploy_group_sites_site_id");
+  });
+
+  test("runMigrations creates deploy group tables", async () => {
+    await db.runMigrations();
+
+    const tables = db.query<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('deploy_groups', 'deploy_group_sites')`
+    );
+    expect(tables.map((table) => table.name).sort()).toEqual([
+      "deploy_group_sites",
+      "deploy_groups",
+    ]);
   });
 
   test("runMigrations is idempotent - running twice doesn't error", async () => {

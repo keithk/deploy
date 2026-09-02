@@ -2067,6 +2067,67 @@ deploy-app {
   font-size: 20px;
 }
 
+.deploy-groups-frame {
+  margin-bottom: 28px;
+  font-size: 20px;
+}
+
+.deploy-groups-list {
+  padding: 0 8px;
+}
+
+.deploy-groups-empty {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+.deploy-group-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(240px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 34px;
+}
+
+.deploy-group-row:hover {
+  background: var(--hover);
+}
+
+.deploy-group-name {
+  color: #c8ffdb;
+}
+
+.deploy-group-sites,
+.deploy-group-site-status {
+  color: var(--muted);
+}
+
+.deploy-group-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.deploy-group-site-picker {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  margin-top: 20px;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+}
+
+.deploy-group-site-picker legend {
+  padding: 0 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.deploy-group-site-picker .form-checkbox {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+}
+
 .terminal-frame-title {
   margin-bottom: 8px;
 }
@@ -2679,6 +2740,15 @@ deploy-status-ticker {
 
   .site-list-tools .search-input {
     width: 130px;
+  }
+
+  .deploy-group-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .deploy-group-sites {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .site-detail-header {

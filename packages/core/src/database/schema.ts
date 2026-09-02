@@ -31,6 +31,17 @@ export interface Site {
   build_sources: string;              // JSON array of BuildSource entries overlaid onto the build context
 }
 
+/** A named collection of sites that can be deployed together. */
+export interface DeployGroup {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface DeployGroupWithSites extends DeployGroup {
+  sites: Site[];
+}
+
 /**
  * A directory pulled into a site's build context before the image is built.
  *

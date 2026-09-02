@@ -29,3 +29,5 @@ export { DeploymentStepModel, deploymentStepModel } from "./deployment-step";
 
 export { ContainerMetricModel, containerMetricModel } from "./container-metric";
 export type { InsertContainerMetricData } from "./container-metric";
+
+export { DeployGroupModel, deployGroupModel } from "./deploy-group";
