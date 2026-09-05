@@ -9,6 +9,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { DeployApiClient } from "./client.js";
+import type { Site } from "@keithk/deploy-core";
 import { parseCustomDomains } from "@keithk/deploy-core";
 import type { BuildSource } from "@keithk/deploy-core";
 
@@ -74,6 +75,10 @@ const siteWithTypeSchema = z.object({
 const domainsSchema = z.object({
   site: z.string(),
   domains: z.array(z.string()),
+});
+const databaseSchema = z.object({
+  site: z.string(),
+  action: z.enum(["attach", "detach", "drop"]),
 });
 const envVarsSchema = z.object({
   site: z.string(),
@@ -143,6 +148,19 @@ server.setRequestHandler(
               domains: { type: "array", items: { type: "string" } },
             },
             required: ["site", "domains"],
+          },
+        },
+        {
+          name: "manage_database",
+          description:
+            'Manage a site\'s Postgres database on the registered database server. action="attach" creates the database and role (or rotates the password) and injects DATABASE_URL on the next deploy; "detach" stops injecting it but keeps the data; "drop" deletes the database and its data permanently.',
+          inputSchema: {
+            type: "object",
+            properties: {
+              site: { type: "string" },
+              action: { type: "string", enum: ["attach", "detach", "drop"] },
+            },
+            required: ["site", "action"],
           },
         },
         {
@@ -316,6 +334,9 @@ server.setRequestHandler(
                   sleep_after_minutes: siteData.sleep_after_minutes,
                   autodeploy: siteData.autodeploy,
                   persistent_storage: siteData.persistent_storage,
+                  database_name: siteData.database_name ?? null,
+                  database_attached:
+                    (siteData as Site & { database_attached?: boolean }).database_attached ?? false,
                 },
                 null,
                 2
@@ -441,6 +462,22 @@ server.setRequestHandler(
                 null,
                 2
               ),
+            } as TextContent,
+          ],
+        };
+      } else if (toolName === "manage_database") {
+        const parsed = databaseSchema.parse(args);
+        const siteId = await resolveSiteId(parsed.site);
+        const result =
+          parsed.action === "attach"
+            ? await client.attachDatabase(siteId)
+            : await client.detachDatabase(siteId, parsed.action === "drop");
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2),
             } as TextContent,
           ],
         };

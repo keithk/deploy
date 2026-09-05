@@ -14,6 +14,8 @@ interface Site {
   gitUrl?: string;
   git_url?: string;
   persistent_storage?: number;
+  database_name?: string | null;
+  database_attached?: boolean;
   autodeploy?: number;
   sleep_enabled?: number;
   sleep_after_minutes?: number | null;
@@ -380,6 +382,68 @@ class DeploySiteDetail extends HTMLElement {
       }
     } catch (error) {
       console.error("Failed to update visibility:", error);
+    }
+  }
+
+  async handleAttachDatabase() {
+    if (!this.site) return;
+    const reattach = !!this.site.database_name;
+    const confirmed = await showConfirm(
+      'Attach Database',
+      reattach
+        ? `Reconnect "${this.site.database_name}"? Its data is kept and a new password is issued. A redeploy picks up the new DATABASE_URL.`
+        : 'Create a Postgres database for this site and inject DATABASE_URL on the next deploy?'
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/sites/${this.siteId}/database`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        this.site.database_name = body.database_name;
+        this.site.database_attached = true;
+        showToast(body.message || "Database attached.", 'success');
+        this.render();
+      } else {
+        showToast(body.error || "Failed to attach database.", 'error');
+      }
+    } catch (error) {
+      console.error("Failed to attach database:", error);
+      showToast("Failed to attach database.", 'error');
+    }
+  }
+
+  async handleDetachDatabase(drop: boolean) {
+    if (!this.site?.database_name) return;
+    const confirmed = await showConfirm(
+      drop ? 'Drop Database' : 'Detach Database',
+      drop
+        ? `Drop "${this.site.database_name}" and delete all of its data? This cannot be undone.`
+        : `Stop injecting DATABASE_URL? The data in "${this.site.database_name}" is kept and attaching again reuses it.`,
+      drop ? { confirmText: 'Drop', destructive: true } : undefined
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `/api/sites/${this.siteId}/database${drop ? "?drop=true" : ""}`,
+        { method: "DELETE", credentials: "include" }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        if (drop) this.site.database_name = null;
+        this.site.database_attached = false;
+        showToast(body.message || "Database detached.", 'success');
+        this.render();
+      } else {
+        showToast(body.error || "Failed to detach database.", 'error');
+      }
+    } catch (error) {
+      console.error("Failed to detach database:", error);
+      showToast("Failed to detach database.", 'error');
     }
   }
 
@@ -794,6 +858,18 @@ class DeploySiteDetail extends HTMLElement {
       this.querySelector("#storage-checkbox")?.addEventListener("change", () =>
         this.handleStorageToggle()
       );
+      this.querySelector("#attach-db-btn")?.addEventListener("click", () =>
+        this.handleAttachDatabase()
+      );
+      this.querySelector("#rotate-db-btn")?.addEventListener("click", () =>
+        this.handleAttachDatabase()
+      );
+      this.querySelector("#detach-db-btn")?.addEventListener("click", () =>
+        this.handleDetachDatabase(false)
+      );
+      this.querySelector("#drop-db-btn")?.addEventListener("click", () =>
+        this.handleDetachDatabase(true)
+      );
       this.querySelector("#sleep-checkbox")?.addEventListener("change", () =>
         this.handleSleepToggle()
       );
@@ -986,6 +1062,45 @@ class DeploySiteDetail extends HTMLElement {
     `;
   }
 
+  renderDatabaseSection(): string {
+    const name = this.site?.database_name;
+    const attached = this.site?.database_attached;
+
+    if (attached && name) {
+      return `
+        <p class="text-muted mb-4">
+          <code>${name}</code> is attached. <code>DATABASE_URL</code> is injected on every deploy and listed under Environment.
+        </p>
+        <div class="domain-input-row">
+          <button id="rotate-db-btn" class="btn">Rotate password</button>
+          <button id="detach-db-btn" class="btn">Detach</button>
+          <button id="drop-db-btn" class="btn btn-danger">Drop database</button>
+        </div>
+      `;
+    }
+
+    if (name) {
+      return `
+        <p class="text-muted mb-4">
+          <code>${name}</code> exists but is detached. Attach to inject <code>DATABASE_URL</code> again, or drop it to delete the data.
+        </p>
+        <div class="domain-input-row">
+          <button id="attach-db-btn" class="btn btn-primary">Attach</button>
+          <button id="drop-db-btn" class="btn btn-danger">Drop database</button>
+        </div>
+      `;
+    }
+
+    return `
+      <p class="text-muted mb-4">
+        Create a Postgres database on the registered database server and inject <code>DATABASE_URL</code> into this site.
+      </p>
+      <div class="domain-input-row">
+        <button id="attach-db-btn" class="btn btn-primary">Attach database</button>
+      </div>
+    `;
+  }
+
   renderSettingsTab(): string {
     const isPublic = this.site?.visibility === "public";
     const hasStorage = this.site?.persistent_storage;
@@ -1024,6 +1139,11 @@ class DeploySiteDetail extends HTMLElement {
             ? "Creates a webhook on the GitHub repository."
             : "Requires a GitHub repository URL."
         }</p>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Database</h3>
+        ${this.renderDatabaseSection()}
       </div>
 
       <div class="settings-section">

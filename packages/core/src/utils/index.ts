@@ -5,6 +5,7 @@ export * from "./configLoader";
 export * from "./actionHelpers";
 export * from "./caddyfile";
 export * from "./caddyManager";
+export * from "./crypto";
 export * from "./siteDiscovery";
 export * from "./portUtils";
 export * from "./crypto";

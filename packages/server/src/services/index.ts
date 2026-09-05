@@ -17,4 +17,5 @@ export {
   type ContainerInfo,
 } from "./container";
 export { deploySite, stopSite } from "./deploy";
+export { attachDatabase, detachDatabase, databaseEnvVars, getDatabaseServerUrl } from "./database";
 export { startSleepMonitor, stopSleepMonitor, checkForSleep } from "./sleep-monitor";

@@ -1,7 +1,13 @@
 // ABOUTME: REST API endpoint for server settings.
 // ABOUTME: Provides domain configuration, GitHub token, and other server-level settings.
 
-import { settingsModel, updateCaddyConfig } from "@keithk/deploy-core";
+import { encrypt, settingsModel, updateCaddyConfig } from "@keithk/deploy-core";
+import {
+  DATABASE_URL_SETTING,
+  describeDatabaseServer,
+  getDatabaseServerUrl,
+  isPostgresUrl,
+} from "../services/database";
 
 /**
  * Handle /api/settings requests
@@ -19,6 +25,7 @@ export async function handleSettingsApi(
     return Response.json({
       domain: settings.domain || process.env.PROJECT_DOMAIN || "localhost",
       github_configured: !!settings.github_token,
+      ...databaseServerSummary(),
       primary_site: settings.primary_site || null,
       // Build resource settings
       build_nice_level: parseInt(settings.build_nice_level || process.env.BUILD_NICE_LEVEL || "10", 10),
@@ -43,6 +50,21 @@ export async function handleSettingsApi(
           settingsModel.set("github_token", body.github_token);
         } else {
           settingsModel.delete("github_token");
+        }
+      }
+
+      // Handle database_url: the admin connection string sites' databases are provisioned on
+      if (body.database_url !== undefined) {
+        if (body.database_url) {
+          if (!isPostgresUrl(String(body.database_url))) {
+            return Response.json(
+              { error: "database_url must be a postgres:// connection string" },
+              { status: 400 }
+            );
+          }
+          settingsModel.set(DATABASE_URL_SETTING, encrypt(String(body.database_url)));
+        } else {
+          settingsModel.delete(DATABASE_URL_SETTING);
         }
       }
 
@@ -111,6 +133,7 @@ export async function handleSettingsApi(
         success: true,
         domain: settingsModel.get("domain") || process.env.PROJECT_DOMAIN || "localhost",
         github_configured: !!settingsModel.get("github_token"),
+        ...databaseServerSummary(),
         primary_site: settingsModel.get("primary_site") || null,
         build_nice_level: parseInt(settingsModel.get("build_nice_level") || "10", 10),
         build_io_class: settingsModel.get("build_io_class") || "idle",
@@ -128,4 +151,15 @@ export async function handleSettingsApi(
   }
 
   return null;
+}
+
+/** Whether a database server is registered, and where it is, without credentials. */
+function databaseServerSummary(): { database_configured: boolean; database_server: string | null } {
+  const url = getDatabaseServerUrl();
+  if (!url) return { database_configured: false, database_server: null };
+  try {
+    return { database_configured: true, database_server: describeDatabaseServer(url) };
+  } catch {
+    return { database_configured: true, database_server: null };
+  }
 }
