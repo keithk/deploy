@@ -29,6 +29,8 @@ export interface Site {
   primary_port: number | null;        // internal container port of primary service
   custom_domains: string;             // JSON array of custom domains (e.g., ["myapp.com"])
   build_sources: string;              // JSON array of BuildSource entries overlaid onto the build context
+  database_name: string | null;       // Postgres database + role provisioned for this site, if attached
+  database_url: string | null;        // encrypted connection string injected as DATABASE_URL; null when detached
 }
 
 /** A named collection of sites that can be deployed together. */

@@ -13,6 +13,8 @@ interface Site {
 interface Settings {
   domain?: string;
   github_configured?: boolean;
+  database_configured?: boolean;
+  database_server?: string | null;
   primary_site?: string | null;
   build_nice_level?: number;
   build_io_class?: "idle" | "best-effort" | "realtime";
@@ -247,6 +249,45 @@ class DeploySettings extends HTMLElement {
     }
   }
 
+  async saveDatabaseUrl(url: string) {
+    this.saving = true;
+    this.render();
+
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ database_url: url }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        this.settings.database_configured = result.database_configured;
+        this.settings.database_server = result.database_server;
+        showToast(url ? "Database server saved." : "Database server cleared.", 'success');
+      } else {
+        const body = await response.json().catch(() => ({}));
+        showToast(body.error || "Failed to save database server.", 'error');
+      }
+    } catch (error) {
+      console.error("Failed to save database server:", error);
+      showToast("Failed to save database server.", 'error');
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+
+  async clearDatabaseUrl() {
+    const confirmed = await showConfirm(
+      'Clear Database Server',
+      'Sites with attached databases keep their DATABASE_URL, but no new databases can be attached until a server is registered again.'
+    );
+    if (!confirmed) return;
+    await this.saveDatabaseUrl("");
+  }
+
   async saveGitHubToken(token: string) {
     this.saving = true;
     this.render();
@@ -429,6 +470,40 @@ class DeploySettings extends HTMLElement {
           ${
             this.settings.github_configured
               ? `<button id="clear-github-token-btn" class="btn" ${
+                  this.saving ? "disabled" : ""
+                }>Clear</button>`
+              : ""
+          }
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Database Server</h3>
+        <p class="text-muted mb-4">
+          ${
+            this.settings.database_configured
+              ? `Sites can attach a Postgres database on <code>${this.settings.database_server ?? "the registered server"}</code>. Enter a new admin connection string to replace it.`
+              : "Enter the admin connection string of a Postgres server (a managed database works well). Each site that attaches a database gets its own database and role there."
+          }
+        </p>
+        <div class="domain-input-row">
+          <input
+            type="password"
+            id="database-url-input"
+            class="form-input"
+            value=""
+            placeholder="${this.settings.database_configured ? "••••••••••• (configured)" : "postgres://admin:password@host:5432/defaultdb?sslmode=require"}"
+            autocomplete="off"
+            ${this.saving ? "disabled" : ""}
+          >
+          <button id="save-database-url-btn" class="btn btn-primary" ${
+            this.saving ? "disabled" : ""
+          }>
+            Save
+          </button>
+          ${
+            this.settings.database_configured
+              ? `<button id="clear-database-url-btn" class="btn" ${
                   this.saving ? "disabled" : ""
                 }>Clear</button>`
               : ""
@@ -761,6 +836,20 @@ class DeploySettings extends HTMLElement {
 
     this.querySelector("#clear-github-token-btn")?.addEventListener("click", () => {
       this.clearGitHubToken();
+    });
+
+    this.querySelector("#save-database-url-btn")?.addEventListener("click", () => {
+      const input = this.querySelector("#database-url-input") as HTMLInputElement;
+      const value = input?.value.trim();
+      if (value) {
+        this.saveDatabaseUrl(value);
+      } else {
+        showToast("Enter a connection string to save.", 'error');
+      }
+    });
+
+    this.querySelector("#clear-database-url-btn")?.addEventListener("click", () => {
+      this.clearDatabaseUrl();
     });
 
     // Build settings: update displayed value on range change

@@ -168,6 +168,20 @@ export class DeployApiClient {
     return this.updateSite(siteId, { custom_domains: domains });
   }
 
+  // Provision a Postgres database for a site (or rotate its password)
+  async attachDatabase(siteId: string): Promise<{ message: string; database_name: string }> {
+    return this.request("POST", `/api/sites/${siteId}/database`, undefined);
+  }
+
+  // Stop injecting DATABASE_URL; with drop, delete the database and its data
+  async detachDatabase(siteId: string, drop: boolean): Promise<{ message: string }> {
+    return this.request(
+      "DELETE",
+      `/api/sites/${siteId}/database${drop ? "?drop=true" : ""}`,
+      undefined
+    );
+  }
+
   // Get environment variables for a site
   async getEnvVars(
     siteId: string

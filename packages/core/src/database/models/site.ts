@@ -6,13 +6,20 @@ import { Database } from "../database";
 import type { BuildSource, Site } from "../schema";
 import { encrypt, decrypt } from "../../utils/crypto";
 
-/** Decrypt a site's environment JSON after a query that bypasses SiteModel. */
+/** Decrypt a site's secrets (env JSON, database URL) after a query that bypasses SiteModel. */
 export function decryptSiteEnvVars(site: Site): Site {
   if (site.env_vars) {
     try {
       site.env_vars = decrypt(site.env_vars);
     } catch {
       // Leave the value as-is so callers can handle malformed or unavailable data.
+    }
+  }
+  if (site.database_url) {
+    try {
+      site.database_url = decrypt(site.database_url);
+    } catch {
+      // Same policy as env_vars: surface the stored value rather than fail the read.
     }
   }
   return site;
@@ -37,6 +44,8 @@ export interface CreateSiteData {
   primary_port?: number | null;
   custom_domains?: string[];
   build_sources?: BuildSource[];
+  database_name?: string | null;
+  database_url?: string | null;
 }
 
 /**
@@ -58,6 +67,8 @@ export interface UpdateSiteData {
   primary_port?: number | null;
   custom_domains?: string[];
   build_sources?: BuildSource[];
+  database_name?: string | null;
+  database_url?: string | null;
 }
 
 /**
@@ -116,11 +127,13 @@ export class SiteModel {
       primary_port: data.primary_port ?? null,
       custom_domains: JSON.stringify(data.custom_domains ?? []),
       build_sources: JSON.stringify(data.build_sources ?? []),
+      database_name: data.database_name ?? null,
+      database_url: data.database_url ?? null,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domains, build_sources)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sites (id, name, git_url, branch, type, visibility, status, container_id, port, env_vars, persistent_storage, autodeploy, created_at, last_deployed_at, sleep_enabled, sleep_after_minutes, last_request_at, compose_yaml, primary_service, primary_port, custom_domains, build_sources, database_name, database_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -145,7 +158,9 @@ export class SiteModel {
       site.primary_service,
       site.primary_port,
       site.custom_domains,
-      site.build_sources
+      site.build_sources,
+      site.database_name,
+      site.database_url ? encrypt(site.database_url) : null
     );
 
     return site;
@@ -291,6 +306,14 @@ export class SiteModel {
     if (data.build_sources !== undefined) {
       updates.push("build_sources = ?");
       values.push(JSON.stringify(data.build_sources));
+    }
+    if (data.database_name !== undefined) {
+      updates.push("database_name = ?");
+      values.push(data.database_name);
+    }
+    if (data.database_url !== undefined) {
+      updates.push("database_url = ?");
+      values.push(data.database_url ? encrypt(data.database_url) : null);
     }
 
     if (updates.length === 0) {

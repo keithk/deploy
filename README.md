@@ -71,6 +71,7 @@ Open `https://admin.yourdomain.com` in your browser and log in with the password
 - **Automatic SSL**: Caddy handles certificates for all your subdomains
 - **GitHub autodeploy**: Toggle it on, push to main, site updates automatically
 - **Persistent storage**: Enable `/data` volumes that survive redeploys
+- **Databases**: Register a Postgres server once, then attach a database to any site and it gets `DATABASE_URL`
 - **Build & runtime logs**: Watch deployments in real-time
 - **Environment variables**: Set secrets per-site via the dashboard, available to the build and the container
 - **Build sources**: Pull a private repo or a server directory into the build context for sites whose repository must stay public
@@ -131,6 +132,7 @@ deploy update             # Pull latest code and restart
 - [Getting Started](docs/getting-started.md) — Detailed setup walkthrough
 - [Custom Domains](docs/custom-domains.md) — Using your own domains
 - [Persistent Storage](docs/persistent-storage.md) — Data that survives redeploys
+- [Databases](docs/databases.md) — Per-site Postgres databases on a server you register
 - [Actions](docs/actions/index.md) — Scheduled tasks, webhooks, and automation
 - [Deployment Guide](docs/DEPLOYMENT.md) — Production deployment details
 

@@ -12,6 +12,7 @@ import {
 } from "@keithk/deploy-core";
 import { requireAuth } from "../middleware/auth";
 import { deploySite } from "../services/deploy";
+import { attachDatabase, detachDatabase } from "../services/database";
 import { teardownSite, getSiteLogs } from "../services/site-ops";
 import { validateBuildSources } from "../services/overlay";
 import { parseComposeFile, ComposeError } from "./compose";
@@ -108,7 +109,73 @@ export async function handleSitesApi(
     return handleSetBuildSources(siteId, request);
   }
 
+  // POST /api/sites/:id/database - Provision a Postgres database and inject DATABASE_URL
+  if (method === "POST" && subResource === "database") {
+    return handleAttachDatabase(siteId);
+  }
+
+  // DELETE /api/sites/:id/database[?drop=true] - Stop injecting DATABASE_URL; optionally drop the data
+  if (method === "DELETE" && subResource === "database") {
+    return handleDetachDatabase(siteId, request);
+  }
+
   return null;
+}
+
+/**
+ * Site fields safe to return to the dashboard and MCP. The connection string
+ * carries the site's database password, so only its presence is exposed.
+ */
+function publicSite<T extends { database_url?: string | null }>(site: T) {
+  const { database_url, ...rest } = site;
+  return { ...rest, database_attached: !!database_url };
+}
+
+/**
+ * POST /api/sites/:id/database - Attach a database to a site
+ */
+async function handleAttachDatabase(siteId: string): Promise<Response> {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  try {
+    const updated = await attachDatabase(site);
+    return Response.json({
+      message: "Database attached. DATABASE_URL is injected on the next deploy.",
+      database_name: updated.database_name,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/sites/:id/database - Detach a site's database
+ */
+async function handleDetachDatabase(siteId: string, request: Request): Promise<Response> {
+  const site = siteModel.findById(siteId);
+  if (!site) {
+    return Response.json({ error: "Site not found" }, { status: 404 });
+  }
+  if (!site.database_name) {
+    return Response.json({ error: "Site has no database attached" }, { status: 400 });
+  }
+
+  const drop = new URL(request.url).searchParams.get("drop") === "true";
+  try {
+    await detachDatabase(site, { drop });
+    return Response.json({
+      message: drop
+        ? "Database dropped. Its data is gone."
+        : "Database detached. Its data is kept and a later attach reuses it.",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
 
 /**
@@ -124,7 +191,7 @@ function handleListSites(): Response {
     sites.map((site) => {
       const metrics = latestMetrics.get(site.id);
       return {
-        ...site,
+        ...publicSite(site),
         cpu_pct: metrics?.cpu_pct ?? null,
         mem_pct:
           metrics && metrics.mem_limit_bytes > 0
@@ -325,7 +392,7 @@ function handleGetSite(siteId: string): Response {
   if (!site) {
     return Response.json({ error: "Site not found" }, { status: 404 });
   }
-  return Response.json(site);
+  return Response.json(publicSite(site));
 }
 
 /**
@@ -522,6 +589,9 @@ function handleGetEnvVars(siteId: string): Response {
   }
   if (site.persistent_storage) {
     systemEnvVars.DATA_DIR = "/data";
+  }
+  if (site.database_url) {
+    systemEnvVars.DATABASE_URL = site.database_url;
   }
 
   return Response.json({

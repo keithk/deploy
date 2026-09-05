@@ -16,6 +16,8 @@ const mockSite = {
   port: null,
   env_vars: "{}",
   build_sources: "[]",
+  database_name: null,
+  database_url: null,
   created_at: new Date().toISOString(),
   last_deployed_at: null,
 };
@@ -161,6 +163,20 @@ mockDeploySite = mock((siteId: string) =>
 mock.module("../src/services/deploy", () => {
   return {
     deploySite: mockDeploySite,
+  };
+});
+
+const mockAttachDatabase = mock((site: any) =>
+  Promise.resolve({ ...site, database_name: "site_test_site", database_url: "postgres://site_test_site:pw@db/site_test_site" })
+);
+const mockDetachDatabase = mock((site: any, options?: { drop?: boolean }) =>
+  Promise.resolve({ ...site, database_url: null, database_name: options?.drop ? null : site.database_name })
+);
+
+mock.module("../src/services/database", () => {
+  return {
+    attachDatabase: mockAttachDatabase,
+    detachDatabase: mockDetachDatabase,
   };
 });
 
@@ -680,5 +696,109 @@ describe("handleSitesApi routing", () => {
     const response = await handleSitesApi(request, "/api/other");
 
     expect(response).toBeNull();
+  });
+});
+
+describe("site database", () => {
+  beforeEach(() => {
+    mockAttachDatabase.mockClear();
+    mockDetachDatabase.mockClear();
+  });
+
+  test("POST /api/sites/:id/database attaches and reports the database name", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/database",
+      { method: "POST" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123/database");
+
+    expect(response!.status).toBe(200);
+    expect(await response!.json()).toMatchObject({ database_name: "site_test_site" });
+    expect(mockAttachDatabase).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST /api/sites/:id/database returns 404 for an unknown site", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/non-existent/database",
+      { method: "POST" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/non-existent/database");
+
+    expect(response!.status).toBe(404);
+    expect(mockAttachDatabase).not.toHaveBeenCalled();
+  });
+
+  test("POST /api/sites/:id/database surfaces provisioning errors", async () => {
+    mockAttachDatabase.mockImplementationOnce(() =>
+      Promise.reject(new Error("No database server is registered. Add one in Settings first."))
+    );
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/database",
+      { method: "POST" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123/database");
+
+    expect(response!.status).toBe(500);
+    expect((await response!.json()).error).toContain("No database server");
+  });
+
+  test("DELETE /api/sites/:id/database detaches without dropping by default", async () => {
+    mockSiteFindById.mockImplementationOnce(() => ({
+      ...mockSite,
+      database_name: "site_test_site",
+      database_url: "postgres://x",
+    }));
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/database",
+      { method: "DELETE" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123/database");
+
+    expect(response!.status).toBe(200);
+    expect(mockDetachDatabase).toHaveBeenCalledTimes(1);
+    expect(mockDetachDatabase.mock.calls[0][1]).toEqual({ drop: false });
+  });
+
+  test("DELETE /api/sites/:id/database?drop=true drops the database", async () => {
+    mockSiteFindById.mockImplementationOnce(() => ({
+      ...mockSite,
+      database_name: "site_test_site",
+      database_url: "postgres://x",
+    }));
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/database?drop=true",
+      { method: "DELETE" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123/database");
+
+    expect(response!.status).toBe(200);
+    expect(mockDetachDatabase.mock.calls[0][1]).toEqual({ drop: true });
+  });
+
+  test("DELETE /api/sites/:id/database is a 400 when nothing is attached", async () => {
+    const request = createAuthenticatedRequest(
+      "http://localhost/api/sites/site-id-123/database",
+      { method: "DELETE" }
+    );
+    const response = await handleSitesApi(request, "/api/sites/site-id-123/database");
+
+    expect(response!.status).toBe(400);
+    expect(mockDetachDatabase).not.toHaveBeenCalled();
+  });
+
+  test("GET /api/sites/:id hides the connection string but reports attachment", async () => {
+    mockSiteFindById.mockImplementationOnce(() => ({
+      ...mockSite,
+      database_name: "site_test_site",
+      database_url: "postgres://site_test_site:secret@db/site_test_site",
+    }));
+    const request = createAuthenticatedRequest("http://localhost/api/sites/site-id-123");
+    const response = await handleSitesApi(request, "/api/sites/site-id-123");
+    const body = await response!.json();
+
+    expect(body.database_url).toBeUndefined();
+    expect(body.database_attached).toBe(true);
+    expect(body.database_name).toBe("site_test_site");
+    expect(JSON.stringify(body)).not.toContain("secret");
   });
 });

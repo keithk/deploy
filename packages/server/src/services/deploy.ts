@@ -13,6 +13,7 @@ import {
 } from "@keithk/deploy-core";
 import { cloneSite } from "./git";
 import { buildWithRailpacks } from "./railpacks";
+import { databaseEnvVars } from "./database";
 import {
   startContainer,
   stopContainer,
@@ -233,7 +234,7 @@ async function runDeploy(
       siteModel.updateStatus(siteId, "building");
     }
 
-    const envVars = parseEnvVars(site.env_vars);
+    const envVars = { ...parseEnvVars(site.env_vars), ...databaseEnvVars(site) };
     let sitePath: string;
     let imageName: string;
 
@@ -580,7 +581,7 @@ async function deployComposeSite(
     log(`Writing compose project files...`);
     writeComposeProject(site, {
       allocatedPort,
-      envVars: parseEnvVars(site.env_vars),
+      envVars: { ...parseEnvVars(site.env_vars), ...databaseEnvVars(site) },
       persistentStorage: site.persistent_storage === 1,
     });
     deploymentStepModel.completeStep(currentStepId);

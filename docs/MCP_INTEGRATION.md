@@ -229,6 +229,26 @@ Sets the full list of custom domains for a site, replacing any existing ones. On
 }
 ```
 
+### manage_database
+
+Manages a site's Postgres database on the server registered under Settings → Database Server.
+
+**Parameters:**
+- `site` (string, required): Site name or ID
+- `action` (string, required): `"attach"` creates the database and role (or rotates the password) and injects `DATABASE_URL` on the next deploy; `"detach"` stops injecting it but keeps the data; `"drop"` deletes the database and its data permanently
+
+**Usage in Claude:**
+> "Attach a database to the blog site"
+> "Drop the database on the staging site"
+
+**Output example:**
+```json
+{
+  "message": "Database attached. DATABASE_URL is injected on the next deploy.",
+  "database_name": "site_blog"
+}
+```
+
 ### manage_env_vars
 
 Gets or sets environment variables for a site. Environment variables are stored per-site and merged with system variables (like `PORT`) at build/runtime. They are passed to the build as BuildKit secrets as well as to the running container.
