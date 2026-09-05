@@ -133,6 +133,7 @@ deploy update             # Pull latest code and restart
 - [Custom Domains](docs/custom-domains.md) — Using your own domains
 - [Persistent Storage](docs/persistent-storage.md) — Data that survives redeploys
 - [Databases](docs/databases.md) — Per-site Postgres databases on a server you register
+- [Compose Sites](docs/compose-sites.md) — Multi-service sites from a Docker Compose file
 - [Actions](docs/actions/index.md) — Scheduled tasks, webhooks, and automation
 - [Deployment Guide](docs/DEPLOYMENT.md) — Production deployment details
 

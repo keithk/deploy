@@ -15,6 +15,12 @@ const SITES_BASE_PATH = process.env.ROOT_DIR || "/var/deploy/sites";
 const COMPOSE_FILENAME = "docker-compose.yml";
 
 /**
+ * Env file written beside the compose file with the same variables the primary
+ * service receives, so other services can opt in with `env_file: [deploy.env]`.
+ */
+export const DEPLOY_ENV_FILENAME = "deploy.env";
+
+/**
  * The compose project name for a site. Used as `docker compose -p <name>`.
  * Must stay in sync between create, deploy, sleep/wake and delete paths.
  */
@@ -79,6 +85,35 @@ function normalizeEnvironment(env: unknown): Record<string, string> {
 }
 
 /**
+ * The variables the platform hands a compose site: the site's env vars plus
+ * DATA_DIR when persistent storage is on.
+ */
+export function platformEnvVars(
+  envVars: Record<string, string>,
+  persistentStorage: boolean
+): Record<string, string> {
+  const vars = { ...envVars };
+  if (persistentStorage && vars.DATA_DIR === undefined) {
+    vars.DATA_DIR = "/data";
+  }
+  return vars;
+}
+
+/**
+ * Render env vars in the KEY=VALUE form docker compose's `env_file` reads.
+ * Values are double-quoted with backslash, quote, and newline escaped, which
+ * compose unescapes, so multi-line secrets survive the round trip.
+ */
+export function renderEnvFile(envVars: Record<string, string>): string {
+  return Object.entries(envVars)
+    .map(([key, value]) => {
+      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+      return `${key}="${escaped}"`;
+    })
+    .join("\n") + "\n";
+}
+
+/**
  * Take the user's compose YAML and return a deploy-ready version that:
  *   - strips `ports:` from every service (we won't let any service publish on the host)
  *   - on the primary service: adds a single `127.0.0.1:<allocatedPort>:<primaryPort>` binding
@@ -124,11 +159,8 @@ export function prepareDeployCompose(
   // 3. Primary service: merge env vars (ours win).
   const merged = {
     ...normalizeEnvironment(primary.environment),
-    ...envVars,
+    ...platformEnvVars(envVars, persistentStorage),
   };
-  if (persistentStorage && merged.DATA_DIR === undefined) {
-    merged.DATA_DIR = "/data";
-  }
   primary.environment = merged;
 
   // 4. Primary service: append /data mount when persistent storage is on.
@@ -176,7 +208,12 @@ export function writeComposeProject(site: Site, options: WriteOptions): void {
   });
 
   writeFileSync(join(dir, COMPOSE_FILENAME), composeYaml);
-  debug(`Wrote compose project file for ${site.name}`);
+  writeFileSync(
+    join(dir, DEPLOY_ENV_FILENAME),
+    renderEnvFile(platformEnvVars(options.envVars, options.persistentStorage)),
+    { mode: 0o600 }
+  );
+  debug(`Wrote compose project files for ${site.name}`);
 }
 
 /**

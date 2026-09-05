@@ -8,6 +8,8 @@ import {
   composeProjectName,
   composeProjectDir,
   composeFilesArgs,
+  platformEnvVars,
+  renderEnvFile,
 } from "../src/services/compose";
 
 const COBALT_COMPOSE = `
@@ -174,5 +176,32 @@ services:
     expect(() =>
       prepareDeployCompose(yaml, { ...baseOpts, primaryService: "app", primaryPort: 6379 })
     ).toThrow(/privileged/);
+  });
+});
+
+describe("deploy.env for secondary services", () => {
+  test("platformEnvVars adds DATA_DIR only with persistent storage", () => {
+    expect(platformEnvVars({ A: "1" }, false)).toEqual({ A: "1" });
+    expect(platformEnvVars({ A: "1" }, true)).toEqual({ A: "1", DATA_DIR: "/data" });
+    expect(platformEnvVars({ DATA_DIR: "/custom" }, true)).toEqual({ DATA_DIR: "/custom" });
+  });
+
+  test("renderEnvFile quotes values and escapes quotes, backslashes, and newlines", () => {
+    const out = renderEnvFile({
+      PLAIN: "hello",
+      QUOTED: 'say "hi"',
+      KEY: "line1\nline2",
+      SLASH: "a\\b",
+    });
+    expect(out).toBe(
+      'PLAIN="hello"\n' +
+        'QUOTED="say \\"hi\\""\n' +
+        'KEY="line1\\nline2"\n' +
+        'SLASH="a\\\\b"\n'
+    );
+  });
+
+  test("renderEnvFile of nothing is an empty file", () => {
+    expect(renderEnvFile({})).toBe("\n");
   });
 });
