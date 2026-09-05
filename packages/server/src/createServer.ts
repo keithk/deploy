@@ -692,7 +692,7 @@ export async function createServer({
         // Try database-backed containerized sites FIRST
         // This gives containerized deployments priority over filesystem sites
         const dbResponse = await handleSubdomainRequest(server, request, PROJECT_DOMAIN);
-        if (dbResponse.status !== 404) {
+        if (dbResponse) {
           logger.logResponse(request, dbResponse, loggerStart);
           return dbResponse;
         }

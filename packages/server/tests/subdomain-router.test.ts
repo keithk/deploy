@@ -108,8 +108,10 @@ const mockWakeSite = mock(() => Promise.resolve());
 mock.module("@keithk/deploy-core", () => ({
   siteModel: {
     findByName: mockSiteFindByName,
+    findAll: () => [],
     updateLastRequest: mockUpdateLastRequest,
   },
+  siteHasDomain: () => false,
   info: () => {},
   debug: () => {},
   error: () => {},
@@ -152,7 +154,7 @@ describe("handleSubdomainRequest", () => {
     mockWakeSite.mockClear();
   });
 
-  test("returns 404 for non-existent site", async () => {
+  test("returns null for non-existent site so the caller can fall back", async () => {
     const request = createRequest("nonexistent");
     const response = await handleSubdomainRequest(
       mockServer,
@@ -160,9 +162,7 @@ describe("handleSubdomainRequest", () => {
       "dev.flexi"
     );
 
-    expect(response.status).toBe(404);
-    const text = await response.text();
-    expect(text).toContain("not found");
+    expect(response).toBeNull();
   });
 
   test("proxies running site to container port", async () => {

@@ -181,7 +181,9 @@ export async function proxyRequest(
       request.headers.get("X-Forwarded-Proto") || "https"
     );
 
-    headers.set("Host", "localhost:" + targetPort);
+    // Hand the app the host the visitor used, as Caddy does for us. Apps build
+    // absolute URLs and resolve per-host behavior (wildcard subdomains) from it.
+    headers.set("Host", originalHost || "localhost:" + targetPort);
 
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
 

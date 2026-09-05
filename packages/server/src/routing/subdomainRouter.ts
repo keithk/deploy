@@ -327,7 +327,7 @@ export async function handleSubdomainRequest(
   server: Server<WsProxyData>,
   request: Request,
   projectDomain: string
-): Promise<Response> {
+): Promise<Response | null> {
   const host = request.headers.get("host") || "";
   const hostNoPort = host.split(":")[0] || "";
 
@@ -351,15 +351,18 @@ export async function handleSubdomainRequest(
     subdomain = extractSubdomain(host, projectDomain) || "";
 
     if (!subdomain) {
-      return new Response("Site not found", { status: 404 });
+      return null;
     }
 
     // Look up site in database by name (subdomain)
     site = siteModel.findByName(subdomain);
   }
 
+  // No DB site owns this host. Returning null (rather than a 404 Response) lets
+  // the caller fall back to filesystem sites without mistaking a site's own 404
+  // for "no such site".
   if (!site) {
-    return new Response("Site not found", { status: 404 });
+    return null;
   }
 
   // Check access for private sites
