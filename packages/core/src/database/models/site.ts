@@ -396,6 +396,31 @@ export function parseCustomDomains(site: Site): string[] {
 }
 
 /**
+ * True when `host` is covered by a custom-domain entry. An entry is either an
+ * exact hostname or a wildcard like `*.example.com`, which matches exactly one
+ * label below it (`a.example.com`, not `a.b.example.com` or `example.com`).
+ */
+export function domainMatches(entry: string, host: string): boolean {
+  const pattern = entry.trim().toLowerCase();
+  const target = host.trim().toLowerCase();
+  if (!pattern || !target) return false;
+  if (pattern === target) return true;
+  if (!pattern.startsWith("*.")) return false;
+
+  const base = pattern.slice(2);
+  if (!target.endsWith(`.${base}`)) return false;
+  const label = target.slice(0, -(base.length + 1));
+  return label.length > 0 && !label.includes(".");
+}
+
+/**
+ * True when any of the site's custom domains covers `host`.
+ */
+export function siteHasDomain(site: Site, host: string): boolean {
+  return parseCustomDomains(site).some((entry) => domainMatches(entry, host));
+}
+
+/**
  * Parse a site's build_sources JSON column into an array.
  * Falls back to an empty array on malformed JSON.
  */

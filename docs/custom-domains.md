@@ -78,6 +78,18 @@ docker ps | grep sitename
 
 ---
 
+## Wildcard Custom Domains
+
+A custom domain entry can start with `*.` to cover every single-label subdomain of a domain you own. `*.example.com` matches `blog.example.com` and `keith.example.com`, but not `example.com` itself (add that as its own entry) or `a.b.example.com`.
+
+This is for apps that hand out subdomains to their users. Point a wildcard DNS record at the server:
+
+```
+A     *     →  your.server.ip
+```
+
+With on-demand TLS enabled, Caddy requests a certificate for each subdomain the first time it is visited. Let's Encrypt allows 50 new certificates per registered domain per week, so this suits sites with a modest number of subdomains rather than thousands.
+
 ## Wildcard Subdomains
 
 Your main domain already has wildcard support. Any subdomain automatically routes to the site with that name:

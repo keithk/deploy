@@ -11,7 +11,7 @@ export {
   shareLinkModel
 } from "./share-link";
 
-export { SiteModel, siteModel, parseCustomDomains, parseBuildSources } from "./site";
+export { SiteModel, siteModel, parseCustomDomains, parseBuildSources, domainMatches, siteHasDomain } from "./site";
 export type { CreateSiteData, UpdateSiteData } from "./site";
 
 export { SettingsModel, settingsModel } from "./settings";

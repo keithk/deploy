@@ -135,7 +135,7 @@ server.setRequestHandler(
         {
           name: "set_custom_domains",
           description:
-            "Set the full list of custom domains for a site, replacing any existing ones. Pass an empty array to remove all custom domains.",
+            "Set the full list of custom domains for a site, replacing any existing ones. An entry like *.example.com matches every single-label subdomain. Pass an empty array to remove all custom domains.",
           inputSchema: {
             type: "object",
             properties: {
