@@ -1,5 +1,5 @@
 import type { SiteConfig } from "@keithk/deploy-core";
-import { debug, info, error, warn } from "@keithk/deploy-core";
+import { debug, info, error, warn, domainMatches } from "@keithk/deploy-core";
 
 /**
  * Middleware that determines the site based on the subdomain or custom domain.
@@ -24,7 +24,7 @@ export function siteContext(sites: SiteConfig[], projectDomain: string) {
 
     // First, check if this is a custom domain
     const siteByCustomDomain = sites.find(
-      (site) => site.customDomain === hostNoPort
+      (site) => site.customDomain && domainMatches(site.customDomain, hostNoPort)
     );
 
     if (siteByCustomDomain) {

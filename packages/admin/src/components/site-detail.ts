@@ -215,9 +215,10 @@ class DeploySiteDetail extends HTMLElement {
     const domain = input.value.trim().toLowerCase();
     if (!domain) return;
 
-    const hostnamePattern = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+    // A leading `*.` makes the entry match every single-label subdomain.
+    const hostnamePattern = /^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
     if (!hostnamePattern.test(domain)) {
-      showToast("Enter a valid domain, e.g. example.com", 'error');
+      showToast("Enter a valid domain, e.g. example.com or *.example.com", 'error');
       return;
     }
 

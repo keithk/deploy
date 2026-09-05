@@ -17,7 +17,7 @@ import {
   executeHook,
   routeManager
 } from "./actions";
-import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database, parseCustomDomains } from "@keithk/deploy-core";
+import { debug, info, warn, setLogLevel, LogLevel, settingsModel, siteModel, Database, siteHasDomain, domainMatches } from "@keithk/deploy-core";
 import { spawn } from "bun";
 import { processManager } from "./utils/process-manager";
 import { isReservedHost } from "./utils/reserved-hosts";
@@ -349,7 +349,7 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     // Check if domain is configured in any filesystem site
     const isFilesystemSite = sites.some(site => {
       // Check if it matches a custom domain
-      if (site.customDomain === domain) {
+      if (site.customDomain && domainMatches(site.customDomain, domain)) {
         return true;
       }
 
@@ -366,7 +366,7 @@ async function handleDomainValidation(request: Request, sites: SiteConfig[]): Pr
     const dbSites = siteModel.findAll();
     const isDbSite = dbSites.some(site => {
       // Check custom domains
-      if (parseCustomDomains(site).includes(domain)) {
+      if (siteHasDomain(site, domain)) {
         return true;
       }
       // Check subdomain pattern
