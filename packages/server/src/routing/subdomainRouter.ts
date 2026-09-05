@@ -6,7 +6,7 @@ interface WsProxyData {
   targetWs: WebSocket;
   targetPort: number;
 }
-import { siteModel, siteHasDomain } from "@keithk/deploy-core";
+import { siteModel, findSiteForHost } from "@keithk/deploy-core";
 import { ActionRegistry } from "../actions/registry";
 import { join, resolve } from "path";
 import { existsSync } from "fs";
@@ -339,8 +339,7 @@ export async function handleSubdomainRequest(
 
   if (hostNoPort && hostNoPort !== projectDomain && hostNoPort !== "localhost") {
     // Check if any DB site has this host among its custom_domains
-    const allSites = siteModel.findAll();
-    const customSite = allSites.find((s) => siteHasDomain(s, hostNoPort));
+    const customSite = findSiteForHost(siteModel.findAll(), hostNoPort);
     if (customSite) {
       site = customSite;
       subdomain = customSite.name;

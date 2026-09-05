@@ -444,6 +444,19 @@ export function siteHasDomain(site: Site, host: string): boolean {
 }
 
 /**
+ * The site that owns `host`: an exact custom-domain entry beats a wildcard
+ * one, so `pds.example.com` on one site is not swallowed by `*.example.com`
+ * on another.
+ */
+export function findSiteForHost(sites: Site[], host: string): Site | undefined {
+  const target = host.trim().toLowerCase();
+  const exact = sites.find((site) =>
+    parseCustomDomains(site).some((entry) => entry.trim().toLowerCase() === target)
+  );
+  return exact ?? sites.find((site) => siteHasDomain(site, host));
+}
+
+/**
  * Parse a site's build_sources JSON column into an array.
  * Falls back to an empty array on malformed JSON.
  */

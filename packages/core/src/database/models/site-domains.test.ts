@@ -2,7 +2,7 @@
 // ABOUTME: Covers the matcher shared by on-demand TLS validation and request routing.
 
 import { describe, test, expect } from "bun:test";
-import { domainMatches, siteHasDomain } from "./site";
+import { domainMatches, findSiteForHost, siteHasDomain } from "./site";
 import type { Site } from "../schema";
 
 describe("domainMatches", () => {
@@ -44,5 +44,24 @@ describe("siteHasDomain", () => {
 
   test("tolerates malformed JSON", () => {
     expect(siteHasDomain({ custom_domains: "not json" } as Site, "pollen.place")).toBe(false);
+  });
+});
+
+describe("findSiteForHost", () => {
+  const app = { name: "app", custom_domains: JSON.stringify(["example.com", "*.example.com"]) } as Site;
+  const pds = { name: "pds", custom_domains: JSON.stringify(["pds.example.com"]) } as Site;
+
+  test("an exact entry wins over another site's wildcard regardless of order", () => {
+    expect(findSiteForHost([app, pds], "pds.example.com")?.name).toBe("pds");
+    expect(findSiteForHost([pds, app], "pds.example.com")?.name).toBe("pds");
+  });
+
+  test("falls back to the wildcard for other subdomains", () => {
+    expect(findSiteForHost([pds, app], "keith.example.com")?.name).toBe("app");
+    expect(findSiteForHost([pds, app], "example.com")?.name).toBe("app");
+  });
+
+  test("returns undefined when nothing matches", () => {
+    expect(findSiteForHost([app, pds], "other.org")).toBeUndefined();
   });
 });

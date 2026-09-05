@@ -111,7 +111,7 @@ mock.module("@keithk/deploy-core", () => ({
     findAll: () => [],
     updateLastRequest: mockUpdateLastRequest,
   },
-  siteHasDomain: () => false,
+  findSiteForHost: () => undefined,
   info: () => {},
   debug: () => {},
   error: () => {},
