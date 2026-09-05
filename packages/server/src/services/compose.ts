@@ -105,12 +105,11 @@ export function platformEnvVars(
  * compose unescapes, so multi-line secrets survive the round trip.
  */
 export function renderEnvFile(envVars: Record<string, string>): string {
-  return Object.entries(envVars)
-    .map(([key, value]) => {
-      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
-      return `${key}="${escaped}"`;
-    })
-    .join("\n") + "\n";
+  const lines = Object.entries(envVars).map(([key, value]) => {
+    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    return `${key}="${escaped}"`;
+  });
+  return `${lines.join("\n")}\n`;
 }
 
 /**
