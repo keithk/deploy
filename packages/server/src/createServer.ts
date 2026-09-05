@@ -115,7 +115,11 @@ function getContentType(filePath: string): string {
  */
 function isRootDomain(host: string, projectDomain: string): boolean {
   const hostNoPort = host.split(":")[0] || "";
-  return hostNoPort === projectDomain || hostNoPort === "localhost";
+  return (
+    hostNoPort === projectDomain ||
+    hostNoPort === `www.${projectDomain}` ||
+    hostNoPort === "localhost"
+  );
 }
 
 /**
