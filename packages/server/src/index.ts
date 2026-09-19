@@ -49,6 +49,10 @@ export {
   buildSite
 } from "./actions";
 
+// Re-export the deployment pipeline so a site action can redeploy its own site.
+// buildSite only covers static-build sites, which the pipeline no longer builds.
+export { deploySite, deploySiteByName } from "./services/deploy";
+
 // Export types
 export type { ActionRegistry } from "./actions/registry";
 

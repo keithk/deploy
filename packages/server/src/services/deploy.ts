@@ -132,6 +132,20 @@ export async function deploySite(
   return deploySiteWithOptions(siteId, {});
 }
 
+/**
+ * Deploy a site by name, for callers that only have its SiteConfig — a site
+ * action's context carries the subdomain, never the database id.
+ * @param name The site's name, which is also its subdomain
+ * @returns Result with success status, deployment ID, and optional error message
+ */
+export async function deploySiteByName(name: string): Promise<DeployResult> {
+  const site = siteModel.findByName(name);
+  if (!site) {
+    return { success: false, error: `Site not found: ${name}` };
+  }
+  return deploySite(site.id);
+}
+
 /** Build and deploy the source site for a group using only variables shared by every member. */
 export async function deployGroupSourceSite(
   siteId: string,
