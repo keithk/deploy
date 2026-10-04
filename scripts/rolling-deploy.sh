@@ -1,6 +1,6 @@
 #!/bin/bash
-# ABOUTME: Zero-downtime rolling deploy — pulls, builds, and restarts each server
-# ABOUTME: instance one at a time behind a health gate so the site stays up.
+# ABOUTME: Production deploy — pulls, builds, and restarts the server behind a
+# ABOUTME: health gate. Caddy holds requests during the restart (lb_try_duration).
 #
 # Invoked by the running server from Settings -> System Updates, launched as a
 # transient systemd unit (see performRollingUpdate in api/system.ts) so it runs
@@ -19,10 +19,11 @@ BRANCH="${1:-main}"
 STATUS_FILE="$DEPLOY_DIR/data/update-status.json"
 STARTED_AT="$(date -Iseconds)"
 
-# instance service name -> health port. The non-templated `deploy` service is
-# instance 0 (port 3000); `deploy@1` is instance 1 (port 3001). Restarting them
-# one at a time keeps at least one instance serving traffic throughout.
-INSTANCES=("deploy:3000" "deploy@1:3001")
+# instance service name -> health port. Production runs a single instance: the
+# sleep monitor and action scheduler aren't safe to run twice. Caddy's
+# lb_try_duration holds incoming requests while it restarts, so visitors see a
+# short delay rather than errors.
+INSTANCES=("deploy:3000")
 
 MAX_RETRIES=30
 RETRY_INTERVAL=2
