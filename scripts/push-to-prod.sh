@@ -26,5 +26,5 @@ echo "==> Running rolling deploy on $HOST"
 ssh "$HOST" "sudo -u deploy bash -lc 'cd $DEPLOY_DIR && ./scripts/rolling-deploy.sh $BRANCH'"
 
 echo "==> Verifying"
-ssh "$HOST" "cd $DEPLOY_DIR && git log --oneline -1"
+ssh "$HOST" "sudo -u deploy git -C $DEPLOY_DIR log --oneline -1"
 curl -sf -o /dev/null -w "admin.keith.is/health: %{http_code}\n" https://admin.keith.is/health
