@@ -518,6 +518,9 @@ export async function createServer({
   // Start the server with Bun.serve
   const server = Bun.serve({
     port,
+    // Bun's 10s default closes slow proxied requests (long polls, waking sites)
+    // mid-flight; Caddy sees the EOF as an upstream failure. 255s is Bun's max.
+    idleTimeout: 255,
     // Add websocket property to satisfy TypeScript
     websocket: createWebSocketHandlers(),
     fetch: async (request, server) => {
