@@ -3,7 +3,7 @@
 
 import { info, error, siteModel } from "@keithk/deploy-core";
 import { waitForContainerHealth } from "./container";
-import { startSiteContainer } from "./site-ops";
+import { startSiteContainer, stopSiteContainer } from "./site-ops";
 
 /** Sites currently being woken — prevents duplicate wake calls */
 const wakeInProgress = new Set<string>();
@@ -41,8 +41,11 @@ export async function wakeSite(siteId: string): Promise<void> {
       const duration = Date.now() - startTime;
       info(`Site ${site.name} woke in ${duration}ms`);
     } else {
-      error(`Site ${site.name} failed to become healthy after wake`);
-      siteModel.updateStatus(siteId, "error");
+      // A slow health check is usually transient (a busy host, a slow app boot).
+      // Go back to sleep rather than "error" so the next visit retries the wake.
+      error(`Site ${site.name} failed to become healthy after wake; returning it to sleep`);
+      await stopSiteContainer(site);
+      siteModel.updateStatus(siteId, "sleeping", site.container_id ?? undefined, site.port);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
