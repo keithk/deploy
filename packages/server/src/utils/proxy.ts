@@ -203,7 +203,13 @@ export async function proxyRequest(
       body: bodyBuffer,
     });
 
-    const response = await fetch(proxyReq, { redirect: "manual" });
+    // Abort the upstream fetch when the visitor disconnects. Without this, a
+    // never-ending response (SSE streams) holds its upstream connection forever,
+    // and enough of them exhaust Bun's fetch pool for every site.
+    const response = await fetch(proxyReq, {
+      redirect: "manual",
+      signal: request.signal,
+    });
 
     const responseHeaders = new Headers(response.headers);
     // Do not inject a blanket Access-Control-Allow-Origin. Let each site set
