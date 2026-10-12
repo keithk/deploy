@@ -168,6 +168,13 @@ export class DeployApiClient {
     return this.updateSite(siteId, { custom_domains: domains });
   }
 
+  // Create (enabled=true) or delete (enabled=false) the GitHub push webhook for a repo
+  async setGithubWebhook(gitUrl: string, enabled: boolean): Promise<unknown> {
+    return this.request(enabled ? "POST" : "DELETE", "/api/github/webhooks", {
+      git_url: gitUrl,
+    });
+  }
+
   // Provision a Postgres database for a site (or rotate its password)
   async attachDatabase(siteId: string): Promise<{ message: string; database_name: string }> {
     return this.request("POST", `/api/sites/${siteId}/database`, undefined);

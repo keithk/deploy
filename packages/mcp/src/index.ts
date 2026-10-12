@@ -80,6 +80,11 @@ const databaseSchema = z.object({
   site: z.string(),
   action: z.enum(["attach", "detach", "drop"]),
 });
+const siteSettingsSchema = z.object({
+  site: z.string(),
+  visibility: z.enum(["public", "private"]).optional(),
+  autodeploy: z.boolean().optional(),
+});
 const envVarsSchema = z.object({
   site: z.string(),
   action: z.enum(["get", "set"]),
@@ -148,6 +153,20 @@ server.setRequestHandler(
               domains: { type: "array", items: { type: "string" } },
             },
             required: ["site", "domains"],
+          },
+        },
+        {
+          name: "update_site_settings",
+          description:
+            "Change a site's visibility and/or autodeploy. visibility=\"public\" serves the site to anyone; \"private\" requires an admin login. Enabling autodeploy also creates the GitHub push webhook on the site's repo (requires a GitHub token in admin settings); disabling it deletes the webhook.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              site: { type: "string", description: "Site name or ID" },
+              visibility: { type: "string", enum: ["public", "private"] },
+              autodeploy: { type: "boolean" },
+            },
+            required: ["site"],
           },
         },
         {
@@ -458,6 +477,53 @@ server.setRequestHandler(
                     customDomains.length > 0
                       ? customDomains.map((d) => `https://${d}`)
                       : [`https://${site.name}.keith.is`],
+                },
+                null,
+                2
+              ),
+            } as TextContent,
+          ],
+        };
+      } else if (toolName === "update_site_settings") {
+        const parsed = siteSettingsSchema.parse(args);
+        if (parsed.visibility === undefined && parsed.autodeploy === undefined) {
+          throw new Error("Pass visibility and/or autodeploy");
+        }
+        const siteId = await resolveSiteId(parsed.site);
+
+        if (parsed.visibility !== undefined) {
+          await client.updateSite(siteId, { visibility: parsed.visibility });
+        }
+
+        if (parsed.autodeploy !== undefined) {
+          const current = await client.getSite(siteId);
+          if (!current.git_url) {
+            throw new Error("Autodeploy needs a site with a git_url");
+          }
+          await client.updateSite(siteId, { autodeploy: parsed.autodeploy });
+          // Mirror the admin UI: if the webhook change fails, revert the flag
+          // so the site never claims autodeploy without a webhook behind it.
+          try {
+            await client.setGithubWebhook(current.git_url, parsed.autodeploy);
+          } catch (webhookError) {
+            await client.updateSite(siteId, { autodeploy: !parsed.autodeploy });
+            throw new Error(
+              `Failed to ${parsed.autodeploy ? "create" : "delete"} GitHub webhook: ${formatError(webhookError)}`
+            );
+          }
+        }
+
+        const updated = await client.getSite(siteId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  message: "Site settings updated",
+                  name: updated.name,
+                  visibility: updated.visibility,
+                  autodeploy: updated.autodeploy,
                 },
                 null,
                 2
