@@ -6,7 +6,7 @@ import { cp, mkdir, rm, stat } from "fs/promises";
 import { dirname, isAbsolute, join, normalize, relative, resolve } from "path";
 import type { BuildSource } from "@keithk/deploy-core";
 import { info } from "@keithk/deploy-core";
-import { getAuthenticatedUrl } from "./git";
+import { getGitAuth, gitErrorMessage } from "./git";
 
 /**
  * Validate one build source, returning a normalized copy.
@@ -107,13 +107,6 @@ export function resolveDest(sitePath: string, dest: string): string {
 }
 
 /**
- * Strip an injected token so clone failures can be logged safely.
- */
-function scrubUrl(message: string, authUrl: string, originalUrl: string): string {
-  return authUrl === originalUrl ? message : message.split(authUrl).join(originalUrl);
-}
-
-/**
  * Copy every build source into the site checkout, replacing whatever a previous
  * deploy left behind. Git sources are cloned shallow and stripped of their .git
  * directory — the build only needs the files, and this keeps the context small.
@@ -143,16 +136,15 @@ async function cloneBuildSource(
   log: (message: string) => void
 ): Promise<void> {
   const branch = source.branch || "main";
-  const authUrl = getAuthenticatedUrl(source.source);
+  const { url, env } = getGitAuth(source.source);
 
-  log(`Adding ${source.source} (${branch}) to build context at ${source.dest}`);
+  log(`Adding ${url} (${branch}) to build context at ${source.dest}`);
 
   try {
-    await $`git clone --depth 1 --branch ${branch} --single-branch ${authUrl} ${target}`.quiet();
+    await $`git clone --depth 1 --branch ${branch} --single-branch ${url} ${target}`.env(env).quiet();
   } catch (err) {
-    const raw = err instanceof $.ShellError ? err.stderr.toString().trim() : String(err);
     throw new Error(
-      `Build source clone failed for ${source.source}: ${scrubUrl(raw, authUrl, source.source)}`
+      `Build source clone failed for ${url}: ${gitErrorMessage(err)}`
     );
   }
 

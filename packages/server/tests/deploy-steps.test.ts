@@ -105,7 +105,8 @@ mock.module("../src/services/git", () => ({
   cloneSite: mock(async () => "/tmp/fake-site-path"),
   pullSite: mock(async () => "/tmp/fake-site-path"),
   getSitePath: mock(() => "/tmp/fake-site-path"),
-  getAuthenticatedUrl: mock((url: string) => url),
+  getGitAuth: mock((url: string) => ({ url, env: process.env })),
+  gitErrorMessage: mock((err: unknown) => String(err)),
 }));
 
 const buildWithRailpacksMock = mock(async () =>
